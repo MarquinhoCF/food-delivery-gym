@@ -5,6 +5,7 @@ import numpy as np
 from gymnasium import Env
 from gymnasium.spaces import Dict, Box, Discrete
 
+from src.main.environment.env_mode import EnvMode
 from src.main.environment.food_delivery_simpy_env import FoodDeliverySimpyEnv
 from src.main.generator.initial_driver_generator import InitialDriverGenerator
 from src.main.generator.initial_establishment_order_rate_generator import InitialEstablishmentOrderRateGenerator
@@ -50,6 +51,7 @@ class FoodDeliveryGymEnv(Env):
         self.desconsider_capacity = desconsider_capacity
         self.max_time_step = max_time_step
         self.normalize = normalize
+        self.env_mode = EnvMode.EVALUATING
         
         assert render_mode is None or render_mode in self.metadata["render_modes"]
         self.render_mode = render_mode
@@ -143,8 +145,8 @@ class FoodDeliveryGymEnv(Env):
     def _get_info(self):
         return {'info': self.simpy_env.now}
     
-    def _get_obs(self):
-        return self.get_observation()
+    def set_mode(self, mode: EnvMode):
+        self.env_mode = mode
     
     # Avança na simulação até que um evento principal ocorra ou que a simulação termine/trunque.
     def advance_simulation_until_event(self):
@@ -154,8 +156,7 @@ class FoodDeliveryGymEnv(Env):
         
         while (not terminated) and (not truncated) and (core_event is None):
             if self.simpy_env.state.orders_delivered < self.num_orders:
-                self.simpy_env.step()
-                self.render()
+                self.simpy_env.step(self.env_mode, self.render_mode)
 
                 # Verifica se um pedido foi entregue
                 if self.simpy_env.state.orders_delivered > self.last_num_orders_delivered:
@@ -174,7 +175,7 @@ class FoodDeliveryGymEnv(Env):
                 
                 # Verifica se atingiu o limite de tempo
                 if self.simpy_env.now >= self.max_time_step - 1:
-                    print("Limite de tempo atingido!")
+                    # print("Limite de tempo atingido!")
                     truncated = True
             else:
                 # TODO: Logs
@@ -222,7 +223,7 @@ class FoodDeliveryGymEnv(Env):
         core_event, _, _ = self.advance_simulation_until_event()
         self.last_order = core_event.order if core_event else None
 
-        observation = self._get_obs()
+        observation = self.get_observation()
         info = self._get_info()
 
         return observation, info
@@ -270,7 +271,7 @@ class FoodDeliveryGymEnv(Env):
 
             self.last_order = core_event.order if core_event else None
 
-            observation = self._get_obs()
+            observation = self.get_observation()
 
             assert self.observation_space.contains(observation), "A observação gerada não está contida no espaço de observação."
             
@@ -302,11 +303,6 @@ class FoodDeliveryGymEnv(Env):
             print(e)
             print(traceback.format_exc())
             raise
-        
-
-    def render(self):
-        if self.render_mode == "human":
-            self.simpy_env.render()
 
     def show_statistcs_board(self, sum_reward = None, dir_path = None):
         if sum_reward is None and dir_path is None:

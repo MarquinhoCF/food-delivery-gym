@@ -10,6 +10,7 @@ from stable_baselines3.common.vec_env import DummyVecEnv
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.callbacks import EvalCallback
 
+from src.main.environment.env_mode import EnvMode
 from src.main.utils.load_scenarios import load_scenario
 from src.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
 
@@ -34,6 +35,7 @@ def main():
     try:
         # Criando o ambiente de treinamento
         gym_env: FoodDeliveryGymEnv = load_scenario("complex.json")
+        gym_env.set_mode(EnvMode.TRAINING)
 
         # Verificar se o ambiente está implementado corretamente
         check_env(gym_env, warn=True)

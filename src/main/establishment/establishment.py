@@ -1,4 +1,3 @@
-import uuid
 from typing import List
 
 from simpy.core import SimTime
@@ -22,20 +21,17 @@ from src.main.establishment.catalog import Catalog
 class Establishment(MapActor):
     def __init__(
             self,
+            id: Number,
             environment: FoodDeliverySimpyEnv,
             coordinate: Coordinate,
             available: bool,
             catalog: Catalog,
             percentage_allocation_driver: Number = 0.7,
-            id: Number = None,
             production_capacity: Number = 4,
             use_estimate: bool = False
     ) -> None:
         
-        if id is not None:
-            self.establishment_id = id
-        else:
-            self.establishment_id = uuid.uuid4()
+        self.establishment_id = id
             
         super().__init__(environment, coordinate, available)
         self.catalog = catalog
@@ -65,7 +61,7 @@ class Establishment(MapActor):
 
     def process_order_requests(self) -> ProcessGenerator:
         while True:
-            while len(self.order_requests) > 0:
+            while self.order_requests:
                 order = self.order_requests.pop(0)
                 self.process(self.process_order_request(order))
             yield self.timeout(self.time_to_process_order_requests())

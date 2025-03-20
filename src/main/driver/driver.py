@@ -1,4 +1,3 @@
-import uuid
 from typing import Optional, List
 
 from simpy.events import ProcessGenerator
@@ -29,21 +28,18 @@ from src.main.route.route_segment import RouteSegment
 class Driver(MapActor):
     def __init__(
             self,
+            id: Number,
             environment: FoodDeliverySimpyEnv,
             coordinate: Coordinate,
             available: bool,
             color: Optional[tuple[int, int, int]] = (255, 0, 0), # Cor vermelha
             desconsider_capacity: bool = False,
-            id: Number = None,
             capacity: Optional[Capacity] = Capacity(Dimensions(100, 100, 100, 100)),
             status: Optional[DriverStatus] = DriverStatus.AVAILABLE,
             movement_rate: Optional[Number] = 5
     ):
         
-        if id is not None:
-            self.driver_id = id
-        else:
-            self.driver_id = uuid.uuid4()
+        self.driver_id = id
 
         super().__init__(environment, coordinate, available)
 
@@ -88,7 +84,7 @@ class Driver(MapActor):
 
     def process_route_requests(self) -> ProcessGenerator:
         while True:
-            if len(self.route_requests) > 0:
+            if self.route_requests:
                 route = self.route_requests.pop(0)
                 self.process_route_request(route)
                 yield self.timeout(self.time_to_accept_or_reject_route())
@@ -330,65 +326,58 @@ class Driver(MapActor):
         total_busy_time = 0
         valid_coordinate = self.coordinate  # Posição atual do motorista
 
-        # Se o motorista já está em uma rota, inclui o tempo restante dessa rota
-        if self.current_route is not None:
-            if self.current_route_segment is not None:
-                current_order = self.current_route_segment.order
+        def add_travel_time(from_coord, to_coord):
+            return self.environment.map.estimated_time(from_coord, to_coord, self.movement_rate)
 
+        # Se o motorista já está em uma rota, inclui o tempo restante dessa rota
+        if self.current_route:
+            current_order = self.current_route_segment.order if self.current_route_segment else None
+            
+            if current_order:
                 # Se o segmento atual é de coleta, considera o tempo para pegar o pedido
                 if self.current_route_segment.is_pickup():
-                    if self.status == DriverStatus.PICKING_UP_WAITING:
-                        total_busy_time += current_order.estimated_time_to_ready - self.now
-                    else:
-                        total_busy_time += self.environment.map.estimated_time(
-                            self.coordinate, current_order.establishment.coordinate, self.movement_rate
-                        )
-                    total_busy_time += self.time_between_picked_up_and_start_delivery()
-                    total_busy_time += self.environment.map.estimated_time(
-                        current_order.establishment.coordinate, current_order.customer.coordinate, self.movement_rate
+                    total_busy_time += (
+                        current_order.estimated_time_to_ready - self.now
+                        if self.status == DriverStatus.PICKING_UP_WAITING
+                        else add_travel_time(self.coordinate, current_order.establishment.coordinate)
                     )
-
+                    total_busy_time += self.time_between_picked_up_and_start_delivery()
+                    total_busy_time += add_travel_time(current_order.establishment.coordinate, current_order.customer.coordinate)
+                
                 # Se o segmento atual é de entrega, considera o tempo de entrega
-                if self.current_route_segment.is_delivery():
+                elif self.current_route_segment.is_delivery():
                     if self.status == DriverStatus.DELIVERING:
-                        total_busy_time += self.environment.map.estimated_time(
-                            self.coordinate, current_order.customer.coordinate, self.movement_rate
-                        )
+                        total_busy_time += add_travel_time(self.coordinate, current_order.customer.coordinate)
 
                 if self.status != DriverStatus.AVAILABLE:
                     total_busy_time += self.estimate_time_to_costumer_receive_order(current_order)
 
-            # Atualiza a posição do motorista para o local da entrega
-            valid_coordinate = self.current_route_segment.order.customer.coordinate
+                # Atualiza a posição do motorista para o local da entrega
+                valid_coordinate = current_order.customer.coordinate
         
         # Considera o tempo para processar todas as rotas na fila de pedidos
         for route in self.route_requests:
             # Tempo para aceitar ou rejeitar a rota
             total_busy_time += self.time_to_accept_or_reject_route()
-
+            
             # Percorre cada segmento da rota
             for route_segment in route.route_segments:
                 order = route_segment.order
-
+                
                 # Se o segmento é de coleta, calcula o tempo para pegar o pedido
                 if route_segment.is_pickup():
                     total_busy_time += self.time_between_accept_and_start_picking_up()
-                    total_busy_time += self.environment.map.estimated_time(
-                        valid_coordinate, order.establishment.coordinate, self.movement_rate
-                    )
+                    total_busy_time += add_travel_time(valid_coordinate, order.establishment.coordinate)
                     total_busy_time += self.time_between_picked_up_and_start_delivery()
-
+                
                 # Se o segmento é de entrega, calcula o tempo de entrega
-                if route_segment.is_delivery():
-                    total_busy_time += self.environment.map.estimated_time(
-                        order.establishment.coordinate, order.customer.coordinate, self.movement_rate
-                    )
-                    total_busy_time += self.estimate_time_to_costumer_receive_order(order)
+                elif route_segment.is_delivery():
+                    total_busy_time += add_travel_time(order.establishment.coordinate, order.customer.coordinate)
+                    total_busy_time += self.estimate_time_to_costumer_receive_order(order)                
+                    valid_coordinate = order.customer.coordinate
 
-                # Atualiza a posição após cada entrega
-                valid_coordinate = order.customer.coordinate
+        return max(total_busy_time, 0)
 
-        return total_busy_time if total_busy_time > 0 else 0
     
     def calculate_total_distance(self) -> Number:
         total_distance = 0
@@ -396,15 +385,14 @@ class Driver(MapActor):
 
         # Se o motorista já está em uma rota, inclui o tempo restante dessa rota
         if self.current_route is not None:
-            if self.current_route_segment is not None:
-                current_order = self.current_route_segment.order
+            current_order = self.current_route_segment.order if self.current_route_segment else None
 
+            if current_order:
                 # Se o segmento atual é de coleta, considera o tempo para pegar o pedido
                 if self.current_route_segment.is_pickup():
                     total_distance += self.environment.map.distance(
                         self.coordinate, current_order.establishment.coordinate
                     )
-                    
                     total_distance += self.environment.map.distance(
                         current_order.establishment.coordinate, current_order.customer.coordinate
                     )
@@ -441,7 +429,7 @@ class Driver(MapActor):
                 # Atualiza a posição após cada entrega
                 valid_coordinate = order.customer.coordinate
 
-        return total_distance if total_distance > 0 else 0
+        return max(total_distance, 0)
     
     def estimate_time_to_complete_next_order(self, nextOrder: Order):
         #   Este método só é chamado pelo ambiente gymnasium no momento em que o ambiente simpy já avançou a ponto de ter um 
@@ -452,7 +440,7 @@ class Driver(MapActor):
             return 0
 
         estimated_time = self.time_between_accept_and_start_picking_up()
-        estimated_time = self.environment.map.estimated_time(self.last_future_coordinate, nextOrder.establishment.coordinate, self.movement_rate)
+        estimated_time += self.environment.map.estimated_time(self.last_future_coordinate, nextOrder.establishment.coordinate, self.movement_rate)
         estimated_time += self.time_between_picked_up_and_start_delivery()
         estimated_time += self.environment.map.estimated_time(nextOrder.establishment.coordinate, nextOrder.customer.coordinate, self.movement_rate)
         estimated_time += self.estimate_time_to_costumer_receive_order(nextOrder)

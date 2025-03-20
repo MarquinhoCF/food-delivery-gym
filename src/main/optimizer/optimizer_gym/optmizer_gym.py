@@ -7,6 +7,7 @@ import numpy as np
 import statistics as stt
 
 from src.main.driver.driver import Driver
+from src.main.environment.env_mode import EnvMode
 from src.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
 from src.main.optimizer.optimizer import Optimizer
 from src.main.order.order import Order
@@ -54,10 +55,10 @@ class OptimizerGym(Optimizer, ABC):
             self.state, reward, self.done, self.truncated, info = self.gym_env.step(action)
             sum += reward
 
-            print(f"State: {self.state}, Reward: {reward}, Done: {self.done}, Truncated: {self.truncated}")
+            #print(f"State: {self.state}, Reward: {reward}, Done: {self.done}, Truncated: {self.truncated}")
 
-        print(f"\n\n\nTotal reward: {sum}")
-        print(f"Final Time  Step: {info['info']}")
+        #print(f"\n\n\nTotal reward: {sum}")
+        #print(f"Final Time  Step: {info['info']}")
 
         return {
             "final_state": self.state,
@@ -73,6 +74,9 @@ class OptimizerGym(Optimizer, ABC):
     
     def show_mean_statistic_board(self):
         self.gym_env.show_total_mean_statistics_board()
+
+    def set_gym_env_mode(self, mode: EnvMode):
+        self.gym_env.set_mode(mode)
     
     @abstractmethod
     def get_title(self):
@@ -117,6 +121,8 @@ class OptimizerGym(Optimizer, ABC):
 
     def run_simulations(self, num_runs: int, dir_path: str, seed: int | None = None):
         self.initialize(seed=seed)
+        self.set_gym_env_mode(EnvMode.EVALUATING)
+
         # Garantir que o diretório existe
         os.makedirs(dir_path, exist_ok=True)
         file_path = dir_path + "results.txt"

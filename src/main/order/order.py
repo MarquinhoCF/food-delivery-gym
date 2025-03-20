@@ -1,7 +1,7 @@
-import uuid
 from typing import List
 
 from src.main.base.dimensions import Dimensions
+from src.main.base.types import Number
 from src.main.order.delivery_rejection import DeliveryRejection
 from src.main.order.item import Item
 from src.main.order.order_status import OrderStatus
@@ -10,17 +10,13 @@ from src.main.order.order_status import OrderStatus
 class Order:
     def __init__(
             self,
+            id: Number,
             customer,
             establishment,
             request_date: int,
             items: List[Item],
-            id: int = None
     ):
-        if id is not None:
-            self.order_id = id
-        else:
-            self.order_id = uuid.uuid4()
-            
+        self.order_id = id
         self.customer = customer
         self.establishment = establishment
         self.request_date = request_date

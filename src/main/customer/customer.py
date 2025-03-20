@@ -1,9 +1,7 @@
-import uuid
-
 from simpy.events import ProcessGenerator
 
 from src.main.actors.map_actor import MapActor
-from src.main.base.types import Coordinate
+from src.main.base.types import Coordinate, Number
 from src.main.driver.driver import Driver
 from src.main.environment.food_delivery_simpy_env import FoodDeliverySimpyEnv
 from src.main.events.customer_placed_order import CustomerPlacedOrder
@@ -15,8 +13,8 @@ from src.main.establishment.establishment import Establishment
 
 
 class Customer(MapActor):
-    def __init__(self, environment: FoodDeliverySimpyEnv, coordinate: Coordinate, available: bool, single_order: bool = False) -> None:
-        self.customer_id = uuid.uuid4()
+    def __init__(self, id: Number, environment: FoodDeliverySimpyEnv, coordinate: Coordinate, available: bool, single_order: bool = False) -> None:
+        self.customer_id = id
         self.single_order = single_order
         self.status = CustumerStatus.WAITING_DELIVERY
         super().__init__(environment, coordinate, available)

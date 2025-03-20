@@ -23,14 +23,14 @@ class EstablishmentOrderRate(Establishment):
             use_estimate: bool = False,
     ):
         super().__init__(
-            environment, 
-            coordinate, 
-            available, 
-            catalog, 
-            percentage_allocation_driver, 
-            id, 
-            production_capacity, 
-            use_estimate
+            id=id, 
+            environment=environment, 
+            coordinate=coordinate, 
+            available=available, 
+            catalog=catalog, 
+            percentage_allocation_driver=percentage_allocation_driver,
+            production_capacity=production_capacity, 
+            use_estimate=use_estimate
         )
         self.order_production_time_rate = order_production_time_rate
         self.operating_radius = operating_radius

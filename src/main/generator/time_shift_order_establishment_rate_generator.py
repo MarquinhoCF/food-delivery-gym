@@ -17,6 +17,7 @@ class TimeShiftOrderEstablishmentRateGenerator(TimeShiftGenerator):
         if establishment.establishment_id:
 
             customer = Customer(
+                id=self.current_order_id,
                 environment=env,
                 coordinate=point_in_gauss_circle(
                     establishment.coordinate,
@@ -31,11 +32,11 @@ class TimeShiftOrderEstablishmentRateGenerator(TimeShiftGenerator):
             items = self.rng.sample(establishment.catalog.items, 2)
 
             order = Order(
-                customer, 
-                establishment, 
-                env.now, 
-                items, 
-                id=self.current_order_id
+                id=self.current_order_id,
+                customer=customer, 
+                establishment=establishment, 
+                request_date=env.now, 
+                items=items,
             )
 
             self.current_order_id += 1

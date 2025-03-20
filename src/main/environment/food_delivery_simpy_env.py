@@ -6,6 +6,7 @@ import numpy as np
 from simpy import Environment, Event
 from simpy.core import SimTime
 
+from src.main.environment.env_mode import EnvMode
 from src.main.environment.delivery_env_state import DeliveryEnvState
 from src.main.events.event_type import EventType
 from src.main.map.map import Map
@@ -118,14 +119,14 @@ class FoodDeliverySimpyEnv(Environment):
         if self.view is not None and self.view.quited:
             self.view.quit()
 
-    def step(self, render_mode=None):
+    def step(self, mode: EnvMode, render_mode=None):
         super().step()
         if render_mode == "human" and self.view is not None:
             self.view.render(self)
             if self.view.quited:
                 self.view.quit()
         
-        if self.last_time_step < self.now:
+        if mode == EnvMode.EVALUATING and self.last_time_step < self.now:
             self.update_statistcs_variables()
             #self.print_enviroment_state()
             self.last_time_step = self.now
