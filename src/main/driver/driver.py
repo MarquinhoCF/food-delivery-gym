@@ -280,7 +280,7 @@ class Driver(MapActor):
 
     def move(self) -> ProcessGenerator:
         while True:
-            if self.current_route_segment is not None:
+            if self.current_route_segment:
                 old_coordinate = self.coordinate
                 self.coordinate = self.environment.map.move(
                     origin=self.coordinate,

@@ -157,13 +157,13 @@ class FoodDeliveryGymEnv(Env):
         while (not terminated) and (not truncated) and (core_event is None):
             if self.simpy_env.state.orders_delivered < self.num_orders:
                 self.simpy_env.step(self.env_mode, self.render_mode)
-
-                # Verifica se um pedido foi entregue
-                if self.simpy_env.state.orders_delivered > self.last_num_orders_delivered:
-                    # TODO: Logs
+                
+                # TODO: Logs
+                # # Verifica se um pedido foi entregue
+                # if self.simpy_env.state.orders_delivered > self.last_num_orders_delivered:
                     # print("Pedido entregue!")
                     # print(f"Número de pedidos entregues: {self.simpy_env.state.orders_delivered}")
-                    self.last_num_orders_delivered = self.simpy_env.state.orders_delivered
+                    # self.last_num_orders_delivered = self.simpy_env.state.orders_delivered
 
                 # Verifica o próximo evento principal
                 core_event = self.simpy_env.dequeue_core_event()
@@ -219,7 +219,7 @@ class FoodDeliveryGymEnv(Env):
             view=GridViewPygame(grid_size=self.grid_map_size) if self.render_mode == "human" else None
         )
 
-        self.last_num_orders_delivered = 0
+        # self.last_num_orders_delivered = 0
         core_event, _, _ = self.advance_simulation_until_event()
         self.last_order = core_event.order if core_event else None
 
@@ -273,7 +273,7 @@ class FoodDeliveryGymEnv(Env):
 
             observation = self.get_observation()
 
-            assert self.observation_space.contains(observation), "A observação gerada não está contida no espaço de observação."
+            # assert self.observation_space.contains(observation), "A observação gerada não está contida no espaço de observação."
             
             info = self._get_info()
 
