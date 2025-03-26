@@ -1,5 +1,6 @@
 from numbers import Number
 
+import numpy as np
 from simpy.core import SimTime
 from src.main.environment.food_delivery_simpy_env import FoodDeliverySimpyEnv
 from src.main.establishment.catalog import Catalog
@@ -38,5 +39,7 @@ class EstablishmentOrderRate(Establishment):
         self.min_prepare_time = min_prepare_time
 
     def time_estimate_to_prepare_order(self) -> SimTime:
-        estimated_time = round(self.rng.expovariate(1 / self.order_production_time_rate))
-        return np.clip(estimated_time, self.min_prepare_time, self.max_prepare_time)
+        a, b = 2, 5
+        sample = np.random.beta(a, b)
+        estimated_time = self.min_prepare_time + (self.max_prepare_time - self.min_prepare_time) * sample
+        return round(estimated_time)
