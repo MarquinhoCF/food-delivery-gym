@@ -126,8 +126,12 @@ class FoodDeliverySimpyEnv(Environment):
             if self.view.quited:
                 self.view.quit()
         
-        if mode == EnvMode.EVALUATING and self.last_time_step < self.now:
-            self.update_statistcs_variables()
+        if self.last_time_step < self.now:
+            self.update_spent_drivers()
+
+            if mode == EnvMode.EVALUATING:
+                self.update_statistcs_variables()
+            
             #self.print_enviroment_state()
             self.last_time_step = self.now
 
@@ -158,6 +162,10 @@ class FoodDeliverySimpyEnv(Environment):
         
         for driver in self._state.drivers:
             driver.update_statistcs_variables()
+    
+    def update_spent_drivers(self):
+        for driver in self._state.drivers:
+            driver.update_spent_time()
 
     def register_statistic_data(self):
         for establishment in self._state.establishments:

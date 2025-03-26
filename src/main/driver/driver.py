@@ -54,9 +54,9 @@ class Driver(MapActor):
         
         self.status = status
         self.movement_rate = movement_rate
-        
-        self.start_time_to_last_order = 0
-        self.time_spent_to_last_order = 0
+
+        # Variáveis para calcular o tempo gasto desde a última decisão do agente
+        self.time_spent_since_last_state = 0
 
         self.current_route: Optional[Route] = None
         self.current_route_segment: Optional[RouteSegment] = None
@@ -201,7 +201,6 @@ class Driver(MapActor):
         self.environment.add_rejected_delivery(route_segment.order, rejection, event)
 
     def picking_up(self, order: Order) -> ProcessGenerator:
-        self.start_time_to_last_order = self.now
         self.status = DriverStatus.PICKING_UP
 
         if order.status == OrderStatus.PREPARING:
@@ -456,3 +455,12 @@ class Driver(MapActor):
 
     def update_last_total_distance(self):
         self.last_total_distance = self.total_distance
+
+    def update_spent_time(self):
+        if self.status != DriverStatus.AVAILABLE:
+            self.time_spent_since_last_state += 1
+
+    def get_and_reset_spent_time(self):
+        spent_time = self.time_spent_since_last_state
+        self.time_spent_since_last_state = 0
+        return spent_time

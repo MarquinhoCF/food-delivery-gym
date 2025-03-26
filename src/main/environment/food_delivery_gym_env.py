@@ -59,7 +59,7 @@ class FoodDeliveryGymEnv(Env):
         self.simpy_env = None # Ambiente de simulação será criado no reset
 
         # Definindo o objetivo da recompensa
-        valid_objectives = [1, 2]
+        valid_objectives = [1, 2, 3]
         if reward_objective not in valid_objectives:
             raise ValueError(f"Objetivo inválido! Escolha entre {valid_objectives}")
         self.reward_objective = reward_objective
@@ -252,6 +252,14 @@ class FoodDeliveryGymEnv(Env):
                 driver.update_last_total_distance()
             
             return -sum_distance_traveled
+        # Objetivo 3: Minimizar o tempo de entrega dos motoristas a partir do tempo efetivo gasto -> Recompensa negativa
+        elif self.reward_objective == 3:
+            # Soma do tempo efetivo gasto por cada motorista
+            sum_spent_time_drivers = 0
+            for driver in self.simpy_env.state.drivers:
+                sum_spent_time_drivers += driver.get_and_reset_spent_time()
+
+            return -sum_spent_time_drivers
         
     def step(self, action):
         try:
