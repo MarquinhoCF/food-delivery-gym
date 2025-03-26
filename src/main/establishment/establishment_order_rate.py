@@ -38,7 +38,5 @@ class EstablishmentOrderRate(Establishment):
         self.min_prepare_time = min_prepare_time
 
     def time_estimate_to_prepare_order(self) -> SimTime:
-        time_to_prepare = None
-        while time_to_prepare is None or time_to_prepare < self.min_prepare_time or time_to_prepare > self.max_prepare_time:   # TODO: Pesquisar uma forma de não afetar a distribuição
-            time_to_prepare = round(self.rng.expovariate(1 / self.order_production_time_rate))
-        return time_to_prepare
+        estimated_time = round(self.rng.expovariate(1 / self.order_production_time_rate))
+        return np.clip(estimated_time, self.min_prepare_time, self.max_prepare_time)
