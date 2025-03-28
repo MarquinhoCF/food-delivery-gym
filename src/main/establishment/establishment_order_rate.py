@@ -38,8 +38,11 @@ class EstablishmentOrderRate(Establishment):
         self.max_prepare_time = max_prepare_time
         self.min_prepare_time = min_prepare_time
 
+        relative_position = (order_production_time_rate - min_prepare_time) / (max_prepare_time - min_prepare_time)
+        self.a = 1 + 5 * relative_position
+        self.b = 7 - self.a
+
     def time_estimate_to_prepare_order(self) -> SimTime:
-        a, b = 2, 5
-        sample = np.random.beta(a, b)
+        sample = np.random.beta(self.a, self.b)
         estimated_time = self.min_prepare_time + (self.max_prepare_time - self.min_prepare_time) * sample
         return round(estimated_time)
