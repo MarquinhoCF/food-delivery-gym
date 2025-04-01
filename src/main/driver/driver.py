@@ -55,12 +55,15 @@ class Driver(MapActor):
         self.status = status
         self.movement_rate = movement_rate
 
-        # Variáveis para calcular o tempo gasto desde a última decisão do agente
-        self.time_spent_since_last_state = 0
-
         self.current_route: Optional[Route] = None
         self.current_route_segment: Optional[RouteSegment] = None
         self.route_requests: List[Route] = []
+
+        # Variáveis para controle do tempo gasto para entrega dos pedidos
+        self.orders_list: List[Order] = []
+        self.last_time_check: Number = 0
+        self.sum_time_spent_for_delivery: Number = 0
+
         self.last_future_coordinate: Coordinate = coordinate
 
         self.total_distance: Number = 0
@@ -96,6 +99,8 @@ class Driver(MapActor):
         self.accept_route(route) if accept else self.reject_route(route)
 
     def accept_route(self, route: Route) -> None:
+        self.orders_list.append(route.order)
+
         if not self.desconsider_capacity:
             self.environment.state.increment_assigned_routes()
         if self.current_route is None:
@@ -259,7 +264,6 @@ class Driver(MapActor):
         yield self.process(order.customer.receive_order(order, self))
         self.delivered(order)
         
-
     def delivered(self, order: Order) -> None:
         self.coordinate = order.customer.coordinate
         self.publish_event(DriverDeliveredOrder(
@@ -274,6 +278,19 @@ class Driver(MapActor):
         self.process(self.sequential_processor())
         self.orders_delivered += 1
         self.environment.state.increment_orders_delivered()
+        
+        # Remove o pedido da lista de pedidos do motorista
+        for i, o in enumerate(self.orders_list):
+            if o.order_id == order.order_id:
+                # TODO: Verificar com Julio se eu deveria usar o atributo 'time_it_was_accepted' ou o 'time_that_driver_was_allocated'
+                if order.time_that_driver_was_allocated > self.last_time_check:
+                    # Se o pedido foi alocado depois do último tempo de verificação, soma o tempo desde a alocação até agora
+                    self.sum_time_spent_for_delivery += (self.now - o.time_that_driver_was_allocated)
+                else:
+                    # Se o pedido foi alocado antes do último tempo de verificação, soma o tempo desde o último tempo de verificação até agora
+                    self.sum_time_spent_for_delivery += (self.now - self.last_time_check)
+                del self.orders_list[i]
+                break
         # TODO: Logs
         # print(f"Driver {self.driver_id} entregou o pedido ao cliente no tempo {self.now}")
 
@@ -456,11 +473,16 @@ class Driver(MapActor):
     def update_last_total_distance(self):
         self.last_total_distance = self.total_distance
 
-    def update_spent_time(self):
-        if self.status != DriverStatus.AVAILABLE:
-            self.time_spent_since_last_state += 1
-
-    def get_and_reset_spent_time(self):
-        spent_time = self.time_spent_since_last_state
-        self.time_spent_since_last_state = 0
-        return spent_time
+    def get_sum_time_spent_for_delivery(self) -> Number:
+        sum_time_spent = self.sum_time_spent_for_delivery
+        for order in self.orders_list:
+            if order.time_that_driver_was_allocated > self.last_time_check:
+                # Se o pedido foi alocado depois do último tempo de verificação, soma o tempo desde a alocação até agora
+                sum_time_spent += (self.now - order.time_that_driver_was_allocated)
+            else:
+                # Se o pedido foi alocado antes do último tempo de verificação, soma o tempo desde o último tempo de verificação até agora
+                sum_time_spent += (self.now - self.last_time_check)
+        
+        self.last_time_check = self.now
+        self.sum_time_spent_for_delivery = 0
+        return sum_time_spent

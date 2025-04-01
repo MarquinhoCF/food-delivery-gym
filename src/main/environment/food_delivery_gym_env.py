@@ -234,10 +234,6 @@ class FoodDeliveryGymEnv(Env):
     def calculate_reward(self, terminated, truncated):
         reward = 0
 
-        # Função sigmoide para penalização: cresce lentamente no início e acelera após 1400
-        def penalizacao(t, t_shift=((self.num_orders/self.num_drivers)*25), k=0.005):
-            return 5 * (0.01 / (0.01 + np.exp(-k * (t - t_shift))))  # Sigmoide deslocada
-
         # Objetivo 1: Minimizar o tempo de entrega -> Recompensa negativa
         if self.reward_objective == 1:
             # Soma das estimativas do tempo de ocupação de cada motoristas
@@ -253,15 +249,13 @@ class FoodDeliveryGymEnv(Env):
         # Objetivo 3: Minimizar o tempo de entrega dos motoristas a partir do tempo efetivo gasto -> Recompensa negativa
         elif self.reward_objective == 3:
             # Soma do tempo efetivo gasto por cada motorista
-            spent_time = sum(driver.get_and_reset_spent_time() for driver in self.simpy_env.state.drivers)
-            penalty_factor = self.simpy_env.now * penalizacao(self.simpy_env.now)
-            reward = - (spent_time + penalty_factor)  # Aplica a penalização suavemente
+            reward = sum(driver.get_sum_time_spent_for_delivery() for driver in self.simpy_env.state.drivers)
 
         # Objetivo 4: Minimizar o tempo de entrega dos motoristas a partir do tempo efetivo gasto -> Recompensa negativa no fim da simulação
         elif self.reward_objective == 4 and (terminated or truncated):
             # TODO: Tem que ser revisado
             # Soma do tempo efetivo gasto por cada motorista
-            reward = -sum(driver.get_and_reset_spent_time() for driver in self.simpy_env.state.drivers)
+            reward = -sum(driver.get_sum_time_spent_for_delivery() for driver in self.simpy_env.state.drivers)
         
         # Objetivo 5: Minimizar o custo de operação (distância) -> Recompensa negativa no fim da simulação
         elif self.reward_objective == 5 and (terminated or truncated):
