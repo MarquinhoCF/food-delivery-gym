@@ -242,14 +242,12 @@ class FoodDeliveryGymEnv(Env):
         # Objetivo 2: Minimizar o custo de operação (distância) -> Recompensa negativa
         elif self.reward_objective == 2:
             # Distância percorrida desde a última recompensa para o motorista selecionado
-            reward = -sum(driver.total_distance - driver.last_total_distance for driver in self.simpy_env.state.drivers)
-            for driver in self.simpy_env.state.drivers:
-                driver.update_last_total_distance()
+            reward = -sum(driver.get_and_update_distance_traveled() for driver in self.simpy_env.state.drivers)
             
         # Objetivo 3: Minimizar o tempo de entrega dos motoristas a partir do tempo efetivo gasto -> Recompensa negativa
         elif self.reward_objective == 3:
             # Soma do tempo efetivo gasto por cada motorista
-            reward = sum(driver.get_sum_time_spent_for_delivery() for driver in self.simpy_env.state.drivers)
+            reward = -sum(driver.get_sum_time_spent_for_delivery() for driver in self.simpy_env.state.drivers)
 
         # Objetivo 4: Minimizar o tempo de entrega dos motoristas a partir do tempo efetivo gasto -> Recompensa negativa no fim da simulação
         elif self.reward_objective == 4 and (terminated or truncated):
@@ -260,7 +258,7 @@ class FoodDeliveryGymEnv(Env):
         # Objetivo 5: Minimizar o custo de operação (distância) -> Recompensa negativa no fim da simulação
         elif self.reward_objective == 5 and (terminated or truncated):
             # Distância total percorrida por cada motorista
-            reward = -sum(driver.total_distance for driver in self.simpy_env.state.drivers)
+            reward = -sum(driver.get_and_update_distance_traveled() for driver in self.simpy_env.state.drivers)
         
         return reward
         

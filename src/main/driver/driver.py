@@ -470,8 +470,10 @@ class Driver(MapActor):
         if self.status == DriverStatus.PICKING_UP_WAITING:
             self.time_waiting_for_order += 1
 
-    def update_last_total_distance(self):
+    def get_and_update_distance_traveled(self):
+        distance_traveled = self.total_distance - self.last_total_distance
         self.last_total_distance = self.total_distance
+        return distance_traveled
 
     def get_sum_time_spent_for_delivery(self) -> Number:
         sum_time_spent = self.sum_time_spent_for_delivery
