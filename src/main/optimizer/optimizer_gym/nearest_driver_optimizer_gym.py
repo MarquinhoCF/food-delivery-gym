@@ -9,7 +9,7 @@ from src.main.route.route import Route
 class NearestDriverOptimizerGym(OptimizerGym):
 
     def compare_distance(self, map: Map, driver: Driver, route: Route):
-        return map.distance(driver.coordinate, route.route_segments[0].coordinate)
+        return map.distance(driver.get_last_coordinate_from_routes_list(), route.route_segments[0].coordinate)
     
     def get_title(self):
         return "Otimizador do Motorista Mais Próximo"

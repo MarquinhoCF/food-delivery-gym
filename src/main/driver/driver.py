@@ -494,3 +494,8 @@ class Driver(MapActor):
         for order in self.orders_list:
             penalty += (self.now - order.time_that_driver_was_allocated)
         return penalty
+    
+    def get_last_coordinate_from_routes_list(self) -> Coordinate:
+        if self.route_requests:
+            return self.route_requests[-1].order.customer.coordinate
+        return self.coordinate
