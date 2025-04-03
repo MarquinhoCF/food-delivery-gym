@@ -282,7 +282,6 @@ class Driver(MapActor):
         # Remove o pedido da lista de pedidos do motorista
         for i, o in enumerate(self.orders_list):
             if o.order_id == order.order_id:
-                # TODO: Verificar com Julio se eu deveria usar o atributo 'time_it_was_accepted' ou o 'time_that_driver_was_allocated'
                 if order.time_that_driver_was_allocated > self.last_time_check:
                     # Se o pedido foi alocado depois do último tempo de verificação, soma o tempo desde a alocação até agora
                     self.sum_time_spent_for_delivery += (self.now - o.time_that_driver_was_allocated)
@@ -291,6 +290,7 @@ class Driver(MapActor):
                     self.sum_time_spent_for_delivery += (self.now - self.last_time_check)
                 del self.orders_list[i]
                 break
+
         # TODO: Logs
         # print(f"Driver {self.driver_id} entregou o pedido ao cliente no tempo {self.now}")
 
@@ -488,3 +488,9 @@ class Driver(MapActor):
         self.last_time_check = self.now
         self.sum_time_spent_for_delivery = 0
         return sum_time_spent
+    
+    def get_penality_for_late_orders(self) -> Number:
+        penalty = 0
+        for order in self.orders_list:
+            penalty += (self.now - order.time_that_driver_was_allocated)
+        return penalty
