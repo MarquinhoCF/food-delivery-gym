@@ -15,12 +15,12 @@ from src.main.environment.step_reward_logger import StepRewardLogger
 from src.main.utils.load_scenarios import load_scenario
 from src.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
 
-SEED = 123456
+SEED = 101010
 
 # Escolha se deseja salvar o log em um arquivo
 SAVE_LOG_TO_FILE = False
 
-DIR_PATH = "./data/ppo_training/obj_3/medium_scenario/13000000_time_steps/"
+DIR_PATH = "./data/ppo_training/obj_3/complex_scenario/13000000_time_steps/"
 
 # Verificar e criar os diretórios necessários
 os.makedirs(DIR_PATH + "logs/", exist_ok=True)
@@ -35,7 +35,7 @@ if SAVE_LOG_TO_FILE:
 def main():
     try:
         # Criando o ambiente de treinamento
-        gym_env: FoodDeliveryGymEnv = load_scenario("medium.json")
+        gym_env: FoodDeliveryGymEnv = load_scenario("complex.json")
         gym_env.set_mode(EnvMode.TRAINING)
         gym_env.set_reward_objective(3)
 
@@ -47,7 +47,7 @@ def main():
         env = DummyVecEnv([lambda: gym_env])
 
         # Criando o ambiente de avaliação separado (sem Monitor)
-        eval_env = load_scenario("medium.json")
+        eval_env = load_scenario("complex.json")
         eval_env.set_mode(EnvMode.TRAINING)
         eval_env.set_reward_objective(3)
         eval_env = Monitor(eval_env, DIR_PATH + "logs_eval/")
@@ -134,9 +134,11 @@ def main():
         # Plotar a tendência de recompensa ao longo do episódio
         step_rewards = step_rewards_df["reward"].values
 
+        episode_length = gym_env.env.num_orders
+
         # Quebrar o vetor em episódios (cada um com EPISODE_LENGTH passos)
-        num_episodes = len(step_rewards) // gym_env.num_orders
-        step_matrix = step_rewards[:num_episodes * gym_env.num_orders].reshape((num_episodes, gym_env.num_orders))
+        num_episodes = len(step_rewards) // episode_length
+        step_matrix = step_rewards[:num_episodes * episode_length].reshape((num_episodes, episode_length))
 
         # Calcular a média e desvio padrão em cada posição do episódio
         mean_rewards = step_matrix.mean(axis=0)
@@ -145,7 +147,7 @@ def main():
         # Plotar
         plt.figure(figsize=(12, 5))
         plt.plot(mean_rewards, label="Média por passo no episódio", linewidth=2)
-        plt.fill_between(range(gym_env.num_orders), mean_rewards - std_rewards, mean_rewards + std_rewards, alpha=0.2, label="Desvio Padrão")
+        plt.fill_between(range(episode_length), mean_rewards - std_rewards, mean_rewards + std_rewards, alpha=0.2, label="Desvio Padrão")
         plt.xlabel("Passo dentro do episódio")
         plt.ylabel("Recompensa")
         plt.title("Tendência de Recompensa ao Longo do Episódio")
