@@ -11,15 +11,16 @@ from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.callbacks import EvalCallback
 
 from src.main.environment.env_mode import EnvMode
+from src.main.environment.step_reward_logger import StepRewardLogger
 from src.main.utils.load_scenarios import load_scenario
 from src.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
 
-SEED = 101010
+SEED = 123456
 
 # Escolha se deseja salvar o log em um arquivo
 SAVE_LOG_TO_FILE = False
 
-DIR_PATH = "./data/ppo_training/complex_scenario/6000000_time_steps/"
+DIR_PATH = "./data/ppo_training/obj_3/medium_scenario/13000000_time_steps/"
 
 # Verificar e criar os diretórios necessários
 os.makedirs(DIR_PATH + "logs/", exist_ok=True)
@@ -34,8 +35,9 @@ if SAVE_LOG_TO_FILE:
 def main():
     try:
         # Criando o ambiente de treinamento
-        gym_env: FoodDeliveryGymEnv = load_scenario("complex.json")
+        gym_env: FoodDeliveryGymEnv = load_scenario("medium.json")
         gym_env.set_mode(EnvMode.TRAINING)
+        gym_env.set_reward_objective(3)
 
         # Verificar se o ambiente está implementado corretamente
         check_env(gym_env, warn=True)
@@ -45,7 +47,11 @@ def main():
         env = DummyVecEnv([lambda: gym_env])
 
         # Criando o ambiente de avaliação separado (sem Monitor)
-        eval_env = DummyVecEnv([lambda: load_scenario("complex.json")])
+        eval_env = load_scenario("medium.json")
+        eval_env.set_mode(EnvMode.TRAINING)
+        eval_env.set_reward_objective(3)
+        eval_env = Monitor(eval_env, DIR_PATH + "logs_eval/")
+        eval_env = DummyVecEnv([lambda: eval_env])
 
         # Criando o EvalCallback para salvar o melhor modelo
         eval_callback = EvalCallback(
@@ -56,11 +62,13 @@ def main():
             deterministic=True,
             render=False
         )
+        
+        step_reward_logger = StepRewardLogger(DIR_PATH + "logs/step_rewards.csv")
 
         # Treinar o modelo com EvalCallback
         model = PPO('MultiInputPolicy', env, verbose=1)
         start_time = time.time()
-        model.learn(total_timesteps=6000000, callback=eval_callback)
+        model.learn(total_timesteps=13000000, callback=[eval_callback, step_reward_logger])
         end_time = time.time()
         training_time = end_time - start_time
 
@@ -111,6 +119,41 @@ def main():
         plt.legend()
         plt.savefig(DIR_PATH + "curva_de_aprendizado_avg_std_1000_ep.png", dpi=300, bbox_inches='tight')
         plt.show()
+
+        # Plotar a recompensa acumulada por passo
+        step_rewards_df = pd.read_csv(DIR_PATH + "logs/step_rewards.csv")
+
+        plt.figure(figsize=(12, 5))
+        plt.plot(step_rewards_df["reward"], alpha=0.6, linewidth=0.7)
+        plt.xlabel("Passos")
+        plt.ylabel("Recompensa")
+        plt.title("Recompensa a cada passo durante o treinamento")
+        plt.savefig(DIR_PATH + "recompensa_por_passo.png", dpi=300, bbox_inches='tight')
+        plt.show()
+
+        # Plotar a tendência de recompensa ao longo do episódio
+        step_rewards = step_rewards_df["reward"].values
+
+        # Quebrar o vetor em episódios (cada um com EPISODE_LENGTH passos)
+        num_episodes = len(step_rewards) // gym_env.num_orders
+        step_matrix = step_rewards[:num_episodes * gym_env.num_orders].reshape((num_episodes, gym_env.num_orders))
+
+        # Calcular a média e desvio padrão em cada posição do episódio
+        mean_rewards = step_matrix.mean(axis=0)
+        std_rewards = step_matrix.std(axis=0)
+
+        # Plotar
+        plt.figure(figsize=(12, 5))
+        plt.plot(mean_rewards, label="Média por passo no episódio", linewidth=2)
+        plt.fill_between(range(gym_env.num_orders), mean_rewards - std_rewards, mean_rewards + std_rewards, alpha=0.2, label="Desvio Padrão")
+        plt.xlabel("Passo dentro do episódio")
+        plt.ylabel("Recompensa")
+        plt.title("Tendência de Recompensa ao Longo do Episódio")
+        plt.legend()
+        plt.grid(True, linestyle="--", alpha=0.3)
+        plt.savefig(DIR_PATH + "tendencia_por_passo_no_episodio.png", dpi=300, bbox_inches='tight')
+        plt.show()
+
 
     except ValueError as e:
         print(e)

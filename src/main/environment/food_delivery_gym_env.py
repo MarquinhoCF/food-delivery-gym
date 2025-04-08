@@ -255,7 +255,7 @@ class FoodDeliveryGymEnv(Env):
 
             if truncated and self.simpy_env.state.orders_delivered < self.num_orders:
                 # Se a simulação foi truncada e não foram entregues todos os pedidos, penaliza a recompensa
-                reward += -sum(driver.get_penality_for_late_orders() for driver in self.simpy_env.state.drivers)
+                reward -= sum(driver.get_penality_for_late_orders() for driver in self.simpy_env.state.drivers)
 
         # Objetivo 4: Minimizar o tempo de entrega dos motoristas a partir do tempo efetivo gasto -> Recompensa negativa no fim da simulação
         elif self.reward_objective == 4 and (terminated or truncated):
@@ -264,7 +264,7 @@ class FoodDeliveryGymEnv(Env):
 
             if truncated and self.simpy_env.state.orders_delivered < self.num_orders:
                 # Se a simulação foi truncada e não foram entregues todos os pedidos, penaliza a recompensa
-                reward += -sum(driver.get_penality_for_late_orders() for driver in self.simpy_env.state.drivers)
+                reward -= sum(driver.get_penality_for_late_orders() for driver in self.simpy_env.state.drivers)
         
         # Objetivo 5: Minimizar o custo de operação (distância) -> Recompensa negativa no fim da simulação
         elif self.reward_objective == 5 and (terminated or truncated):
