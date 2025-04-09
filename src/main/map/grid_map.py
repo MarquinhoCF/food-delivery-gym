@@ -12,6 +12,10 @@ class GridMap(Map):
     def distance(self, coord1: Coordinate, coord2: Coordinate) -> Number:
         return max(abs(coord1[0] - coord2[0]) + abs(coord1[1] - coord2[1]), 1)
 
+    def max_distance(self) -> Number:
+        # abs(size-1 - 0) + abs(size-1 - 0) = (size-1) + (size-1) = 2*size - 2
+        return self.size * 2 - 2
+
     def acc_distance(self, coordinates: List[Coordinate]) -> Number:
         distance = 0
         if len(coordinates) <= 1:

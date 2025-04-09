@@ -54,13 +54,16 @@ class Driver(MapActor):
         
         self.status = status
         self.movement_rate = movement_rate
-        
-        self.start_time_to_last_order = 0
-        self.time_spent_to_last_order = 0
 
         self.current_route: Optional[Route] = None
         self.current_route_segment: Optional[RouteSegment] = None
         self.route_requests: List[Route] = []
+
+        # Variáveis para controle do tempo gasto para entrega dos pedidos
+        self.orders_list: List[Order] = []
+        self.last_time_check: Number = 0
+        self.sum_time_spent_for_delivery: Number = 0
+
         self.last_future_coordinate: Coordinate = coordinate
 
         self.total_distance: Number = 0
@@ -96,6 +99,8 @@ class Driver(MapActor):
         self.accept_route(route) if accept else self.reject_route(route)
 
     def accept_route(self, route: Route) -> None:
+        self.orders_list.append(route.order)
+
         if not self.desconsider_capacity:
             self.environment.state.increment_assigned_routes()
         if self.current_route is None:
@@ -201,7 +206,6 @@ class Driver(MapActor):
         self.environment.add_rejected_delivery(route_segment.order, rejection, event)
 
     def picking_up(self, order: Order) -> ProcessGenerator:
-        self.start_time_to_last_order = self.now
         self.status = DriverStatus.PICKING_UP
 
         if order.status == OrderStatus.PREPARING:
@@ -260,7 +264,6 @@ class Driver(MapActor):
         yield self.process(order.customer.receive_order(order, self))
         self.delivered(order)
         
-
     def delivered(self, order: Order) -> None:
         self.coordinate = order.customer.coordinate
         self.publish_event(DriverDeliveredOrder(
@@ -275,12 +278,25 @@ class Driver(MapActor):
         self.process(self.sequential_processor())
         self.orders_delivered += 1
         self.environment.state.increment_orders_delivered()
+        
+        # Remove o pedido da lista de pedidos do motorista
+        for i, o in enumerate(self.orders_list):
+            if o.order_id == order.order_id:
+                if order.time_that_driver_was_allocated > self.last_time_check:
+                    # Se o pedido foi alocado depois do último tempo de verificação, soma o tempo desde a alocação até agora
+                    self.sum_time_spent_for_delivery += (self.now - o.time_that_driver_was_allocated)
+                else:
+                    # Se o pedido foi alocado antes do último tempo de verificação, soma o tempo desde o último tempo de verificação até agora
+                    self.sum_time_spent_for_delivery += (self.now - self.last_time_check)
+                del self.orders_list[i]
+                break
+
         # TODO: Logs
         # print(f"Driver {self.driver_id} entregou o pedido ao cliente no tempo {self.now}")
 
     def move(self) -> ProcessGenerator:
         while True:
-            if self.current_route_segment is not None:
+            if self.current_route_segment:
                 old_coordinate = self.coordinate
                 self.coordinate = self.environment.map.move(
                     origin=self.coordinate,
@@ -454,5 +470,32 @@ class Driver(MapActor):
         if self.status == DriverStatus.PICKING_UP_WAITING:
             self.time_waiting_for_order += 1
 
-    def update_last_total_distance(self):
+    def get_and_update_distance_traveled(self):
+        distance_traveled = self.total_distance - self.last_total_distance
         self.last_total_distance = self.total_distance
+        return distance_traveled
+
+    def get_sum_time_spent_for_delivery(self) -> Number:
+        sum_time_spent = self.sum_time_spent_for_delivery
+        for order in self.orders_list:
+            if order.time_that_driver_was_allocated > self.last_time_check:
+                # Se o pedido foi alocado depois do último tempo de verificação, soma o tempo desde a alocação até agora
+                sum_time_spent += (self.now - order.time_that_driver_was_allocated)
+            else:
+                # Se o pedido foi alocado antes do último tempo de verificação, soma o tempo desde o último tempo de verificação até agora
+                sum_time_spent += (self.now - self.last_time_check)
+        
+        self.last_time_check = self.now
+        self.sum_time_spent_for_delivery = 0
+        return sum_time_spent
+    
+    def get_penality_for_late_orders(self) -> Number:
+        penalty = 0
+        for order in self.orders_list:
+            penalty += (self.now - order.time_that_driver_was_allocated)
+        return penalty
+    
+    def get_last_coordinate_from_routes_list(self) -> Coordinate:
+        if self.route_requests:
+            return self.route_requests[-1].order.customer.coordinate
+        return self.coordinate

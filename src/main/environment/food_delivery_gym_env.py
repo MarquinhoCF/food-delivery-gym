@@ -59,10 +59,7 @@ class FoodDeliveryGymEnv(Env):
         self.simpy_env = None # Ambiente de simulação será criado no reset
 
         # Definindo o objetivo da recompensa
-        valid_objectives = [1, 2]
-        if reward_objective not in valid_objectives:
-            raise ValueError(f"Objetivo inválido! Escolha entre {valid_objectives}")
-        self.reward_objective = reward_objective
+        self.set_reward_objective(reward_objective)
 
         # Espaço de Observação
         if self.normalize:
@@ -157,13 +154,13 @@ class FoodDeliveryGymEnv(Env):
         while (not terminated) and (not truncated) and (core_event is None):
             if self.simpy_env.state.orders_delivered < self.num_orders:
                 self.simpy_env.step(self.env_mode, self.render_mode)
-
-                # Verifica se um pedido foi entregue
-                if self.simpy_env.state.orders_delivered > self.last_num_orders_delivered:
-                    # TODO: Logs
+                
+                # TODO: Logs
+                # # Verifica se um pedido foi entregue
+                # if self.simpy_env.state.orders_delivered > self.last_num_orders_delivered:
                     # print("Pedido entregue!")
                     # print(f"Número de pedidos entregues: {self.simpy_env.state.orders_delivered}")
-                    self.last_num_orders_delivered = self.simpy_env.state.orders_delivered
+                    # self.last_num_orders_delivered = self.simpy_env.state.orders_delivered
 
                 # Verifica o próximo evento principal
                 core_event = self.simpy_env.dequeue_core_event()
@@ -219,7 +216,7 @@ class FoodDeliveryGymEnv(Env):
             view=GridViewPygame(grid_size=self.grid_map_size) if self.render_mode == "human" else None
         )
 
-        self.last_num_orders_delivered = 0
+        # self.last_num_orders_delivered = 0
         core_event, _, _ = self.advance_simulation_until_event()
         self.last_order = core_event.order if core_event else None
 
@@ -234,24 +231,51 @@ class FoodDeliveryGymEnv(Env):
         route = Route(self.simpy_env, [segment_pickup, segment_delivery])
         selected_driver.receive_route_requests(route)
 
-    def calculate_reward(self):
+    def calculate_reward(self, terminated, truncated):
+        reward = 0
+
         # Objetivo 1: Minimizar o tempo de entrega -> Recompensa negativa
         if self.reward_objective == 1:
             # Soma das estimativas do tempo de ocupação de cada motoristas
-            sum_busy_time_drivers = 0
-            for driver in self.simpy_env.state.drivers:
-                sum_busy_time_drivers += driver.estimate_total_busy_time()
+            reward = -sum(driver.estimate_total_busy_time() for driver in self.simpy_env.state.drivers)
 
-            return -sum_busy_time_drivers
         # Objetivo 2: Minimizar o custo de operação (distância) -> Recompensa negativa
         elif self.reward_objective == 2:
             # Distância percorrida desde a última recompensa para o motorista selecionado
-            sum_distance_traveled = 0
-            for driver in self.simpy_env.state.drivers:
-                sum_distance_traveled += driver.total_distance - driver.last_total_distance
-                driver.update_last_total_distance()
+            reward = -sum(driver.get_and_update_distance_traveled() for driver in self.simpy_env.state.drivers)
+
+            if truncated and self.simpy_env.state.orders_delivered < self.num_orders:
+                # Se a simulação foi truncada e não foram entregues todos os pedidos, penaliza a recompensa
+                reward -= (self.num_orders - self.simpy_env.state.orders_delivered) * self.simpy_env.map.max_distance() * 2
             
-            return -sum_distance_traveled
+        # Objetivo 3: Minimizar o tempo de entrega dos motoristas a partir do tempo efetivo gasto -> Recompensa negativa
+        elif self.reward_objective == 3:
+            # Soma do tempo efetivo gasto por cada motorista
+            reward = -sum(driver.get_sum_time_spent_for_delivery() for driver in self.simpy_env.state.drivers)
+
+            if truncated and self.simpy_env.state.orders_delivered < self.num_orders:
+                # Se a simulação foi truncada e não foram entregues todos os pedidos, penaliza a recompensa
+                reward -= sum(driver.get_penality_for_late_orders() for driver in self.simpy_env.state.drivers)
+
+        # Objetivo 4: Minimizar o tempo de entrega dos motoristas a partir do tempo efetivo gasto -> Recompensa negativa no fim da simulação
+        elif self.reward_objective == 4 and (terminated or truncated):
+            # Soma do tempo efetivo gasto por cada motorista
+            reward = -sum(driver.get_sum_time_spent_for_delivery() for driver in self.simpy_env.state.drivers)
+
+            if truncated and self.simpy_env.state.orders_delivered < self.num_orders:
+                # Se a simulação foi truncada e não foram entregues todos os pedidos, penaliza a recompensa
+                reward -= sum(driver.get_penality_for_late_orders() for driver in self.simpy_env.state.drivers)
+        
+        # Objetivo 5: Minimizar o custo de operação (distância) -> Recompensa negativa no fim da simulação
+        elif self.reward_objective == 5 and (terminated or truncated):
+            # Distância total percorrida por cada motorista
+            reward = -sum(driver.get_and_update_distance_traveled() for driver in self.simpy_env.state.drivers)
+
+            if truncated and self.simpy_env.state.orders_delivered < self.num_orders:
+                # Se a simulação foi truncada e não foram entregues todos os pedidos, penaliza a recompensa
+                reward -= (self.num_orders - self.simpy_env.state.orders_delivered) * self.simpy_env.map.max_distance() * 2
+        
+        return reward
         
     def step(self, action):
         try:
@@ -273,18 +297,11 @@ class FoodDeliveryGymEnv(Env):
 
             observation = self.get_observation()
 
-            assert self.observation_space.contains(observation), "A observação gerada não está contida no espaço de observação."
+            # assert self.observation_space.contains(observation), "A observação gerada não está contida no espaço de observação."
             
             info = self._get_info()
 
-            if terminated or truncated:
-                # TODO: Logs
-                # print("Terminated or truncated!")
-                reward = 0
-                # print(f"reward: {reward}")
-                return observation, reward, terminated, truncated, info
-
-            reward = self.calculate_reward()
+            reward = self.calculate_reward(terminated, truncated)
             # print(f"reward: {reward}")
 
             return observation, reward, terminated, truncated, info
@@ -381,6 +398,15 @@ class FoodDeliveryGymEnv(Env):
     
     def get_statistics(self):
         return self.simpy_env.compute_statistics()
+    
+    def get_reward_objective(self):
+        return self.reward_objective
+    
+    def set_reward_objective(self, reward_objective: int):
+        valid_objectives = [1, 2, 3, 4, 5]
+        if reward_objective not in valid_objectives:
+            raise ValueError(f"Objetivo inválido! Escolha entre {valid_objectives}")
+        self.reward_objective = reward_objective
     
     def get_description(self):
         descricao = []

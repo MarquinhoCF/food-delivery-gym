@@ -8,3 +8,4 @@ stable-baselines3==2.4.0
 sb3-contrib
 tensorflow
 tensorboard
+snakeviz

@@ -40,7 +40,7 @@ class DriverIdleTimeMetric(Metric):
             print("\nTempo Ocioso por Motorista:")
 
             for driver_id, idle_time in zip(ids, idle_times):
-                print(f"Estabelecimento {driver_id}: {idle_time:.2f} minutos ocioso")
+                print(f"Motorista {driver_id}: {idle_time:.2f} minutos ocioso")
 
             ax.barh(ids, idle_times, color='green')
             ax.set_xlabel('Idle Time')

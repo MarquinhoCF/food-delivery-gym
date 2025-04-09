@@ -158,6 +158,10 @@ class FoodDeliverySimpyEnv(Environment):
         
         for driver in self._state.drivers:
             driver.update_statistcs_variables()
+    
+    def update_spent_drivers(self):
+        for driver in self._state.drivers:
+            driver.update_spent_time()
 
     def register_statistic_data(self):
         for establishment in self._state.establishments:

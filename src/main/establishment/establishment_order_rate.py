@@ -1,5 +1,6 @@
 from numbers import Number
 
+import numpy as np
 from simpy.core import SimTime
 from src.main.environment.food_delivery_simpy_env import FoodDeliverySimpyEnv
 from src.main.establishment.catalog import Catalog
@@ -37,8 +38,11 @@ class EstablishmentOrderRate(Establishment):
         self.max_prepare_time = max_prepare_time
         self.min_prepare_time = min_prepare_time
 
+        relative_position = (order_production_time_rate - min_prepare_time) / (max_prepare_time - min_prepare_time)
+        self.a = 1 + 5 * relative_position
+        self.b = 7 - self.a
+
     def time_estimate_to_prepare_order(self) -> SimTime:
-        time_to_prepare = None
-        while time_to_prepare is None or time_to_prepare < self.min_prepare_time or time_to_prepare > self.max_prepare_time:   # TODO: Pesquisar uma forma de não afetar a distribuição
-            time_to_prepare = round(self.rng.expovariate(1 / self.order_production_time_rate))
-        return time_to_prepare
+        sample = np.random.beta(self.a, self.b)
+        estimated_time = self.min_prepare_time + (self.max_prepare_time - self.min_prepare_time) * sample
+        return round(estimated_time)

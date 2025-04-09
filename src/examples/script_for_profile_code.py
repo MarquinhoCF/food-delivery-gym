@@ -1,10 +1,10 @@
 import sys
 
 from stable_baselines3 import PPO
-from src.main.environment.env_mode import EnvMode
 from src.main.utils.load_scenarios import load_scenario
 from src.main.cost.objective_based_cost_function import ObjectiveBasedCostFunction
 from src.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
+from src.main.environment.env_mode import EnvMode
 from src.main.optimizer.optimizer_gym.first_driver_optimizer_gym import FirstDriverOptimizerGym
 from src.main.optimizer.optimizer_gym.lowest_cost_driver_optimizer_gym import LowestCostDriverOptimizerGym
 from src.main.optimizer.optimizer_gym.nearest_driver_optimizer_gym import NearestDriverOptimizerGym
@@ -16,7 +16,7 @@ SEED = 101010
 # Escolha se deseja salvar o log em um arquivo
 SAVE_LOG_TO_FILE = False
 
-RESULTS_DIR = "./data/runs/obj_3/complex_scenario/"
+RESULTS_DIR = "./data/runs/teste/"
 
 if SAVE_LOG_TO_FILE:
     log_file = open(RESULTS_DIR + "log.txt", "w", encoding="utf-8")
@@ -25,25 +25,16 @@ if SAVE_LOG_TO_FILE:
 
 def main():
     gym_env: FoodDeliveryGymEnv = load_scenario("complex.json")
-    gym_env.set_mode(EnvMode.EVALUATING)
-    gym_env.set_reward_objective(3)
-
-    num_runs = 10
 
     optimizer = RandomDriverOptimizerGym(gym_env)
-    optimizer.run_simulations(num_runs, RESULTS_DIR + "random_heuristic/", seed=SEED)
+    optimizer.set_gym_env_mode(EnvMode.TRAINING)
+    optimizer.initialize(seed=SEED)
 
-    optimizer = FirstDriverOptimizerGym(gym_env)
-    optimizer.run_simulations(num_runs, RESULTS_DIR + "first_driver_heuristic/", seed=SEED)
+    for i in range(200):
+        optimizer.run()
+        optimizer.reset_env()
 
-    optimizer = NearestDriverOptimizerGym(gym_env)
-    optimizer.run_simulations(num_runs, RESULTS_DIR + "nearest_driver_heuristic/", seed=SEED)
 
-    optimizer = LowestCostDriverOptimizerGym(gym_env, cost_function=ObjectiveBasedCostFunction(objective=1))
-    optimizer.run_simulations(num_runs, RESULTS_DIR + "lowest_cost_driver_heuristic/", seed=SEED)
-
-    # optimizer = RLModelOptimizerGym(gym_env, PPO.load("./data/ppo_training/obj_4/complex_scenario/6000000_time_steps/best_model/best_model.zip"))
-    # optimizer.run_simulations(num_runs, RESULTS_DIR + "ppo_agent_trained_6000000/", seed=SEED)
 
 if __name__ == '__main__':
     main()
