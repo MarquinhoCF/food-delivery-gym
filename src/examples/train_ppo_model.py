@@ -20,7 +20,7 @@ SEED = 101010
 # Escolha se deseja salvar o log em um arquivo
 SAVE_LOG_TO_FILE = False
 
-DIR_PATH = "./data/ppo_training/obj_3/complex_scenario/13000000_time_steps/"
+DIR_PATH = "./data/ppo_training/obj_3/complex_scenario/1000000_time_steps/"
 
 # Verificar e criar os diretórios necessários
 os.makedirs(DIR_PATH + "logs/", exist_ok=True)

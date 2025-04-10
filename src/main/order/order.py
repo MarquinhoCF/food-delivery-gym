@@ -63,6 +63,15 @@ class Order:
         self.isReady = True
         self.time_it_was_ready = now
 
+    def is_already_caught(self):
+        return self.status in (
+            OrderStatus.PICKED_UP,
+            OrderStatus.DELIVERING,
+            OrderStatus.DRIVER_ARRIVED_DELIVERY_LOCATION,
+            OrderStatus.RECEIVED,
+            OrderStatus.DELIVERED,
+        )
+
     def add_delivery_rejection(self, delivery_rejection: DeliveryRejection):
         self.delivery_rejections.append(delivery_rejection)
 
