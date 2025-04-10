@@ -62,7 +62,7 @@ class Driver(MapActor):
         # Variáveis para controle do tempo gasto para entrega dos pedidos
         self.orders_list: List[Order] = []
         self.last_time_check: Number = 0
-        self.sum_penality_for_time_spent: Number = 0
+        self.sum_penalty_for_time_spent: Number = 0
 
         self.last_future_coordinate: Coordinate = coordinate
 
@@ -278,17 +278,6 @@ class Driver(MapActor):
         self.process(self.sequential_processor())
         self.orders_delivered += 1
         self.environment.state.increment_orders_delivered()
-
-        for order in self.orders_list:
-            # Se o pedido foi alocado depois do último tempo de verificação, soma o tempo desde a alocação até agora
-            # Agora se o pedido foi alocado antes do último tempo de verificação, soma o tempo desde o último tempo de verificação até agora
-            start_time = max(order.time_that_driver_was_allocated, self.last_time_check)
-            penalty = self.now - start_time
-
-            if not order.is_already_caught():
-                penalty *= 5
-            
-            total_penalty += penalty
         
         # Remove o pedido da lista de pedidos do motorista e soma a penalidade do tempo gasto para entrega
         for i, o in enumerate(self.orders_list):
@@ -301,7 +290,7 @@ class Driver(MapActor):
                 if not order.is_already_caught():
                     penalty *= 5
                 
-                self.sum_penality_for_time_spent += penalty
+                self.sum_penalty_for_time_spent += penalty
 
                 del self.orders_list[i]
                 break
@@ -505,7 +494,7 @@ class Driver(MapActor):
             total_penalty += penalty
         
         self.last_time_check = self.now
-        self.sum_penality_for_time_spent = 0
+        self.sum_penalty_for_time_spent = 0
         return total_penalty
     
     def get_penality_for_late_orders(self) -> Number:
