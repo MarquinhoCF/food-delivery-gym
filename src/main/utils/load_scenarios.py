@@ -1,10 +1,10 @@
 import json
 from src.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
 
-DIR_PATH = "./scenarios/"
+DIR_PATH = "./scenarios"
 
-def load_scenario(file_name: str = "scenario.json") -> FoodDeliveryGymEnv:
-    file_path = DIR_PATH + file_name
+def load_scenario(file_name: str = "scenario.json", dir_path: str = DIR_PATH) -> FoodDeliveryGymEnv:
+    file_path = dir_path + "/" + file_name
     with open(file_path, "r", encoding="utf-8") as f:
         scenario = json.load(f)
 
