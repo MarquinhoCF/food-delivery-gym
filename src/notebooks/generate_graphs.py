@@ -5,7 +5,7 @@ import os
 from src.main.utils.load_scenarios import load_scenario
 from src.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
 
-DIR_PATH = "./data/ppo_training/obj_3/complex_scenario/13000000_time_steps/"
+DIR_PATH = "./data/ppo_training/obj_3/complex_scenario/30000000_time_steps/"
 
 gym_env: FoodDeliveryGymEnv = load_scenario("complex.json")
 
@@ -68,7 +68,7 @@ plt.legend()
 plt.grid(True, linestyle="--", alpha=0.3)
 plt.show()
 
-step_matrix = step_rewards[7500*576:8000*576].reshape((8000-7500, episode_length))
+step_matrix = step_rewards[49500*episode_length:50000*episode_length].reshape((50000-49500, episode_length))
 
 mean_rewards = step_matrix.mean(axis=0)
 std_rewards = step_matrix.std(axis=0)
