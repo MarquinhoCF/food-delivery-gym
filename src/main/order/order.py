@@ -30,6 +30,7 @@ class Order:
         self.time_that_driver_was_allocated = None
         self.time_it_was_ready = None
         self.isReady = False
+        self.time_it_was_picked_up = None
         self.required_capacity = self.calculate_required_capacity()
         self.delivery_rejections: List[DeliveryRejection] = []
 
@@ -62,6 +63,10 @@ class Order:
         self.status = OrderStatus.READY
         self.isReady = True
         self.time_it_was_ready = now
+
+    def picked_up(self, now):
+        self.status = OrderStatus.PICKED_UP
+        self.time_it_was_picked_up = now
 
     def is_already_caught(self):
         return self.status in (

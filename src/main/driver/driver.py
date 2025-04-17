@@ -245,6 +245,7 @@ class Driver(MapActor):
             time=self.now
         ))
         self.coordinate = order.establishment.coordinate
+        order.picked_up(self.now)
         self.process(self.sequential_processor())
 
     def delivering(self, order: Order) -> ProcessGenerator:
@@ -295,13 +296,20 @@ class Driver(MapActor):
                 # Se o pedido foi alocado depois do último tempo de verificação, soma o tempo desde a alocação até agora
                 # Agora se o pedido foi alocado antes do último tempo de verificação, soma o tempo desde o último tempo de verificação até agora
                 start_time = max(order.time_that_driver_was_allocated, self.last_time_check)
-                penalty = self.now - start_time
                 
-                # TODO: Verificar essas para recompensa 5 e 6
-                # Se o pedido ainda não foi coletado do restaurante, multiplica a penalidade por 5 somente se objetivo da recompensa for 7 ou 8
-                if self.reward_objective in [5, 6] and not order.is_already_caught():
-                    penalty *= 5
-                
+                if self.reward_objective in [5, 6]:
+                    # O pedido já foi coletado
+                    if order.time_it_was_picked_up > start_time:
+                        # Penalidade dividida entre antes e depois da coleta
+                        penalty_before_pickup = (order.time_it_was_picked_up - start_time) * 5
+                        penalty_after_pickup = self.now - order.time_it_was_picked_up
+                        penalty = penalty_before_pickup + penalty_after_pickup
+                    else:
+                        # Todo o tempo é depois da coleta
+                        penalty = self.now - start_time
+                else:
+                    penalty = self.now - start_time
+
                 self.sum_penalty_for_time_spent += penalty
 
                 del self.orders_list[i]
@@ -495,18 +503,29 @@ class Driver(MapActor):
         total_penalty = self.sum_penalty_for_time_spent
 
         for order in self.orders_list:
-            # Se o pedido foi alocado depois do último tempo de verificação, soma o tempo desde a alocação até agora
-            # Agora se o pedido foi alocado antes do último tempo de verificação, soma o tempo desde o último tempo de verificação até agora
-            start_time = max(order.time_that_driver_was_allocated, self.last_time_check)
-            penalty = self.now - start_time
+            # Considera o tempo de início como o maior entre o momento de alocação do driver e o último tempo de verificação
+            time_count_start = max(order.time_that_driver_was_allocated, self.last_time_check)
 
-            # TODO: Verificar essas para recompensa 5 e 6
-            # Se o pedido ainda não foi coletado do restaurante, multiplica a penalidade por 5 somente se objetivo da recompensa for 7 ou 8
-            if self.reward_objective in [5, 6] and not order.is_already_caught():
-                penalty *= 5
-            
+            if self.reward_objective in [5, 6]:
+                if order.is_already_caught():
+                    # O pedido já foi coletado
+                    if order.time_it_was_picked_up > time_count_start:
+                        # Penalidade dividida entre antes e depois da coleta
+                        penalty_before_pickup = (order.time_it_was_picked_up - time_count_start) * 5
+                        penalty_after_pickup = self.now - order.time_it_was_picked_up
+                        penalty = penalty_before_pickup + penalty_after_pickup
+                    else:
+                        # Todo o tempo é depois da coleta
+                        penalty = self.now - time_count_start
+                else:
+                    # Pedido ainda não foi coletado, aplica multiplicador
+                    penalty = (self.now - time_count_start) * 5
+            else:
+                # Outros objetivos de recompensa
+                penalty = self.now - time_count_start
+
             total_penalty += penalty
-        
+
         self.last_time_check = self.now
         self.sum_penalty_for_time_spent = 0
         return total_penalty
