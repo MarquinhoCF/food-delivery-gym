@@ -6,10 +6,11 @@ from src.main.generator.initial_generator import InitialGenerator
 
 
 class InitialDriverGenerator(InitialGenerator):
-    def __init__(self, num_drivers, vel_drivers, desconsider_capacity=False):
+    def __init__(self, num_drivers, vel_drivers, reward_objective, desconsider_capacity=False):
         super().__init__()
         self.num_drivers = num_drivers
         self.vel_drivers = vel_drivers
+        self.reward_objective = reward_objective
         self.desconsider_capacity = desconsider_capacity
 
     def run(self, env: FoodDeliverySimpyEnv):
@@ -27,6 +28,7 @@ class InitialDriverGenerator(InitialGenerator):
                 movement_rate=self.rng.uniform(self.vel_drivers[0], self.vel_drivers[1]),
                 # Gerar uma cor aleatória RGB para cada motorista
                 color=(self.rng.randint(0, 255), self.rng.randint(0, 255), self.rng.randint(0, 255)),
+                reward_objective=self.reward_objective,
             ) for i in range(self.num_drivers)
         ]
         env.add_drivers(drivers)

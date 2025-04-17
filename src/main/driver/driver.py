@@ -36,7 +36,8 @@ class Driver(MapActor):
             desconsider_capacity: bool = False,
             capacity: Optional[Capacity] = Capacity(Dimensions(100, 100, 100, 100)),
             status: Optional[DriverStatus] = DriverStatus.AVAILABLE,
-            movement_rate: Optional[Number] = 5
+            movement_rate: Optional[Number] = 5,
+            reward_objective: Optional[Number] = 1,
     ):
         
         self.driver_id = id
@@ -54,10 +55,19 @@ class Driver(MapActor):
         
         self.status = status
         self.movement_rate = movement_rate
+        self.reward_objective = reward_objective
 
         self.current_route: Optional[Route] = None
         self.current_route_segment: Optional[RouteSegment] = None
         self.route_requests: List[Route] = []
+
+        # Variável para retornar a recompensa do objetivo 2: 
+        # Minimizar o tempo de entrega a partir da expectativa de tempo gasto com a entrega ao final do episódio 
+        self.sum_expected_delivery_time_reward: Number = 0
+
+        # Variável para retornar a recompensa do objetivo 10: 
+        # Minimizar o tempo de entrega a partir da expectativa de tempo gasto com a entrega ao final do episódio 
+        self.sum_distance_to_be_traveled_reward: Number = 0
 
         # Variáveis para controle do tempo gasto para entrega dos pedidos
         self.orders_list: List[Order] = []
@@ -286,8 +296,10 @@ class Driver(MapActor):
                 # Agora se o pedido foi alocado antes do último tempo de verificação, soma o tempo desde o último tempo de verificação até agora
                 start_time = max(order.time_that_driver_was_allocated, self.last_time_check)
                 penalty = self.now - start_time
-
-                if not order.is_already_caught():
+                
+                # TODO: Verificar essas para recompensa 5 e 6
+                # Se o pedido ainda não foi coletado do restaurante, multiplica a penalidade por 5 somente se objetivo da recompensa for 7 ou 8
+                if self.reward_objective in [5, 6] and not order.is_already_caught():
                     penalty *= 5
                 
                 self.sum_penalty_for_time_spent += penalty
@@ -399,7 +411,7 @@ class Driver(MapActor):
         return max(total_busy_time, 0)
 
     
-    def calculate_total_distance(self) -> Number:
+    def calculate_total_distance_to_travel(self) -> Number:
         total_distance = 0
         valid_coordinate = self.coordinate  # Posição atual do motorista
 
@@ -488,7 +500,9 @@ class Driver(MapActor):
             start_time = max(order.time_that_driver_was_allocated, self.last_time_check)
             penalty = self.now - start_time
 
-            if not order.is_already_caught():
+            # TODO: Verificar essas para recompensa 5 e 6
+            # Se o pedido ainda não foi coletado do restaurante, multiplica a penalidade por 5 somente se objetivo da recompensa for 7 ou 8
+            if self.reward_objective in [5, 6] and not order.is_already_caught():
                 penalty *= 5
             
             total_penalty += penalty
@@ -505,3 +519,15 @@ class Driver(MapActor):
         if self.route_requests:
             return self.route_requests[-1].order.customer.coordinate
         return self.coordinate
+    
+    def update_expected_delivery_time_reward(self) -> None:
+        self.sum_expected_delivery_time_reward += self.estimate_total_busy_time()
+    
+    def get_expected_delivery_time_reward(self) -> Number:
+        return self.sum_expected_delivery_time_reward
+    
+    def update_distance_to_be_traveled_reward(self) -> None:
+        self.sum_distance_to_be_traveled_reward += self.calculate_total_distance_to_travel()
+    
+    def get_distance_to_be_traveled_reward(self) -> Number:
+        return self.sum_distance_to_be_traveled_reward

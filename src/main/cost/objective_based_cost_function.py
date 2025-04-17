@@ -46,7 +46,7 @@ class ObjectiveBasedCostFunction(CostFunction):
         current_distance = 0
 
         if driver.current_route_segment is not None:
-            current_distance = driver.calculate_total_distance()
+            current_distance = driver.calculate_total_distance_to_travel()
 
         new_segment_distance = map.distance(
             driver.coordinate,
