@@ -12,7 +12,6 @@ from stable_baselines3.common.callbacks import EvalCallback
 
 from src.main.environment.env_mode import EnvMode
 from src.main.environment.step_reward_logger import StepRewardLogger
-from src.main.utils.load_scenarios import load_scenario
 from src.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
 
 SEED = 101010
@@ -35,7 +34,7 @@ if SAVE_LOG_TO_FILE:
 def main():
     try:
         # Criando o ambiente de treinamento
-        gym_env: FoodDeliveryGymEnv = load_scenario("complex.json")
+        gym_env: FoodDeliveryGymEnv = FoodDeliveryGymEnv(scenario_json_file_path="./scenarios/complex.json")
         gym_env.set_mode(EnvMode.TRAINING)
         gym_env.set_reward_objective(3)
 
@@ -47,7 +46,7 @@ def main():
         env = DummyVecEnv([lambda: gym_env])
 
         # Criando o ambiente de avaliação separado (sem Monitor)
-        eval_env = load_scenario("complex.json")
+        eval_env = FoodDeliveryGymEnv(scenario_json_file_path="./scenarios/complex.json")
         eval_env.set_mode(EnvMode.TRAINING)
         eval_env.set_reward_objective(3)
         eval_env = Monitor(eval_env, DIR_PATH + "logs_eval/")

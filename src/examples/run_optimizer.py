@@ -2,7 +2,6 @@ import sys
 
 from stable_baselines3 import PPO
 from src.main.environment.env_mode import EnvMode
-from src.main.utils.load_scenarios import load_scenario
 from src.main.cost.objective_based_cost_function import ObjectiveBasedCostFunction
 from src.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
 from src.main.optimizer.optimizer_gym.first_driver_optimizer_gym import FirstDriverOptimizerGym
@@ -16,7 +15,7 @@ SEED = 101010
 # Escolha se deseja salvar o log em um arquivo
 SAVE_LOG_TO_FILE = False
 
-RESULTS_DIR = "./data/runs/obj_3/complex_scenario/"
+RESULTS_DIR = "./data/runs/obj_6/complex_scenario/"
 
 if SAVE_LOG_TO_FILE:
     log_file = open(RESULTS_DIR + "log.txt", "w", encoding="utf-8")
@@ -24,9 +23,9 @@ if SAVE_LOG_TO_FILE:
     sys.stderr = log_file
 
 def main():
-    gym_env: FoodDeliveryGymEnv = load_scenario("complex.json")
+    gym_env: FoodDeliveryGymEnv = FoodDeliveryGymEnv(scenario_json_file_path="./scenarios/complex.json")
     gym_env.set_mode(EnvMode.EVALUATING)
-    gym_env.set_reward_objective(3)
+    gym_env.set_reward_objective(6)
 
     num_runs = 10
 

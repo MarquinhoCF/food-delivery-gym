@@ -38,77 +38,60 @@ class GridMap(Map):
                 point = self.rng.randrange(self.size), self.rng.randrange(self.size)
             self.generated_points[point] = True
         return point
-    
-    # Função de movimento otimizada -> Para melhor entendimento, veja a função comentada abaixo
+
     def move(self, origin: Coordinate, destination: Coordinate, rate: Number) -> Coordinate:
         x, y = origin
         dest_x, dest_y = destination
-        dx, dy = abs(dest_x - x), abs(dest_y - y)
 
-        rate = round(rate)
-        step_x = min(dx, max(1, rate // 2))
-        step_y = min(dy, max(1, rate - step_x))
-
-        # Movimento nas direções corretas
-        x += step_x if x < dest_x else -step_x
-        y += step_y if y < dest_y else -step_y
-
-        # Se já alcançou o destino, retorna diretamente
-        return (dest_x, dest_y) if (dx + dy) <= rate else (x, y)
-
-    # def move(self, origin: Coordinate, destination: Coordinate, rate: Number) -> Coordinate:
-    #     x, y = origin
-    #     dest_x, dest_y = destination
-
-    #     # Calcula a diferença absoluta entre as coordenadas de origem e destino no eixo X, Y (horizontal, vertical)
-    #     dx = abs(dest_x - x)
-    #     dy = abs(dest_y - y)
+        # Calcula a diferença absoluta entre as coordenadas de origem e destino no eixo X, Y (horizontal, vertical)
+        dx = abs(dest_x - x)
+        dy = abs(dest_y - y)
         
-    #     # Arredonda a taxa de movimento
-    #     rate = round(rate)
-    #     # Calcula a metade da taxa
-    #     rate2 = round(rate / 2)
+        # Arredonda a taxa de movimento
+        rate = round(rate)
+        # Calcula a metade da taxa
+        rate2 = round(rate / 2)
 
-    #     # Verifica se a soma das diferenças no eixo X e Y é menor ou igual à taxa de movimento
-    #     if (dx + dy) <= rate:
-    #         # Se sim, o destino é alcançado diretamente
-    #         return dest_x, dest_y
-    #     else:
-    #         # Caso contrário, realiza o movimento em duas etapas (X e Y)
+        # Verifica se a soma das diferenças no eixo X e Y é menor ou igual à taxa de movimento
+        if (dx + dy) <= rate:
+            # Se sim, o destino é alcançado diretamente
+            return dest_x, dest_y
+        else:
+            # Caso contrário, realiza o movimento em duas etapas (X e Y)
 
-    #         # Se a diferença no eixo X for menor que no eixo Y
-    #         if dx < dy:
-    #             # A distância a ser percorrida no eixo X será o menor valor entre a diferença X e metade da taxa de movimento
-    #             distance = min(dx, rate - rate2)
+            # Se a diferença no eixo X for menor que no eixo Y
+            if dx < dy:
+                # A distância a ser percorrida no eixo X será o menor valor entre a diferença X e metade da taxa de movimento
+                distance = min(dx, rate - rate2)
 
-    #             # Move na direção X dependendo de qual lado o destino está
-    #             if x < dest_x:
-    #                 x += distance
-    #             else:
-    #                 x -= distance
+                # Move na direção X dependendo de qual lado o destino está
+                if x < dest_x:
+                    x += distance
+                else:
+                    x -= distance
 
-    #             # No eixo Y, move o restante da taxa
-    #             if y < dest_y:
-    #                 y += rate - distance
-    #             else:
-    #                 y -= rate - distance
+                # No eixo Y, move o restante da taxa
+                if y < dest_y:
+                    y += rate - distance
+                else:
+                    y -= rate - distance
 
-    #         # Se a diferença no eixo Y for menor ou igual ao eixo X
-    #         else:
-    #             # A distância a ser percorrida no eixo Y será o menor valor entre a diferença Y e metade da taxa de movimento
-    #             distance = min(dy, rate - rate2)
+            # Se a diferença no eixo Y for menor ou igual ao eixo X
+            else:
+                # A distância a ser percorrida no eixo Y será o menor valor entre a diferença Y e metade da taxa de movimento
+                distance = min(dy, rate - rate2)
 
-    #             # Move na direção Y dependendo de qual lado o destino está
-    #             if y < dest_y:
-    #                 y += distance
-    #             else:
-    #                 y -= distance
+                # Move na direção Y dependendo de qual lado o destino está
+                if y < dest_y:
+                    y += distance
+                else:
+                    y -= distance
 
-    #             # No eixo X, move o restante da taxa
-    #             if x < dest_x:
-    #                 x += rate - distance
-    #             else:
-    #                 x -= rate - distance
+                # No eixo X, move o restante da taxa
+                if x < dest_x:
+                    x += rate - distance
+                else:
+                    x -= rate - distance
 
-    #     return x, y
+        return x, y
 

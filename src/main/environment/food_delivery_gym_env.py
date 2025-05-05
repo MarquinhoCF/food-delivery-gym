@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 import traceback
 from typing import Optional
 import numpy as np
@@ -31,35 +32,63 @@ class FoodDeliveryGymEnv(Env):
 
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 4}
 
-    def __init__(self, num_drivers, num_establishments, num_orders, num_costumers, function, lambda_code, time_shift, vel_drivers, 
-                prepare_time, operating_radius, production_capacity, percentage_allocation_driver, grid_map_size=100, use_estimate=True, 
-                desconsider_capacity=True, max_time_step=10000, reward_objective=1, render_mode=None, normalize=True):
-        self.num_drivers = num_drivers
-        self.num_establishments = num_establishments
-        self.num_orders = num_orders
-        self.num_costumers = num_costumers
-        self.function = function
-        self.lambda_code = lambda_code
-        self.time_shift = time_shift
-        self.vel_drivers = vel_drivers
-        self.prepare_time = prepare_time
-        self.operating_radius = operating_radius
-        self.production_capacity = production_capacity
-        self.percentage_allocation_driver = percentage_allocation_driver
-        self.grid_map_size = grid_map_size
-        self.use_estimate = use_estimate
-        self.desconsider_capacity = desconsider_capacity
-        self.max_time_step = max_time_step
-        self.normalize = normalize
-        self.env_mode = EnvMode.EVALUATING
+    def __init__(self, scenario_json_file_path = str):
+
+        path = Path(scenario_json_file_path)
+
+        if not path.is_file():
+            raise FileNotFoundError(f"Scenario file not found: {path}")
+
+        with open(path, "r", encoding="utf-8") as f:
+            scenario = json.load(f)
+
+        required_keys = [
+            "num_drivers",
+            "num_establishments",
+            "num_orders",
+            "num_costumers",
+            "function_code",
+            "time_shift",
+            "vel_drivers",
+            "prepare_time",
+            "operating_radius",
+            "production_capacity",
+            "percentage_allocation_driver",
+            "max_time_step",
+            "reward_objective"
+        ]
+
+        missing_keys = [key for key in required_keys if key not in scenario]
+        if missing_keys:
+            raise ValueError(f"Missing required keys in scenario_json: {missing_keys}")
+
+        self.num_drivers = scenario["num_drivers"]
+        self.num_establishments = scenario["num_establishments"]
+        self.num_orders = scenario["num_orders"]
+        self.num_costumers = scenario["num_costumers"]
+        self.function = eval(scenario["function_code"])
+        self.lambda_code = scenario["function_code"]
+        self.time_shift = scenario["time_shift"]
+        self.vel_drivers = scenario["vel_drivers"]
+        self.prepare_time = scenario["prepare_time"]
+        self.operating_radius = scenario["operating_radius"]
+        self.production_capacity = scenario["production_capacity"]
+        self.percentage_allocation_driver = scenario["percentage_allocation_driver"]
+        self.grid_map_size = scenario.get("grid_map_size", 100)
+        self.use_estimate = scenario.get("use_estimate", True)
+        self.desconsider_capacity = scenario.get("desconsider_capacity", True)
+        self.max_time_step = scenario["max_time_step"]
+        self.normalize = scenario.get("normalize", True)
+        self.env_mode = EnvMode.TRAINING
         
+        render_mode = scenario.get("render_mode", None)
         assert render_mode is None or render_mode in self.metadata["render_modes"]
         self.render_mode = render_mode
 
         self.simpy_env = None # Ambiente de simulação será criado no reset
 
         # Definindo o objetivo da recompensa
-        self.set_reward_objective(reward_objective)
+        self.set_reward_objective(scenario["reward_objective"])
 
         # Espaço de Observação
         if self.normalize:
@@ -74,20 +103,20 @@ class FoodDeliveryGymEnv(Env):
             })
             
             self.limits_observation_space = {
-                'drivers_busy_time': (0, max_time_step),
-                'time_to_drivers_complete_order': (0, max_time_step),
+                'drivers_busy_time': (0, self.max_time_step),
+                'time_to_drivers_complete_order': (0, self.max_time_step),
                 'remaining_orders': (0, self.num_orders + 1),
-                'establishment_busy_time': (0, max_time_step),
-                'current_time_step': (0, max_time_step)
+                'establishment_busy_time': (0, self.max_time_step),
+                'current_time_step': (0, self.max_time_step)
             }
         else:
             self.dtype_observation = np.int32
             self.observation_space = Dict({
-                'drivers_busy_time': Box(low=0, high=max_time_step, shape=(self.num_drivers,), dtype=self.dtype_observation),
-                'time_to_drivers_complete_order': Box(low=0, high=max_time_step, shape=(self.num_drivers,), dtype=self.dtype_observation),
+                'drivers_busy_time': Box(low=0, high=self.max_time_step, shape=(self.num_drivers,), dtype=self.dtype_observation),
+                'time_to_drivers_complete_order': Box(low=0, high=self.max_time_step, shape=(self.num_drivers,), dtype=self.dtype_observation),
                 'remaining_orders': Discrete(self.num_orders + 1),
-                'establishment_busy_time': Box(low=0, high=max_time_step, shape=(self.num_establishments,), dtype=self.dtype_observation),
-                'current_time_step': Discrete(max_time_step)
+                'establishment_busy_time': Box(low=0, high=self.max_time_step, shape=(self.num_establishments,), dtype=self.dtype_observation),
+                'current_time_step': Discrete(self.max_time_step)
             })
 
         # Espaço de Ação
@@ -456,28 +485,3 @@ class FoodDeliveryGymEnv(Env):
         descricao.append(f"Capacidade de produção dos estabelecimentos: {self.production_capacity[0]} e {self.production_capacity[1]}")
         
         return "\n".join(descricao)
-    
-    def save_scenario(self, file_name: str = "scenario.json"):
-        scenario = {
-            "num_drivers": self.num_drivers,
-            "num_establishments": self.num_establishments,
-            "num_orders": self.num_orders,
-            "num_costumers": self.num_costumers,
-            "grid_map_size": self.grid_map_size,
-            "vel_drivers": self.vel_drivers,
-            "prepare_time": self.prepare_time,
-            "operating_radius": self.operating_radius,
-            "production_capacity": self.production_capacity,
-            "percentage_allocation_driver": self.percentage_allocation_driver,
-            "use_estimate": self.use_estimate,
-            "desconsider_capacity": self.desconsider_capacity,
-            "max_time_step": self.max_time_step,
-            "reward_objective": self.reward_objective,
-            "function_code": self.lambda_code,
-            "time_shift": self.time_shift,
-            "normalize": self.normalize
-        }
-        file_path = "./scenarios/" + file_name
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(scenario, f, indent=4)
-        print(f"Cenário salvo em {file_path}")
