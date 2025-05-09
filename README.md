@@ -58,7 +58,7 @@ source venv/bin/activate
 
 ### 🔹 Rodar o script do teste do simulador:
 ```shell
-python -m src.examples.test
+python -m food_delivery_gym.examples.test
 ```
 
 ## Treinamento de Agentes de Aprendizado por Reforço
@@ -137,7 +137,7 @@ model.save("ppo_food_delivery")
 ### Treinamento do Agentes RL a partir dos scripts prontos
 
 #### 1️⃣ Script `train_ppo_model`
-Utilize o script `train_ppo_model` localizado na pasta `src.examples` para realizar o treinamento do agente RL. Neste arquivo as constantes do cenário experimental já foram definidas, mas fique a vontade para alterá-las conforme seus objetivos.
+Utilize o script `train_ppo_model` localizado na pasta `food_delivery_gym.examples` para realizar o treinamento do agente RL. Neste arquivo as constantes do cenário experimental já foram definidas, mas fique a vontade para alterá-las conforme seus objetivos.
 
 Defina um caminho de um diretório a sua escolha para o salvamento dos modelos, logs e gráficos do treinamento:
 
@@ -153,7 +153,7 @@ model.learn(total_timesteps=10000, callback=eval_callback)
 
 #### 2️⃣ Script `run_optimizer`
 
-Utilize o script `run_optimizer` localizado na pasta `src.examples` para realizar multiplas execuções dos agentes sobre o ambiente gymnasium e analisar as estatisticas gerais. Os Agentes disponíveis são: **Aleatório**, **Primeiro Motorista**, **Motorista mais Perto**, **Função de Custo** e o **Agente de RL**.
+Utilize o script `run_optimizer` localizado na pasta `food_delivery_gym.examples` para realizar multiplas execuções dos agentes sobre o ambiente gymnasium e analisar as estatisticas gerais. Os Agentes disponíveis são: **Aleatório**, **Primeiro Motorista**, **Motorista mais Perto**, **Função de Custo** e o **Agente de RL**.
 
 Neste arquivo as constantes do cenário experimental já foram definidas, mas fique a vontade para alterá-las conforme seus objetivos.
 

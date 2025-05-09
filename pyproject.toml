@@ -1,0 +1,14 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "food_delivery_gym"
+version = "0.0.1"
+dependencies = [
+  "simpy",
+  "matplotlib",
+  "pygame",
+  "gymnasium",
+  "numpy"
+]
