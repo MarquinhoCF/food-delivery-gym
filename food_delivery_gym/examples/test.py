@@ -1,10 +1,13 @@
+from importlib.resources import files
 import sys
 import numpy as np
 import gymnasium as gym
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.vec_env import DummyVecEnv
-import food_delivery_gym.main.environment
+
+from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
+
 
 SEED = 101010
 
@@ -18,7 +21,8 @@ if SAVE_LOG_TO_FILE:
 
 def main():
     try:
-        gym_env = gym.make("FoodDelivery-medium-v0")
+        scenario_path = str(files("food_delivery_gym.main.scenarios").joinpath("complex.json"))
+        gym_env: FoodDeliveryGymEnv = FoodDeliveryGymEnv(scenario_json_file_path=scenario_path)
 
         estado : list[int] = gym_env.reset(seed=SEED, options={"render_mode": "human"})
         print(f'estado inicial {estado}')

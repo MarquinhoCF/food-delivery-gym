@@ -9,9 +9,9 @@ def get_scenario_path(filename):
 register(
     id='food_delivery_gym/FoodDelivery-initial-v0',
     entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
-    # kwargs={
-    #     "scenario_json_file_path": get_scenario_path("initial.json"),
-    # }
+    kwargs={
+        "scenario_json_file_path": get_scenario_path("initial.json"),
+    }
 )
 
 register(
