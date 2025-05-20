@@ -1,10 +1,11 @@
 simpy
 matplotlib
 pygame
-gymnasium==1.0.0
-numpy==1.26.4
+gymnasium
+numpy
 ortools
-stable-baselines3==2.4.0
+stable-baselines3
+rl_zoo3
 sb3-contrib
 tensorflow
 tensorboard

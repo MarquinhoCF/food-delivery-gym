@@ -8,7 +8,7 @@
             "name": "Python Debugger: Module",
             "type": "debugpy",
             "request": "launch",
-            "module": "src.examples.run_optimizer"
+            "module": "food_delivery_gym.examples.run_optimizer"
         }
     ]
 }
