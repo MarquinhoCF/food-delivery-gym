@@ -114,9 +114,9 @@ class FoodDeliveryGymEnv(Env):
             self.observation_space = Dict({
                 'drivers_busy_time': Box(low=0, high=self.max_time_step, shape=(self.num_drivers,), dtype=self.dtype_observation),
                 'time_to_drivers_complete_order': Box(low=0, high=self.max_time_step, shape=(self.num_drivers,), dtype=self.dtype_observation),
-                'remaining_orders': Discrete(self.num_orders + 1),
+                'remaining_orders': Box(low=0, high=self.num_orders + 1, shape=(1,), dtype=self.dtype_observation),
                 'establishment_busy_time': Box(low=0, high=self.max_time_step, shape=(self.num_establishments,), dtype=self.dtype_observation),
-                'current_time_step': Discrete(self.max_time_step)
+                'current_time_step': Box(low=0, high=self.max_time_step, shape=(1,), dtype=self.dtype_observation)
             })
 
         # Espaço de Ação
@@ -146,7 +146,7 @@ class FoodDeliveryGymEnv(Env):
 
         # 3. orders_remaining: Número de pedidos que faltam ser atribuidos a um motorista
         orders_remaining = self.num_orders - self.simpy_env.state.successfully_assigned_routes
-        orders_remaining = np.array([orders_remaining], dtype=self.dtype_observation) if self.normalize else orders_remaining
+        orders_remaining = np.array([orders_remaining], dtype=self.dtype_observation)
 
         # 4. establishment_next_order_ready_time: Tempo que falta para o próximo pedido em preparação de cada restaurante ficar pronto
         establishment_busy_time = np.zeros((self.num_establishments,), dtype=self.dtype_observation)
@@ -155,7 +155,7 @@ class FoodDeliveryGymEnv(Env):
 
         # 5. current_time_step: O tempo atual da simulação (número do passo)
         current_time_step = self.simpy_env.now
-        current_time_step = np.array([current_time_step], dtype=self.dtype_observation) if self.normalize else current_time_step
+        current_time_step = np.array([current_time_step], dtype=self.dtype_observation)
 
         # Criando a observação final no formato esperado
         obs = {
@@ -433,7 +433,8 @@ class FoodDeliveryGymEnv(Env):
         custom_board.view()
 
     def close(self):
-        self.simpy_env.close()
+        if self.simpy_env is not None:
+            self.simpy_env.close()
 
     def get_simpy_env(self):
         return self.simpy_env

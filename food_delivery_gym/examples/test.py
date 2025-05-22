@@ -21,7 +21,7 @@ if SAVE_LOG_TO_FILE:
 
 def main():
     try:
-        scenario_path = str(files("food_delivery_gym.main.scenarios").joinpath("complex.json"))
+        scenario_path = str(files("food_delivery_gym.main.scenarios").joinpath("complex_obj1.json"))
         gym_env: FoodDeliveryGymEnv = FoodDeliveryGymEnv(scenario_json_file_path=scenario_path)
 
         estado : list[int] = gym_env.reset(seed=SEED, options={"render_mode": "human"})

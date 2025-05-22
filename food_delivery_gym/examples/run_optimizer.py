@@ -24,7 +24,7 @@ if SAVE_LOG_TO_FILE:
     sys.stderr = log_file
 
 def main():
-    scenario_path = str(files("food_delivery_gym.main.scenarios").joinpath("complex.json"))
+    scenario_path = str(files("food_delivery_gym.main.scenarios").joinpath("complex_obj2.json"))
     gym_env: FoodDeliveryGymEnv = FoodDeliveryGymEnv(scenario_json_file_path=scenario_path)
     gym_env.set_mode(EnvMode.EVALUATING)
     gym_env.set_reward_objective(9)

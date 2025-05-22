@@ -21,7 +21,7 @@ SEED = 101010
 # Escolha se deseja salvar o log em um arquivo
 SAVE_LOG_TO_FILE = False
 
-DIR_PATH = "./data/ppo_training/obj_3/complex_scenario/1000000_time_steps/"
+DIR_PATH = "./data/ppo_training/obj_1/medium_scenario/400000_time_steps/"
 
 # Verificar e criar os diretórios necessários
 os.makedirs(DIR_PATH + "logs/", exist_ok=True)
@@ -35,12 +35,12 @@ if SAVE_LOG_TO_FILE:
 
 def main():
     try:
-        scenario_path = str(files("food_delivery_gym.main.scenarios").joinpath("complex.json"))
+        scenario_path = str(files("food_delivery_gym.main.scenarios").joinpath("medium_obj1.json"))
 
         # Criando o ambiente de treinamento
         gym_env: FoodDeliveryGymEnv = FoodDeliveryGymEnv(scenario_json_file_path=scenario_path)
         gym_env.set_mode(EnvMode.TRAINING)
-        gym_env.set_reward_objective(3)
+        gym_env.set_reward_objective(1)
 
         # Verificar se o ambiente está implementado corretamente
         check_env(gym_env, warn=True)
@@ -52,7 +52,7 @@ def main():
         # Criando o ambiente de avaliação separado (sem Monitor)
         eval_env = FoodDeliveryGymEnv(scenario_json_file_path=scenario_path)
         eval_env.set_mode(EnvMode.TRAINING)
-        eval_env.set_reward_objective(3)
+        eval_env.set_reward_objective(1)
         eval_env = Monitor(eval_env, DIR_PATH + "logs_eval/")
         eval_env = DummyVecEnv([lambda: eval_env])
 
@@ -71,98 +71,94 @@ def main():
         # Treinar o modelo com EvalCallback
         model = PPO('MultiInputPolicy', env, verbose=1)
 
-        # Mostra os hiperparâmetros usados pelo PPO
-        pprint(model.get_parameters())
+        start_time = time.time()
+        model.learn(total_timesteps=400000, callback=[eval_callback, step_reward_logger])
+        end_time = time.time()
+        training_time = end_time - start_time
 
+        # Converter segundos para hh:MM:ss
+        hours = int(training_time // 3600)
+        minutes = int((training_time % 3600) // 60)
+        seconds = int(training_time % 60)
+        formatted_time = f"{hours:02}:{minutes:02}:{seconds:02}"
 
-        # start_time = time.time()
-        # model.learn(total_timesteps=13000000, callback=[eval_callback, step_reward_logger])
-        # end_time = time.time()
-        # training_time = end_time - start_time
+        print(f"Total Training Time: {formatted_time}")
 
-        # # Converter segundos para hh:MM:ss
-        # hours = int(training_time // 3600)
-        # minutes = int((training_time % 3600) // 60)
-        # seconds = int(training_time % 60)
-        # formatted_time = f"{hours:02}:{minutes:02}:{seconds:02}"
+        with open(DIR_PATH + "training_time.txt", "w", encoding="utf-8") as time_training_file:
+            time_training_file.write(f"Tempo total de treinamento: {formatted_time}\n")
 
-        # print(f"Total Training Time: {formatted_time}")
+        # Salvar o modelo final
+        model.save(DIR_PATH + "final_model")
 
-        # with open(DIR_PATH + "training_time.txt", "w", encoding="utf-8") as time_training_file:
-        #     time_training_file.write(f"Tempo total de treinamento: {formatted_time}\n")
+        # Carregar os dados do Monitor para análise
+        log_data = pd.read_csv(DIR_PATH + "logs/monitor.csv", skiprows=1)
 
-        # # Salvar o modelo final
-        # model.save(DIR_PATH + "final_model")
+        # Plotar recompensa acumulada por episódio
+        retornos = log_data["r"].values 
+        plt.figure(figsize=(10, 5))
+        plt.plot(retornos, label="Recompensa")
+        plt.xlabel("Episódios")
+        plt.ylabel("Recompensa")
+        plt.title("Curva de Aprendizado - Recompensa por Episódio")
+        plt.legend()
+        plt.savefig(DIR_PATH + "curva_de_aprendizado.png", dpi=300, bbox_inches='tight')
+        plt.show()
 
-        # # Carregar os dados do Monitor para análise
-        # log_data = pd.read_csv(DIR_PATH + "logs/monitor.csv", skiprows=1)
+        # Calcular a média e o desvio padrão a cada mil episódios
+        media_10_episodios = []
+        desvio_10_episodios = []
+        for i in range(10, len(retornos), 10):
+            media_10_episodios.append(np.mean(retornos[i-10:i]))
+            desvio_10_episodios.append(np.std(retornos[i-10:i]))
+        media_10_episodios = np.array(media_10_episodios)
+        desvio_10_episodios = np.array(desvio_10_episodios)
 
-        # # Plotar recompensa acumulada por episódio
-        # retornos = log_data["r"].values 
-        # plt.figure(figsize=(10, 5))
-        # plt.plot(retornos, label="Recompensa")
-        # plt.xlabel("Episódios")
-        # plt.ylabel("Recompensa")
-        # plt.title("Curva de Aprendizado - Recompensa por Episódio")
-        # plt.legend()
-        # plt.savefig(DIR_PATH + "curva_de_aprendizado.png", dpi=300, bbox_inches='tight')
-        # plt.show()
+        # Plotar a curva de aprendizado com a média e o desvio padrão
+        plt.figure(figsize=(10, 5))
+        plt.plot(media_10_episodios, label="Média a cada 10 episódios")
+        plt.fill_between(range(len(media_10_episodios)), media_10_episodios - desvio_10_episodios, media_10_episodios + desvio_10_episodios, alpha=0.2, label="Desvio Padrão")
+        plt.title('Curva de Aprendizado (média e desvio padrão a cada 10 episódios)')
+        plt.xlabel('Episódios (x10)')
+        plt.ylabel('Retornos')
+        plt.legend()
+        plt.savefig(DIR_PATH + "curva_de_aprendizado_avg_std_10_ep.png", dpi=300, bbox_inches='tight')
+        plt.show()
 
-        # # Calcular a média e o desvio padrão a cada mil episódios
-        # media_1000_episodios = []
-        # desvio_1000_episodios = []
-        # for i in range(1000, len(retornos), 1000):
-        #     media_1000_episodios.append(np.mean(retornos[i-1000:i]))
-        #     desvio_1000_episodios.append(np.std(retornos[i-1000:i]))
-        # media_1000_episodios = np.array(media_1000_episodios)
-        # desvio_1000_episodios = np.array(desvio_1000_episodios)
+        # Plotar a recompensa acumulada por passo
+        step_rewards_df = pd.read_csv(DIR_PATH + "logs/step_rewards.csv")
 
-        # # Plotar a curva de aprendizado com a média e o desvio padrão
-        # plt.figure(figsize=(10, 5))
-        # plt.plot(media_1000_episodios, label="Média a cada 1000 episódios")
-        # plt.fill_between(range(len(media_1000_episodios)), media_1000_episodios - desvio_1000_episodios, media_1000_episodios + desvio_1000_episodios, alpha=0.2, label="Desvio Padrão")
-        # plt.title('Curva de Aprendizado (média e desvio padrão a cada mil episódios)')
-        # plt.xlabel('Episódios (x1000)')
-        # plt.ylabel('Retornos')
-        # plt.legend()
-        # plt.savefig(DIR_PATH + "curva_de_aprendizado_avg_std_1000_ep.png", dpi=300, bbox_inches='tight')
-        # plt.show()
+        plt.figure(figsize=(12, 5))
+        plt.plot(step_rewards_df["reward"], alpha=0.6, linewidth=0.7)
+        plt.xlabel("Passos")
+        plt.ylabel("Recompensa")
+        plt.title("Recompensa a cada passo durante o treinamento")
+        plt.savefig(DIR_PATH + "recompensa_por_passo.png", dpi=300, bbox_inches='tight')
+        plt.show()
 
-        # # Plotar a recompensa acumulada por passo
-        # step_rewards_df = pd.read_csv(DIR_PATH + "logs/step_rewards.csv")
+        # Plotar a tendência de recompensa ao longo do episódio
+        step_rewards = step_rewards_df["reward"].values
 
-        # plt.figure(figsize=(12, 5))
-        # plt.plot(step_rewards_df["reward"], alpha=0.6, linewidth=0.7)
-        # plt.xlabel("Passos")
-        # plt.ylabel("Recompensa")
-        # plt.title("Recompensa a cada passo durante o treinamento")
-        # plt.savefig(DIR_PATH + "recompensa_por_passo.png", dpi=300, bbox_inches='tight')
-        # plt.show()
+        episode_length = gym_env.env.num_orders
 
-        # # Plotar a tendência de recompensa ao longo do episódio
-        # step_rewards = step_rewards_df["reward"].values
+        # Quebrar o vetor em episódios (cada um com EPISODE_LENGTH passos)
+        num_episodes = len(step_rewards) // episode_length
+        step_matrix = step_rewards[:num_episodes * episode_length].reshape((num_episodes, episode_length))
 
-        # episode_length = gym_env.env.num_orders
+        # Calcular a média e desvio padrão em cada posição do episódio
+        mean_rewards = step_matrix.mean(axis=0)
+        std_rewards = step_matrix.std(axis=0)
 
-        # # Quebrar o vetor em episódios (cada um com EPISODE_LENGTH passos)
-        # num_episodes = len(step_rewards) // episode_length
-        # step_matrix = step_rewards[:num_episodes * episode_length].reshape((num_episodes, episode_length))
-
-        # # Calcular a média e desvio padrão em cada posição do episódio
-        # mean_rewards = step_matrix.mean(axis=0)
-        # std_rewards = step_matrix.std(axis=0)
-
-        # # Plotar
-        # plt.figure(figsize=(12, 5))
-        # plt.plot(mean_rewards, label="Média por passo no episódio", linewidth=2)
-        # plt.fill_between(range(episode_length), mean_rewards - std_rewards, mean_rewards + std_rewards, alpha=0.2, label="Desvio Padrão")
-        # plt.xlabel("Passo dentro do episódio")
-        # plt.ylabel("Recompensa")
-        # plt.title("Tendência de Recompensa ao Longo do Episódio")
-        # plt.legend()
-        # plt.grid(True, linestyle="--", alpha=0.3)
-        # plt.savefig(DIR_PATH + "tendencia_por_passo_no_episodio.png", dpi=300, bbox_inches='tight')
-        # plt.show()
+        # Plotar
+        plt.figure(figsize=(12, 5))
+        plt.plot(mean_rewards, label="Média por passo no episódio", linewidth=2)
+        plt.fill_between(range(episode_length), mean_rewards - std_rewards, mean_rewards + std_rewards, alpha=0.2, label="Desvio Padrão")
+        plt.xlabel("Passo dentro do episódio")
+        plt.ylabel("Recompensa")
+        plt.title("Tendência de Recompensa ao Longo do Episódio")
+        plt.legend()
+        plt.grid(True, linestyle="--", alpha=0.3)
+        plt.savefig(DIR_PATH + "tendencia_por_passo_no_episodio.png", dpi=300, bbox_inches='tight')
+        plt.show()
 
 
     except ValueError as e:

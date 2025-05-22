@@ -7,25 +7,49 @@ def get_scenario_path(filename):
     return str(files("food_delivery_gym.main.scenarios").joinpath(filename))
 
 register(
-    id='food_delivery_gym/FoodDelivery-initial-v0',
+    id='food_delivery_gym/FoodDelivery-initial-obj1-v0',
     entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
     kwargs={
-        "scenario_json_file_path": get_scenario_path("initial.json"),
+        "scenario_json_file_path": get_scenario_path("initial_obj1.json"),
     }
 )
 
 register(
-    id='food_delivery_gym/FoodDelivery-medium-v0',
+    id='food_delivery_gym/FoodDelivery-initial-obj2-v0',
     entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
     kwargs={
-        "scenario_json_file_path": get_scenario_path("medium.json"),
+        "scenario_json_file_path": get_scenario_path("initial_obj2.json"),
     }
 )
 
 register(
-    id='food_delivery_gym/FoodDelivery-complex-v0',
+    id='food_delivery_gym/FoodDelivery-medium-obj1-v0',
     entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
     kwargs={
-        "scenario_json_file_path": get_scenario_path("complex.json"),
+        "scenario_json_file_path": get_scenario_path("medium_obj1.json"),
+    }
+)
+
+register(
+    id='food_delivery_gym/FoodDelivery-medium-obj2-v0',
+    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
+    kwargs={
+        "scenario_json_file_path": get_scenario_path("medium_obj2.json"),
+    }
+)
+
+register(
+    id='food_delivery_gym/FoodDelivery-complex-obj1-v0',
+    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
+    kwargs={
+        "scenario_json_file_path": get_scenario_path("complex_obj1.json"),
+    }
+)
+
+register(
+    id='food_delivery_gym/FoodDelivery-complex-obj2-v0',
+    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
+    kwargs={
+        "scenario_json_file_path": get_scenario_path("complex_obj2.json"),
     }
 )
