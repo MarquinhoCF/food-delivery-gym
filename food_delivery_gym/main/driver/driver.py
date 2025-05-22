@@ -297,7 +297,7 @@ class Driver(MapActor):
                 # Agora se o pedido foi alocado antes do último tempo de verificação, soma o tempo desde o último tempo de verificação até agora
                 start_time = max(order.time_that_driver_was_allocated, self.last_time_check)
                 
-                if self.reward_objective in [5, 6]:
+                if self.reward_objective in [6, 8]:
                     # O pedido já foi coletado
                     if order.time_it_was_picked_up > start_time:
                         # Penalidade dividida entre antes e depois da coleta
@@ -506,7 +506,7 @@ class Driver(MapActor):
             # Considera o tempo de início como o maior entre o momento de alocação do driver e o último tempo de verificação
             time_count_start = max(order.time_that_driver_was_allocated, self.last_time_check)
 
-            if self.reward_objective in [5, 6]:
+            if self.reward_objective in [6, 8]:
                 if order.is_already_caught():
                     # O pedido já foi coletado
                     if order.time_it_was_picked_up > time_count_start:

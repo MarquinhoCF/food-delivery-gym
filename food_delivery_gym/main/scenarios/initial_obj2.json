@@ -24,7 +24,7 @@
     "use_estimate": true,
     "desconsider_capacity": true,
     "max_time_step": 2880,
-    "reward_objective": 9,
+    "reward_objective": 2,
     "function_code": "lambda time: 2",
     "time_shift": 10,
     "normalize": false
