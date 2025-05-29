@@ -477,7 +477,7 @@ class FoodDeliveryGymEnv(Env):
         descricao.append(f"Objetivo da recompensa: {self.reward_objective}")
         descricao.append(f"Max Time Step: {self.max_time_step}")
 
-        descricao.append(f"Geração de clientes e pedidos: {self.lambda_code} de {self.time_shift} em {self.time_shift} segundos")
+        descricao.append(f"Geração de clientes e pedidos: {self.lambda_code} de {self.time_shift} em {self.time_shift} minutos")
         descricao.append(f"Porcentagem de alocação de motoristas: {self.percentage_allocation_driver}")
 
         descricao.append(f"Velocidade dos motorista entre: {self.vel_drivers[0]} e {self.vel_drivers[1]}")

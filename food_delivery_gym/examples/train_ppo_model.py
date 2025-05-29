@@ -11,6 +11,7 @@ from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.vec_env import DummyVecEnv
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.callbacks import EvalCallback
+import torch
 
 from food_delivery_gym.main.environment.env_mode import EnvMode
 from food_delivery_gym.main.environment.step_reward_logger import StepRewardLogger
@@ -21,7 +22,7 @@ SEED = 101010
 # Escolha se deseja salvar o log em um arquivo
 SAVE_LOG_TO_FILE = False
 
-DIR_PATH = "./data/ppo_training/obj_1/medium_scenario/400000_time_steps/"
+DIR_PATH = "./data/ppo_training/obj_1/medium_scenario/otimization/1M5k-timesteps_50-max-trials/24000000_time_steps_best_params/"
 
 # Verificar e criar os diretórios necessários
 os.makedirs(DIR_PATH + "logs/", exist_ok=True)
@@ -68,11 +69,61 @@ def main():
         
         step_reward_logger = StepRewardLogger(DIR_PATH + "logs/step_rewards.csv")
 
+        # Configuração dos hiperparâmetros das melhores tentativas
+
+        ## Hiperaprâmetros da otimização com 400k timesteps e 30 max trials
+        # best_params = {
+        #     'batch_size': 16,  # 2^4
+        #     'n_steps': 2048,   # 2^11
+        #     'gamma': 0.9836846716768,
+        #     'gae_lambda': 1 - 0.04417218310071766,
+        #     'learning_rate': 3.632407996060141e-05,
+        #     'ent_coef': 0.00015586193266262053,
+        #     'clip_range': 0.3,
+        #     'n_epochs': 20,
+        #     'max_grad_norm': 1.515985879724928,
+        #     'policy_kwargs': dict(net_arch=[dict(pi=[64, 64], vf=[64, 64])], activation_fn=torch.nn.ReLU)
+        # }
+
+        ## Hiperparâmetros da otimização com 1M timesteps e 50 max trials
+        # best_params = {
+        #     'batch_size': 256,                          # 2^8
+        #     'n_steps': 1024,                            # 2^10
+        #     'gamma': 0.974577325639271,
+        #     'gae_lambda': 1 - 0.012288442863496769,
+        #     'learning_rate': 0.00046378433627458214,
+        #     'ent_coef': 0.000220737020600159,
+        #     'clip_range': 0.3,
+        #     'n_epochs': 10,
+        #     'max_grad_norm': 1.127085534694607,
+        #     'policy_kwargs': dict(
+        #         activation_fn=torch.nn.Tanh,
+        #         net_arch=[32, 32]  # "tiny" geralmente é interpretado como uma rede menor, ex: [32, 32]
+        #     ),
+        # }
+
+        # Hiperparâmetros da otimização com 1M5k timesteps e 50 max trials
+        best_params = {
+            'batch_size': 32,                          # 2^5
+            'n_steps': 512,                            # 2^9
+            'gamma': 0.9957742128778314,
+            'gae_lambda': 1 - 0.07691363050279466,
+            'learning_rate': 0.0012385994626143365,
+            'ent_coef': 4.346389035215521e-07,
+            'clip_range': 0.2,
+            'n_epochs': 1,
+            'max_grad_norm': 0.5730007621571269,
+            'policy_kwargs': dict(
+                activation_fn=torch.nn.Tanh,
+                net_arch=[dict(pi=[64], vf=[64])]
+            ),
+        }
+
         # Treinar o modelo com EvalCallback
-        model = PPO('MultiInputPolicy', env, verbose=1)
+        model = PPO('MultiInputPolicy', env, verbose=1, **best_params)
 
         start_time = time.time()
-        model.learn(total_timesteps=400000, callback=[eval_callback, step_reward_logger])
+        model.learn(total_timesteps=24000000, callback=[eval_callback, step_reward_logger])
         end_time = time.time()
         training_time = end_time - start_time
 
@@ -105,23 +156,23 @@ def main():
         plt.show()
 
         # Calcular a média e o desvio padrão a cada mil episódios
-        media_10_episodios = []
-        desvio_10_episodios = []
-        for i in range(10, len(retornos), 10):
-            media_10_episodios.append(np.mean(retornos[i-10:i]))
-            desvio_10_episodios.append(np.std(retornos[i-10:i]))
-        media_10_episodios = np.array(media_10_episodios)
-        desvio_10_episodios = np.array(desvio_10_episodios)
+        media_1000_episodios = []
+        desvio_1000_episodios = []
+        for i in range(1000, len(retornos), 1000):
+            media_1000_episodios.append(np.mean(retornos[i-1000:i]))
+            desvio_1000_episodios.append(np.std(retornos[i-1000:i]))
+        media_1000_episodios = np.array(media_1000_episodios)
+        desvio_1000_episodios = np.array(desvio_1000_episodios)
 
         # Plotar a curva de aprendizado com a média e o desvio padrão
         plt.figure(figsize=(10, 5))
-        plt.plot(media_10_episodios, label="Média a cada 10 episódios")
-        plt.fill_between(range(len(media_10_episodios)), media_10_episodios - desvio_10_episodios, media_10_episodios + desvio_10_episodios, alpha=0.2, label="Desvio Padrão")
-        plt.title('Curva de Aprendizado (média e desvio padrão a cada 10 episódios)')
-        plt.xlabel('Episódios (x10)')
+        plt.plot(media_1000_episodios, label="Média a cada 1000 episódios")
+        plt.fill_between(range(len(media_1000_episodios)), media_1000_episodios - desvio_1000_episodios, media_1000_episodios + desvio_1000_episodios, alpha=0.2, label="Desvio Padrão")
+        plt.title('Curva de Aprendizado (média e desvio padrão a cada 1000 episódios)')
+        plt.xlabel('Episódios (x1000)')
         plt.ylabel('Retornos')
         plt.legend()
-        plt.savefig(DIR_PATH + "curva_de_aprendizado_avg_std_10_ep.png", dpi=300, bbox_inches='tight')
+        plt.savefig(DIR_PATH + "curva_de_aprendizado_avg_std_1000_ep.png", dpi=300, bbox_inches='tight')
         plt.show()
 
         # Plotar a recompensa acumulada por passo
