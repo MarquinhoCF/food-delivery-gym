@@ -129,9 +129,8 @@ class OptimizerGym(Optimizer, ABC):
     def run(self):
         sum_reward = 0
         step_count = 0
-        max_steps = getattr(self.gym_env, '_max_episode_steps', 1000)  # Fallback para evitar loops infinitos
         
-        while not (self.done or self.truncated) and step_count < max_steps:
+        while not (self.done or self.truncated):
             try:
                 order = self.gym_env.get_last_order()
                 action = self.assign_driver_to_order(self.state, order)
