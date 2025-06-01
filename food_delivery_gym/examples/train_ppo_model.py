@@ -11,6 +11,7 @@ from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.vec_env import DummyVecEnv
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.callbacks import EvalCallback
+from stable_baselines3.common.vec_env import VecNormalize
 import torch
 
 from food_delivery_gym.main.environment.env_mode import EnvMode
@@ -48,7 +49,8 @@ def main():
 
         # Monitorando o ambiente de treinamento
         gym_env = Monitor(gym_env, DIR_PATH + "logs/")
-        env = DummyVecEnv([lambda: gym_env])
+        vec_env = DummyVecEnv([lambda: gym_env])
+        env = VecNormalize(vec_env, norm_obs=True, norm_reward=False)
 
         # Criando o ambiente de avaliação separado (sem Monitor)
         eval_env = FoodDeliveryGymEnv(scenario_json_file_path=scenario_path)
@@ -56,6 +58,7 @@ def main():
         eval_env.set_reward_objective(1)
         eval_env = Monitor(eval_env, DIR_PATH + "logs_eval/")
         eval_env = DummyVecEnv([lambda: eval_env])
+        eval_env = VecNormalize(eval_env, norm_obs=True, norm_reward=False)
 
         # Criando o EvalCallback para salvar o melhor modelo
         eval_callback = EvalCallback(

@@ -32,7 +32,7 @@ class FoodDeliveryGymEnv(Env):
 
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 4}
 
-    def __init__(self, scenario_json_file_path = str):
+    def __init__(self, scenario_json_file_path = str, render_mode=None):
 
         path = Path(scenario_json_file_path)
 
@@ -81,9 +81,13 @@ class FoodDeliveryGymEnv(Env):
         self.normalize = scenario.get("normalize", True)
         self.env_mode = EnvMode.TRAINING
         
-        render_mode = scenario.get("render_mode", None)
-        assert render_mode is None or render_mode in self.metadata["render_modes"]
-        self.render_mode = render_mode
+        # Define o modo de renderização
+        self.render_mode = render_mode or scenario.get("render_mode", None)
+
+        # Valida se o modo de renderização é suportado
+        if self.render_mode is not None:
+            assert self.render_mode in self.metadata["render_modes"], \
+                f"Render mode '{self.render_mode}' não suportado. Modos disponíveis: {self.metadata['render_modes']}"
 
         self.simpy_env = None # Ambiente de simulação será criado no reset
 
@@ -331,6 +335,10 @@ class FoodDeliveryGymEnv(Env):
             if truncated and self.simpy_env.state.orders_delivered < self.num_orders:
                 # Se a simulação foi truncada e não foram entregues todos os pedidos, penaliza a recompensa
                 reward -= (self.num_orders - self.simpy_env.state.orders_delivered) * self.simpy_env.map.max_distance() * 2
+
+        if (terminated or truncated) and (self.simpy_env.state.orders_delivered < self.num_orders):
+            # Penaliza a recompensa se o episódio terminou ou foi truncado e não foram entregues todos os pedidos
+            reward -= (self.num_orders - self.simpy_env.state.orders_delivered) * 10000
         
         return reward
         
