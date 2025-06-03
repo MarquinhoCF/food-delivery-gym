@@ -90,10 +90,10 @@ def main():
     num_runs = 20
     
     # Caminho para o modelo treinado
-    model_path = "./data/ppo_training/obj_1/medium_scenario/otimization/1M5k-timesteps_50-max-trials/18000000_time_steps_best_params/best_model.zip"
+    model_path = "./data/ppo_training/obj_1/medium_scenario/otimization/unnormalized/1M-timesteps_50-max-trials/10000000_time_steps_best_params/best_model.zip"
     
     # Opcional: caminho para VecNormalize salvo separadamente
-    vecnormalize_path = "./data/ppo_training/obj_1/medium_scenario/otimization/1M5k-timesteps_50-max-trials/18000000_time_steps_best_params/food_delivery_gym-FoodDelivery-medium-obj1-v0/vecnormalize.pkl"
+    # vecnormalize_path = "./data/ppo_training/obj_1/medium_scenario/otimization/unnormalized/1M-timesteps_50-max-trials/10000000_time_steps_best_params/food_delivery_gym-FoodDelivery-medium-obj1-v0/vecnormalize.pkl"
     
     # ===== EXECUÇÃO DOS OTIMIZADORES HEURÍSTICOS =====
     print("=== Executando otimizadores heurísticos ===")
@@ -117,13 +117,13 @@ def main():
     print("=== Executando otimizador RL ===")
     
     try:
-        # OPÇÃO 1: Usar ambiente do modelo (RECOMENDADO)
+        # OPÇÃO 1: Usar ambiente do modelo
         model, rl_env = load_model_with_environment(model_path)
         
-        # OPÇÃO 2: Se a opção 1 não funcionar, use esta:
+        # OPÇÃO 2: Recontruir o modelo com VecNormalize separado
         # model, rl_env = load_with_separate_vecnormalize(model_path, vecnormalize_path)
         
-        # OPÇÃO 3: Se você tem certeza da configuração, pode usar diretamente:
+        # OPÇÃO 3: Configurar o modelo e o ambiente diretamente:
         # model = PPO.load(model_path)
         # rl_env = create_normalized_environment()
         
