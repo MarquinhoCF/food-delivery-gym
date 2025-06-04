@@ -90,6 +90,7 @@ class FoodDeliveryGymEnv(Env):
                 f"Render mode '{self.render_mode}' não suportado. Modos disponíveis: {self.metadata['render_modes']}"
 
         self.simpy_env = None # Ambiente de simulação será criado no reset
+        self.last_simpy_env = None # Ambiente de simulação da execução anterior -> para fins de computação de estatísticas
 
         # Definindo o objetivo da recompensa
         self.set_reward_objective(scenario["reward_objective"])
@@ -211,6 +212,10 @@ class FoodDeliveryGymEnv(Env):
                 # TODO: Logs
                 # print("Todos os pedidos foram entregues!")
                 terminated = True
+
+        if (self.env_mode == EnvMode.EVALUATING) and (terminated or truncated):
+            self.register_statistic_data()
+            self.last_simpy_env = self.simpy_env
 
         return core_event, terminated, truncated
 
@@ -387,20 +392,27 @@ class FoodDeliveryGymEnv(Env):
             raise
 
     def show_statistcs_board(self, sum_reward = None, dir_path = None):
+        if self.last_simpy_env == None:
+            raise ValueError(
+                "Dados de simulação indisponíveis. Certifique-se de que o ambiente foi executado ao menos uma vez "
+                "e que o método 'reset_last_simpy_env' não foi chamado antes da coleta ou exibição das estatísticas."
+            )
+        
         if sum_reward is None and dir_path is None:
             save_figs = False
         else:
             save_figs = True
+        
         custom_board = SummarizedDataBoard(metrics=[
-            OrderCurveMetric(self.simpy_env),
-            EstablishmentOrdersFulfilledMetric(self.simpy_env),
-            EstablishmentMaxOrdersInQueueMetric(self.simpy_env),
-            EstablishmentActiveTimeMetric(self.simpy_env),
-            EstablishmentIdleTimeMetric(self.simpy_env),
-            DriverOrdersDeliveredMetric(self.simpy_env),
-            DriverTotalDistanceMetric(self.simpy_env),
-            DriverIdleTimeMetric(self.simpy_env),
-            DriverTimeWaitingForOrderMetric(self.simpy_env)
+            OrderCurveMetric(self.last_simpy_env),
+            EstablishmentOrdersFulfilledMetric(self.last_simpy_env),
+            EstablishmentMaxOrdersInQueueMetric(self.last_simpy_env),
+            EstablishmentActiveTimeMetric(self.last_simpy_env),
+            EstablishmentIdleTimeMetric(self.last_simpy_env),
+            DriverOrdersDeliveredMetric(self.last_simpy_env),
+            DriverTotalDistanceMetric(self.last_simpy_env),
+            DriverIdleTimeMetric(self.last_simpy_env),
+            DriverTimeWaitingForOrderMetric(self.last_simpy_env)
         ],
             num_drivers=self.num_drivers,
             num_establishments=self.num_establishments,
@@ -459,8 +471,19 @@ class FoodDeliveryGymEnv(Env):
     def get_statistics_data(self):
         return self.simpy_env.get_statistics_data()
     
+    def reset_last_simpy_env(self):
+        """
+        Limpa o último estado da simulação (last_simpy_env).
+
+        Observação:
+        - Quando o ambiente está envolto com VecNormalize, o reset ocorre automaticamente ao fim de um episódio.
+        - Este método garante que o último ambiente SimPy, que foi armazenado para estatísticas, seja descartado.
+        """
+        self.last_simpy_env = None
+    
     def reset_statistics(self):
         self.simpy_env.reset_statistics()
+        self.reset_last_simpy_env()
     
     def get_statistics(self):
         return self.simpy_env.compute_statistics()

@@ -242,8 +242,6 @@ class OptimizerGym(Optimizer, ABC):
 
                 try:
                     resultado = self.run()
-                    
-                    self._call_env_method('register_statistic_data')
 
                     sum_reward = resultado["sum_reward"]
                     

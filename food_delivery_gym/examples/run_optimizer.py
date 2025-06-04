@@ -90,10 +90,10 @@ def main():
     num_runs = 20
     
     # Caminho para o modelo treinado
-    model_path = "./data/ppo_training/obj_1/medium_scenario/otimization/unnormalized/1M-timesteps_50-max-trials/10000000_time_steps_best_params/best_model.zip"
+    model_path = "./data/ppo_training/obj_1/medium_scenario/otimization/normalized/1M5k-timesteps_50-max-trials/18000000_time_steps_best_params/best_model.zip"
     
     # Opcional: caminho para VecNormalize salvo separadamente
-    # vecnormalize_path = "./data/ppo_training/obj_1/medium_scenario/otimization/unnormalized/1M-timesteps_50-max-trials/10000000_time_steps_best_params/food_delivery_gym-FoodDelivery-medium-obj1-v0/vecnormalize.pkl"
+    #vecnormalize_path = "./data/ppo_training/obj_1/medium_scenario/otimization/normalized/1M5k-timesteps_50-max-trials/24000000_time_steps_best_params/food_delivery_gym-FoodDelivery-medium-obj1-v0/vecnormalize.pkl"
     
     # ===== EXECUÇÃO DOS OTIMIZADORES HEURÍSTICOS =====
     print("=== Executando otimizadores heurísticos ===")
@@ -135,7 +135,7 @@ def main():
         rl_optimizer = RLModelOptimizerGym(rl_env, model)
         rl_optimizer.run_simulations(
             num_runs, 
-            RESULTS_DIR + "ppo_agent_trained_18000000_best_params_normalized/", 
+            RESULTS_DIR + "ppo_reuniao/", 
             seed=SEED
         )
         
