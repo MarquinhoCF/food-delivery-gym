@@ -27,6 +27,7 @@ share/python-wheels/
 MANIFEST
 
 data/*
+notebooks/data_notebooks/*
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
