@@ -42,36 +42,17 @@ class RLModelOptimizerGym(OptimizerGym):
         Returns:
             int: Índice do driver selecionado
         """
-        try:
-            # Se o ambiente é vectorizado, a observação já está no formato correto
-            if self.is_vectorized:
-                # Para ambientes vectorizados, obs já deve estar no formato correto
-                action, _states = self.model.predict(obs, deterministic=True)
-                # Se action for um array, pega o primeiro elemento
-                if isinstance(action, np.ndarray):
-                    action = action[0] if len(action.shape) > 0 else action.item()
-            else:
-                # Para ambientes não vectorizados, pode precisar converter
-                action, _states = self.model.predict(obs, deterministic=True)
-                if isinstance(action, np.ndarray):
-                    action = action.item() if action.size == 1 else action
+        # Se o ambiente é vectorizado, a observação já está no formato correto
+        if self.is_vectorized:
+            # Para ambientes vectorizados, obs já deve estar no formato correto
+            action, _states = self.model.predict(obs, deterministic=True)
+            # Se action for um array, pega o primeiro elemento
+            if isinstance(action, np.ndarray):
+                action = action[0] if len(action.shape) > 0 else action.item()
+        else:
+            # Para ambientes não vectorizados, pode precisar converter
+            action, _states = self.model.predict(obs, deterministic=True)
+            if isinstance(action, np.ndarray):
+                action = action.item() if action.size == 1 else action
             
-            # Garante que a ação está no range válido
-            num_drivers = len(drivers)
-            if num_drivers > 0:
-                action = int(action) % num_drivers
-            else:
-                action = 0
-                
-            return action
-            
-        except Exception as e:
-            print(f"Erro ao fazer predição: {e}")
-            print(f"Tipo da observação: {type(obs)}")
-            if isinstance(obs, dict):
-                for key, value in obs.items():
-                    print(f"  {key}: {type(value)} - Shape: {getattr(value, 'shape', 'N/A')}")
-            
-            # Fallback: retorna driver aleatório
-            import random
-            return random.randint(0, max(0, len(drivers) - 1))
+        return action
