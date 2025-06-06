@@ -213,10 +213,6 @@ class FoodDeliveryGymEnv(Env):
                 # print("Todos os pedidos foram entregues!")
                 terminated = True
 
-        if (self.env_mode == EnvMode.EVALUATING) and (terminated or truncated):
-            self.register_statistic_data()
-            self.last_simpy_env = self.simpy_env
-
         return core_event, terminated, truncated
 
     def reset(self, seed: int | None = None, options: Optional[dict] = None):
@@ -373,6 +369,10 @@ class FoodDeliveryGymEnv(Env):
 
             reward = self.calculate_reward(terminated, truncated)
             # print(f"reward: {reward}")
+
+            if (self.env_mode == EnvMode.EVALUATING) and (terminated or truncated):
+                self.register_statistic_data()
+                self.last_simpy_env = self.simpy_env
 
             return observation, reward, terminated, truncated, info
         

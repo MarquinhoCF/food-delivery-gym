@@ -73,6 +73,7 @@ class Driver(MapActor):
         self.orders_list: List[Order] = []
         self.last_time_check: Number = 0
         self.sum_penalty_for_time_spent: Number = 0
+        self.total_penalty_for_time_spent: Number = 0
 
         self.last_future_coordinate: Coordinate = coordinate
 
@@ -528,6 +529,7 @@ class Driver(MapActor):
 
         self.last_time_check = self.now
         self.sum_penalty_for_time_spent = 0
+        self.total_penalty_for_time_spent += total_penalty
         return total_penalty
     
     def get_penality_for_late_orders(self) -> Number:
