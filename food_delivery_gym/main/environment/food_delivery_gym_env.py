@@ -21,7 +21,7 @@ from food_delivery_gym.main.statistic.summarized_data_board import SummarizedDat
 from food_delivery_gym.main.statistic.driver_orders_delivered_metric import DriverOrdersDeliveredMetric
 from food_delivery_gym.main.statistic.driver_total_distance_metric import DriverTotalDistanceMetric
 from food_delivery_gym.main.statistic.establishment_active_time_metric import EstablishmentActiveTimeMetric
-from food_delivery_gym.main.statistic.establishment_idle_time_metric import EstablishmentIdleTimeMetric
+from food_delivery_gym.main.statistic.driver_time_spent_on_delivery import DriverTimeSpentOnDelivery
 from food_delivery_gym.main.statistic.establishment_max_orders_in_queue_metric import EstablishmentMaxOrdersInQueueMetric
 from food_delivery_gym.main.statistic.establishment_orders_fulfilled_metric import EstablishmentOrdersFulfilledMetric
 from food_delivery_gym.main.statistic.order_curve_metric import OrderCurveMetric
@@ -408,7 +408,7 @@ class FoodDeliveryGymEnv(Env):
             EstablishmentOrdersFulfilledMetric(self.last_simpy_env),
             EstablishmentMaxOrdersInQueueMetric(self.last_simpy_env),
             EstablishmentActiveTimeMetric(self.last_simpy_env),
-            EstablishmentIdleTimeMetric(self.last_simpy_env),
+            DriverTimeSpentOnDelivery(self.last_simpy_env),
             DriverOrdersDeliveredMetric(self.last_simpy_env),
             DriverTotalDistanceMetric(self.last_simpy_env),
             DriverIdleTimeMetric(self.last_simpy_env),
@@ -436,7 +436,7 @@ class FoodDeliveryGymEnv(Env):
             EstablishmentOrdersFulfilledMetric(self.simpy_env, establishments_statistics=statistics["establishments"]),
             EstablishmentMaxOrdersInQueueMetric(self.simpy_env, establishments_statistics=statistics["establishments"]),
             EstablishmentActiveTimeMetric(self.simpy_env, establishments_statistics=statistics["establishments"]),
-            EstablishmentIdleTimeMetric(self.simpy_env, establishments_statistics=statistics["establishments"]),
+            DriverTimeSpentOnDelivery(self.simpy_env, drivers_statistics=statistics["drivers"]),
             DriverOrdersDeliveredMetric(self.simpy_env, drivers_statistics=statistics["drivers"]),
             DriverTotalDistanceMetric(self.simpy_env, drivers_statistics=statistics["drivers"]),
             DriverIdleTimeMetric(self.simpy_env, drivers_statistics=statistics["drivers"]),

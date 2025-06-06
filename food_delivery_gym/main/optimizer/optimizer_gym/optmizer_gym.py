@@ -274,12 +274,53 @@ class OptimizerGym(Optimizer, ABC):
                 else:
                     total_rewards_statistics = {'avg': 0, 'std_dev': 0, 'median': 0, 'mode': 'N/A'}
 
-                results_file.write(f"\n---> Média das somas das recompensas: {total_rewards_statistics['avg']:.2f}\n")
-                results_file.write(f"---> Desvio Padrão: {total_rewards_statistics['std_dev']:.2f}\n")
-                results_file.write(f"---> Mediana: {total_rewards_statistics['median']:.2f}\n")
-                results_file.write(f"---> Moda: {total_rewards_statistics['mode']}\n")
+                results_file.write("\n---> Estatísticas das Recompensas:\n")
+                results_file.write(f"* Média: {total_rewards_statistics['avg']:.2f}\n")
+                results_file.write(f"* Desvio Padrão: {total_rewards_statistics['std_dev']:.2f}\n")
+                results_file.write(f"* Mediana: {total_rewards_statistics['median']:.2f}\n")
+                results_file.write(f"* Moda: {total_rewards_statistics['mode']}\n")
 
                 try:
+                    establishment_metrics, driver_metrics = self._call_env_method('get_statistics_data')
+
+                    time_spent_on_delivery_list = []
+                    total_distance_traveled_list = []
+
+                    for i in range(num_runs):
+                        sum_time_spent_on_delivery_i = 0
+                        for driver_id, metrics in driver_metrics.items():
+                            sum_time_spent_on_delivery_i += metrics["time_spent_on_delivey"][i]
+                        time_spent_on_delivery_list.append(sum_time_spent_on_delivery_i)
+
+                        sum_total_distance_traveled_i = 0
+                        for driver_id, metrics in driver_metrics.items():
+                            sum_total_distance_traveled_i += metrics["total_distance"][i]
+                        total_distance_traveled_list.append(sum_total_distance_traveled_i)
+
+                    time_spent_on_delivery_statistics = {}
+                    time_spent_on_delivery_statistics["avg"] = stt.mean(time_spent_on_delivery_list)
+                    time_spent_on_delivery_statistics["std_dev"] = stt.stdev(time_spent_on_delivery_list)
+                    time_spent_on_delivery_statistics["median"] = stt.median(time_spent_on_delivery_list)
+                    time_spent_on_delivery_statistics["mode"] = stt.mode(time_spent_on_delivery_list)
+
+                    results_file.write("\n---> Estatísticas do Tempo Gasto com entregas:\n")
+                    results_file.write(f"* Média: {time_spent_on_delivery_statistics['avg']:.2f}\n")
+                    results_file.write(f"* Desvio Padrão: {time_spent_on_delivery_statistics['std_dev']:.2f}\n")
+                    results_file.write(f"* Mediana: {time_spent_on_delivery_statistics['median']:.2f}\n")
+                    results_file.write(f"* Moda: {time_spent_on_delivery_statistics['mode']}\n")
+
+                    total_distance_traveled_statistics = {}
+                    total_distance_traveled_statistics["avg"] = stt.mean(total_distance_traveled_list)
+                    total_distance_traveled_statistics["std_dev"] = stt.stdev(total_distance_traveled_list)
+                    total_distance_traveled_statistics["median"] = stt.median(total_distance_traveled_list)
+                    total_distance_traveled_statistics["mode"] = stt.mode(total_distance_traveled_list)
+                    
+                    results_file.write("\n---> Estatísticas da Distância Percorrida:\n")
+                    results_file.write(f"* Média: {total_distance_traveled_statistics['avg']:.2f}\n")
+                    results_file.write(f"* Desvio Padrão: {total_distance_traveled_statistics['std_dev']:.2f}\n")
+                    results_file.write(f"* Mediana: {total_distance_traveled_statistics['median']:.2f}\n")
+                    results_file.write(f"* Moda: {total_distance_traveled_statistics['mode']}\n")
+
                     geral_statistics = self._call_env_method('get_statistics')
                     results_file.write(f"\n---> Estatísticas Finais:\n")
                     results_file.write(f"{self.format_statistics(geral_statistics)}")
@@ -288,8 +329,9 @@ class OptimizerGym(Optimizer, ABC):
                                         sum_rewards_mean=total_rewards_statistics['avg'], 
                                         dir_path=dir_path)
 
-                    establishment_metrics, driver_metrics = self._call_env_method('get_statistics_data')
                     self.save_metrics_to_file(total_rewards, total_rewards_statistics, 
+                                            time_spent_on_delivery_list, time_spent_on_delivery_statistics, 
+                                            total_distance_traveled_list, total_distance_traveled_statistics,
                                             establishment_metrics, driver_metrics, 
                                             geral_statistics, dir_path)
                 except Exception as e:
@@ -302,6 +344,10 @@ class OptimizerGym(Optimizer, ABC):
         self,
         total_rewards: list[float], 
         total_rewards_statistics: dict[str, float],
+        time_spent_on_delivery_list: list[float],
+        time_spent_on_delivery_statistics: dict[str, float],
+        total_distance_traveled_list: list[float],
+        total_distance_traveled_statistics: dict[str, float],
         establishment_metrics: defaultdict[str, defaultdict[str, list[float]]], 
         driver_metrics: defaultdict[str, defaultdict[str, list[float]]], 
         geral_statistics: dict[str, dict[str, dict[str, float]]],
@@ -318,6 +364,10 @@ class OptimizerGym(Optimizer, ABC):
             np.savez_compressed(file_path, 
                                 total_rewards=np.array(total_rewards), 
                                 total_rewards_statistics=total_rewards_statistics,
+                                time_spent_on_delivery_list=np.array(time_spent_on_delivery_list),
+                                time_spent_on_delivery_statistics=time_spent_on_delivery_statistics,
+                                total_distance_traveled_list=np.array(total_distance_traveled_list),
+                                total_distance_traveled_statistics=total_distance_traveled_statistics,
                                 establishment_metrics=establishment_metrics, 
                                 driver_metrics=driver_metrics,
                                 geral_statistics=geral_statistics)
