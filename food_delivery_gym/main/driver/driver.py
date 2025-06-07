@@ -552,3 +552,7 @@ class Driver(MapActor):
     
     def get_distance_to_be_traveled_reward(self) -> Number:
         return self.sum_distance_to_be_traveled_reward
+    
+    def get_time_spent_on_delivery(self) -> Number:
+        self.get_penality_for_time_spent_for_delivery()
+        return self.total_penalty_for_time_spent
