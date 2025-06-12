@@ -174,6 +174,7 @@ class FoodDeliverySimpyEnv(Environment):
         for driver in self._state.drivers:
             id = driver.driver_id
             FoodDeliverySimpyEnv.driver_metrics[id]["orders_delivered"].append(driver.orders_delivered)
+            FoodDeliverySimpyEnv.driver_metrics[id]["time_spent_on_delivey"].append(driver.get_time_spent_on_delivery())
             FoodDeliverySimpyEnv.driver_metrics[id]["idle_time"].append(driver.idle_time)
             FoodDeliverySimpyEnv.driver_metrics[id]["time_waiting_for_order"].append(driver.time_waiting_for_order)
             FoodDeliverySimpyEnv.driver_metrics[id]["total_distance"].append(driver.total_distance)
@@ -192,6 +193,7 @@ class FoodDeliverySimpyEnv(Environment):
         for driver in self._state.drivers:
             id = driver.driver_id
             FoodDeliverySimpyEnv.driver_metrics[id]["orders_delivered"].clear()
+            FoodDeliverySimpyEnv.driver_metrics[id]["time_spent_on_delivey"].clear()
             FoodDeliverySimpyEnv.driver_metrics[id]["idle_time"].clear()
             FoodDeliverySimpyEnv.driver_metrics[id]["time_waiting_for_order"].clear()
             FoodDeliverySimpyEnv.driver_metrics[id]["total_distance"].clear()

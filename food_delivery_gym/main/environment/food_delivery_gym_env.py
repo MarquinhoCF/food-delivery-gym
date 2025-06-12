@@ -21,7 +21,7 @@ from food_delivery_gym.main.statistic.summarized_data_board import SummarizedDat
 from food_delivery_gym.main.statistic.driver_orders_delivered_metric import DriverOrdersDeliveredMetric
 from food_delivery_gym.main.statistic.driver_total_distance_metric import DriverTotalDistanceMetric
 from food_delivery_gym.main.statistic.establishment_active_time_metric import EstablishmentActiveTimeMetric
-from food_delivery_gym.main.statistic.establishment_idle_time_metric import EstablishmentIdleTimeMetric
+from food_delivery_gym.main.statistic.driver_time_spent_on_delivery import DriverTimeSpentOnDelivery
 from food_delivery_gym.main.statistic.establishment_max_orders_in_queue_metric import EstablishmentMaxOrdersInQueueMetric
 from food_delivery_gym.main.statistic.establishment_orders_fulfilled_metric import EstablishmentOrdersFulfilledMetric
 from food_delivery_gym.main.statistic.order_curve_metric import OrderCurveMetric
@@ -32,7 +32,7 @@ class FoodDeliveryGymEnv(Env):
 
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 4}
 
-    def __init__(self, scenario_json_file_path = str):
+    def __init__(self, scenario_json_file_path = str, render_mode=None):
 
         path = Path(scenario_json_file_path)
 
@@ -81,11 +81,16 @@ class FoodDeliveryGymEnv(Env):
         self.normalize = scenario.get("normalize", True)
         self.env_mode = EnvMode.TRAINING
         
-        render_mode = scenario.get("render_mode", None)
-        assert render_mode is None or render_mode in self.metadata["render_modes"]
-        self.render_mode = render_mode
+        # Define o modo de renderização
+        self.render_mode = render_mode or scenario.get("render_mode", None)
+
+        # Valida se o modo de renderização é suportado
+        if self.render_mode is not None:
+            assert self.render_mode in self.metadata["render_modes"], \
+                f"Render mode '{self.render_mode}' não suportado. Modos disponíveis: {self.metadata['render_modes']}"
 
         self.simpy_env = None # Ambiente de simulação será criado no reset
+        self.last_simpy_env = None # Ambiente de simulação da execução anterior -> para fins de computação de estatísticas
 
         # Definindo o objetivo da recompensa
         self.set_reward_objective(scenario["reward_objective"])
@@ -114,9 +119,9 @@ class FoodDeliveryGymEnv(Env):
             self.observation_space = Dict({
                 'drivers_busy_time': Box(low=0, high=self.max_time_step, shape=(self.num_drivers,), dtype=self.dtype_observation),
                 'time_to_drivers_complete_order': Box(low=0, high=self.max_time_step, shape=(self.num_drivers,), dtype=self.dtype_observation),
-                'remaining_orders': Discrete(self.num_orders + 1),
+                'remaining_orders': Box(low=0, high=self.num_orders + 1, shape=(1,), dtype=self.dtype_observation),
                 'establishment_busy_time': Box(low=0, high=self.max_time_step, shape=(self.num_establishments,), dtype=self.dtype_observation),
-                'current_time_step': Discrete(self.max_time_step)
+                'current_time_step': Box(low=0, high=self.max_time_step, shape=(1,), dtype=self.dtype_observation)
             })
 
         # Espaço de Ação
@@ -146,7 +151,7 @@ class FoodDeliveryGymEnv(Env):
 
         # 3. orders_remaining: Número de pedidos que faltam ser atribuidos a um motorista
         orders_remaining = self.num_orders - self.simpy_env.state.successfully_assigned_routes
-        orders_remaining = np.array([orders_remaining], dtype=self.dtype_observation) if self.normalize else orders_remaining
+        orders_remaining = np.array([orders_remaining], dtype=self.dtype_observation)
 
         # 4. establishment_next_order_ready_time: Tempo que falta para o próximo pedido em preparação de cada restaurante ficar pronto
         establishment_busy_time = np.zeros((self.num_establishments,), dtype=self.dtype_observation)
@@ -155,7 +160,7 @@ class FoodDeliveryGymEnv(Env):
 
         # 5. current_time_step: O tempo atual da simulação (número do passo)
         current_time_step = self.simpy_env.now
-        current_time_step = np.array([current_time_step], dtype=self.dtype_observation) if self.normalize else current_time_step
+        current_time_step = np.array([current_time_step], dtype=self.dtype_observation)
 
         # Criando a observação final no formato esperado
         obs = {
@@ -264,13 +269,37 @@ class FoodDeliveryGymEnv(Env):
     def calculate_reward(self, terminated, truncated):
         reward = 0
 
-        # Objetivo 1: Minimizar o tempo de entrega a partir da expectativa de tempo gasto com a entrega-> Recompensa negativa a cada passo
+        # Objetivo 1: Minimizar o tempo de entrega a partir da expectativa de tempo gasto com a entrega -> Recompensa negativa a cada passo
         if self.reward_objective == 1:
             # Soma das estimativas do tempo de ocupação de cada motoristas
             reward = -sum(driver.estimate_total_busy_time() for driver in self.simpy_env.state.drivers)
 
-        # Objetivo 2: Minimizar o tempo de entrega a partir da expectativa de tempo gasto com a entrega -> Recompensa negativa ao final do episódio
-        elif self.reward_objective == 2:
+        # Objetivo 2: Minimizar o custo de operação a partir da expectativa da distância a ser percorrida -> Recompensa negativa a cada passo
+        if self.reward_objective == 2:
+            # Soma das estimativas do tempo de ocupação de cada motoristas
+            reward = -sum(driver.calculate_total_distance_to_travel() for driver in self.simpy_env.state.drivers)
+
+        # Objetivo 3: Minimizar o tempo de entrega dos motoristas a partir do tempo efetivo gasto -> Recompensa negativa a cada passo
+        # Objetivo 9: Minimizar o tempo de entrega dos motoristas a partir do tempo efetivo gasto (Com penalização 5x para pedidos não coletados) -> Recompensa negativa a cada passo
+        elif self.reward_objective in [3, 9]:
+            # Soma do tempo efetivo gasto por cada motorista
+            reward = -sum(driver.get_penality_for_time_spent_for_delivery() for driver in self.simpy_env.state.drivers)
+
+            if truncated and self.simpy_env.state.orders_delivered < self.num_orders:
+                # Se a simulação foi truncada e não foram entregues todos os pedidos, penaliza a recompensa
+                reward -= sum(driver.get_penality_for_late_orders() for driver in self.simpy_env.state.drivers)
+        
+        # Objetivo 4: Minimizar o custo de operação a partir da distância efetiva -> Recompensa negativa a cada passo
+        elif self.reward_objective == 4:
+            # Distância percorrida desde a última recompensa para o motorista selecionado
+            reward = -sum(driver.get_and_update_distance_traveled() for driver in self.simpy_env.state.drivers)
+
+            if truncated and self.simpy_env.state.orders_delivered < self.num_orders:
+                # Se a simulação foi truncada e não foram entregues todos os pedidos, penaliza a recompensa
+                reward -= (self.num_orders - self.simpy_env.state.orders_delivered) * self.simpy_env.map.max_distance() * 2
+
+        # Objetivo 5: Minimizar o tempo de entrega a partir da expectativa de tempo gasto com a entrega -> Recompensa negativa ao final do episódio
+        elif self.reward_objective == 5:
             # Atualiza as estimativas de tempo de ocupação de cada motorista
             for driver in self.simpy_env.state.drivers:
                 driver.update_expected_delivery_time_reward()
@@ -278,35 +307,26 @@ class FoodDeliveryGymEnv(Env):
             if terminated or truncated:
                 # Penalidade baseada na soma das estimativas de tempo de ocupação dos motoristas
                 reward = -sum(driver.get_expected_delivery_time_reward() for driver in self.simpy_env.state.drivers)
-            
-        # Objetivo 3: Minimizar o tempo de entrega dos motoristas a partir do tempo efetivo gasto -> Recompensa negativa a cada passo
-        # Objetivo 5: Minimizar o tempo de entrega dos motoristas a partir do tempo efetivo gasto (Com penalização 5x para pedidos não coletados) -> Recompensa negativa a cada passo
-        elif self.reward_objective in [3, 5]:
+
+        # Objetivo 6: Minimizar o custo de operação a partir da expectativa da distância a ser percorrida -> Recompensa negativa ao final do episódio
+        elif self.reward_objective == 6:
+            # Atualiza as estimativas de tempo de ocupação de cada motorista
+            for driver in self.simpy_env.state.drivers:
+                driver.update_distance_to_be_traveled_reward()
+
+            if terminated or truncated:
+                # Penalidade baseada na soma das estimativas de tempo de ocupação dos motoristas
+                reward = -sum(driver.get_distance_to_be_traveled_reward() for driver in self.simpy_env.state.drivers)
+
+        # Objetivo 7: Minimizar o tempo de entrega dos motoristas a partir do tempo efetivo gasto -> Recompensa negativa no fim do episódio
+        # Objetivo 10: Minimizar o tempo de entrega dos motoristas a partir do tempo efetivo gasto (Com penalização 5x para pedidos não coletados) -> Recompensa negativa no fim do episódio
+        elif self.reward_objective in [7, 10] and (terminated or truncated):
             # Soma do tempo efetivo gasto por cada motorista
             reward = -sum(driver.get_penality_for_time_spent_for_delivery() for driver in self.simpy_env.state.drivers)
 
             if truncated and self.simpy_env.state.orders_delivered < self.num_orders:
                 # Se a simulação foi truncada e não foram entregues todos os pedidos, penaliza a recompensa
                 reward -= sum(driver.get_penality_for_late_orders() for driver in self.simpy_env.state.drivers)
-
-        # Objetivo 4: Minimizar o tempo de entrega dos motoristas a partir do tempo efetivo gasto -> Recompensa negativa no fim do episódio
-        # Objetivo 6: Minimizar o tempo de entrega dos motoristas a partir do tempo efetivo gasto (Com penalização 5x para pedidos não coletados) -> Recompensa negativa no fim do episódio
-        elif self.reward_objective in [4, 6] and (terminated or truncated):
-            # Soma do tempo efetivo gasto por cada motorista
-            reward = -sum(driver.get_penality_for_time_spent_for_delivery() for driver in self.simpy_env.state.drivers)
-
-            if truncated and self.simpy_env.state.orders_delivered < self.num_orders:
-                # Se a simulação foi truncada e não foram entregues todos os pedidos, penaliza a recompensa
-                reward -= sum(driver.get_penality_for_late_orders() for driver in self.simpy_env.state.drivers)
-
-        # Objetivo 7: Minimizar o custo de operação a partir da distância efetiva -> Recompensa negativa a cada passo
-        elif self.reward_objective == 7:
-            # Distância percorrida desde a última recompensa para o motorista selecionado
-            reward = -sum(driver.get_and_update_distance_traveled() for driver in self.simpy_env.state.drivers)
-
-            if truncated and self.simpy_env.state.orders_delivered < self.num_orders:
-                # Se a simulação foi truncada e não foram entregues todos os pedidos, penaliza a recompensa
-                reward -= (self.num_orders - self.simpy_env.state.orders_delivered) * self.simpy_env.map.max_distance() * 2
 
         # Objetivo 8: Minimizar o custo de operação a partir da distância efetiva -> Recompensa negativa no fim do episódio
         elif self.reward_objective == 8 and (terminated or truncated):
@@ -317,20 +337,9 @@ class FoodDeliveryGymEnv(Env):
                 # Se a simulação foi truncada e não foram entregues todos os pedidos, penaliza a recompensa
                 reward -= (self.num_orders - self.simpy_env.state.orders_delivered) * self.simpy_env.map.max_distance() * 2
 
-        # Objetivo 9: Minimizar o custo de operação a partir da distância a ser percorrida -> Recompensa negativa a cada passo
-        if self.reward_objective == 9:
-            # Soma das estimativas do tempo de ocupação de cada motoristas
-            reward = -sum(driver.calculate_total_distance_to_travel() for driver in self.simpy_env.state.drivers)
-
-        # Objetivo 10: Minimizar o custo de operação a partir da distância a ser percorrida -> Recompensa negativa ao final do episódio
-        elif self.reward_objective == 10:
-            # Atualiza as estimativas de tempo de ocupação de cada motorista
-            for driver in self.simpy_env.state.drivers:
-                driver.update_distance_to_be_traveled_reward()
-
-            if terminated or truncated:
-                # Penalidade baseada na soma das estimativas de tempo de ocupação dos motoristas
-                reward = -sum(driver.get_distance_to_be_traveled_reward() for driver in self.simpy_env.state.drivers)
+        if (terminated or truncated) and (self.simpy_env.state.orders_delivered < self.num_orders):
+            # Penaliza a recompensa se o episódio terminou ou foi truncado e não foram entregues todos os pedidos
+            reward -= (self.num_orders - self.simpy_env.state.orders_delivered) * 10000
         
         return reward
         
@@ -361,6 +370,10 @@ class FoodDeliveryGymEnv(Env):
             reward = self.calculate_reward(terminated, truncated)
             # print(f"reward: {reward}")
 
+            if (self.env_mode == EnvMode.EVALUATING) and (terminated or truncated):
+                self.register_statistic_data()
+                self.last_simpy_env = self.simpy_env
+
             return observation, reward, terminated, truncated, info
         
         except ValueError as e:
@@ -379,20 +392,27 @@ class FoodDeliveryGymEnv(Env):
             raise
 
     def show_statistcs_board(self, sum_reward = None, dir_path = None):
+        if self.last_simpy_env == None:
+            raise ValueError(
+                "Dados de simulação indisponíveis. Certifique-se de que o ambiente foi executado ao menos uma vez "
+                "e que o método 'reset_last_simpy_env' não foi chamado antes da coleta ou exibição das estatísticas."
+            )
+        
         if sum_reward is None and dir_path is None:
             save_figs = False
         else:
             save_figs = True
+        
         custom_board = SummarizedDataBoard(metrics=[
-            OrderCurveMetric(self.simpy_env),
-            EstablishmentOrdersFulfilledMetric(self.simpy_env),
-            EstablishmentMaxOrdersInQueueMetric(self.simpy_env),
-            EstablishmentActiveTimeMetric(self.simpy_env),
-            EstablishmentIdleTimeMetric(self.simpy_env),
-            DriverOrdersDeliveredMetric(self.simpy_env),
-            DriverTotalDistanceMetric(self.simpy_env),
-            DriverIdleTimeMetric(self.simpy_env),
-            DriverTimeWaitingForOrderMetric(self.simpy_env)
+            OrderCurveMetric(self.last_simpy_env),
+            EstablishmentOrdersFulfilledMetric(self.last_simpy_env),
+            EstablishmentMaxOrdersInQueueMetric(self.last_simpy_env),
+            EstablishmentActiveTimeMetric(self.last_simpy_env),
+            DriverTimeSpentOnDelivery(self.last_simpy_env),
+            DriverOrdersDeliveredMetric(self.last_simpy_env),
+            DriverTotalDistanceMetric(self.last_simpy_env),
+            DriverIdleTimeMetric(self.last_simpy_env),
+            DriverTimeWaitingForOrderMetric(self.last_simpy_env)
         ],
             num_drivers=self.num_drivers,
             num_establishments=self.num_establishments,
@@ -416,7 +436,7 @@ class FoodDeliveryGymEnv(Env):
             EstablishmentOrdersFulfilledMetric(self.simpy_env, establishments_statistics=statistics["establishments"]),
             EstablishmentMaxOrdersInQueueMetric(self.simpy_env, establishments_statistics=statistics["establishments"]),
             EstablishmentActiveTimeMetric(self.simpy_env, establishments_statistics=statistics["establishments"]),
-            EstablishmentIdleTimeMetric(self.simpy_env, establishments_statistics=statistics["establishments"]),
+            DriverTimeSpentOnDelivery(self.simpy_env, drivers_statistics=statistics["drivers"]),
             DriverOrdersDeliveredMetric(self.simpy_env, drivers_statistics=statistics["drivers"]),
             DriverTotalDistanceMetric(self.simpy_env, drivers_statistics=statistics["drivers"]),
             DriverIdleTimeMetric(self.simpy_env, drivers_statistics=statistics["drivers"]),
@@ -433,7 +453,8 @@ class FoodDeliveryGymEnv(Env):
         custom_board.view()
 
     def close(self):
-        self.simpy_env.close()
+        if self.simpy_env is not None:
+            self.simpy_env.close()
 
     def get_simpy_env(self):
         return self.simpy_env
@@ -450,8 +471,19 @@ class FoodDeliveryGymEnv(Env):
     def get_statistics_data(self):
         return self.simpy_env.get_statistics_data()
     
+    def reset_last_simpy_env(self):
+        """
+        Limpa o último estado da simulação (last_simpy_env).
+
+        Observação:
+        - Quando o ambiente está envolto com VecNormalize, o reset ocorre automaticamente ao fim de um episódio.
+        - Este método garante que o último ambiente SimPy, que foi armazenado para estatísticas, seja descartado.
+        """
+        self.last_simpy_env = None
+    
     def reset_statistics(self):
         self.simpy_env.reset_statistics()
+        self.reset_last_simpy_env()
     
     def get_statistics(self):
         return self.simpy_env.compute_statistics()
@@ -476,7 +508,7 @@ class FoodDeliveryGymEnv(Env):
         descricao.append(f"Objetivo da recompensa: {self.reward_objective}")
         descricao.append(f"Max Time Step: {self.max_time_step}")
 
-        descricao.append(f"Geração de clientes e pedidos: {self.lambda_code} de {self.time_shift} em {self.time_shift} segundos")
+        descricao.append(f"Geração de clientes e pedidos: {self.lambda_code} de {self.time_shift} em {self.time_shift} minutos")
         descricao.append(f"Porcentagem de alocação de motoristas: {self.percentage_allocation_driver}")
 
         descricao.append(f"Velocidade dos motorista entre: {self.vel_drivers[0]} e {self.vel_drivers[1]}")

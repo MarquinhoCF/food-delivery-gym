@@ -73,6 +73,7 @@ class Driver(MapActor):
         self.orders_list: List[Order] = []
         self.last_time_check: Number = 0
         self.sum_penalty_for_time_spent: Number = 0
+        self.total_penalty_for_time_spent: Number = 0
 
         self.last_future_coordinate: Coordinate = coordinate
 
@@ -297,7 +298,7 @@ class Driver(MapActor):
                 # Agora se o pedido foi alocado antes do último tempo de verificação, soma o tempo desde o último tempo de verificação até agora
                 start_time = max(order.time_that_driver_was_allocated, self.last_time_check)
                 
-                if self.reward_objective in [5, 6]:
+                if self.reward_objective in [9, 10]:
                     # O pedido já foi coletado
                     if order.time_it_was_picked_up > start_time:
                         # Penalidade dividida entre antes e depois da coleta
@@ -506,7 +507,7 @@ class Driver(MapActor):
             # Considera o tempo de início como o maior entre o momento de alocação do driver e o último tempo de verificação
             time_count_start = max(order.time_that_driver_was_allocated, self.last_time_check)
 
-            if self.reward_objective in [5, 6]:
+            if self.reward_objective in [9, 10]:
                 if order.is_already_caught():
                     # O pedido já foi coletado
                     if order.time_it_was_picked_up > time_count_start:
@@ -528,6 +529,7 @@ class Driver(MapActor):
 
         self.last_time_check = self.now
         self.sum_penalty_for_time_spent = 0
+        self.total_penalty_for_time_spent += total_penalty
         return total_penalty
     
     def get_penality_for_late_orders(self) -> Number:
@@ -550,3 +552,7 @@ class Driver(MapActor):
     
     def get_distance_to_be_traveled_reward(self) -> Number:
         return self.sum_distance_to_be_traveled_reward
+    
+    def get_time_spent_on_delivery(self) -> Number:
+        self.get_penality_for_time_spent_for_delivery()
+        return self.total_penalty_for_time_spent

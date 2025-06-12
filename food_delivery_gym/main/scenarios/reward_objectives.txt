@@ -1,0 +1,32 @@
+Objetivos de Recompensa:
+
+* Objetivo 1: 
+Minimizar o tempo de entrega a partir da expectativa de tempo gasto com a entrega -> Recompensa negativa a cada passo
+
+* Objetivo 2: 
+Minimizar o custo de operação a partir da expectativa da distância a ser percorrida -> Recompensa negativa a cada passo
+
+* Objetivo 3: 
+Minimizar o tempo de entrega dos motoristas a partir do tempo efetivo gasto -> Recompensa negativa a cada passo
+
+* Objetivo 4: 
+Minimizar o custo de operação a partir da distância efetiva -> Recompensa negativa a cada passo
+
+* Objetivo 5: 
+Minimizar o tempo de entrega a partir da expectativa de tempo gasto com a entrega -> Recompensa negativa ao final do episódio
+
+* Objetivo 6: 
+Minimizar o custo de operação a partir da expectativa da distância a ser percorrida -> Recompensa negativa ao final do episódio
+
+* Objetivo 7: 
+Minimizar o tempo de entrega dos motoristas a partir do tempo efetivo gasto -> Recompensa negativa no fim do episódio
+
+* Objetivo 8: 
+Minimizar o custo de operação a partir da distância efetiva -> Recompensa negativa no fim do episódio
+
+* Objetivo 9: 
+Minimizar o tempo de entrega dos motoristas a partir do tempo efetivo gasto (Com penalização 5x para pedidos não coletados) -> Recompensa negativa a cada passo
+
+* Objetivo 10: 
+Minimizar o tempo de entrega dos motoristas a partir do tempo efetivo gasto (Com penalização 5x para pedidos não coletados) -> Recompensa negativa no fim do episódio
+        

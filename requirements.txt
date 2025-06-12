@@ -10,3 +10,4 @@ sb3-contrib
 tensorflow
 tensorboard
 snakeviz
+openpyxl
