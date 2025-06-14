@@ -16,21 +16,24 @@ HEURISTIC_TO_COLUMN = {
         'first_driver_heuristic': 'E',
         'nearest_driver_heuristic': 'F',
         'lowest_cost_driver_heuristic': 'G',
-        'ppo_otimizado': 'H'
+        'ppo_otimizado_trained_18M': 'H',
+        'ppo_otimizado_trained_50M': 'I'
     },
     'medium_scenario': {
-        'random_heuristic': 'J',
-        'first_driver_heuristic': 'K',
-        'nearest_driver_heuristic': 'L',
-        'lowest_cost_driver_heuristic': 'M',
-        'ppo_otimizado': 'N'
+        'random_heuristic': 'K',
+        'first_driver_heuristic': 'L',
+        'nearest_driver_heuristic': 'M',
+        'lowest_cost_driver_heuristic': 'N',
+        'ppo_otimizado_trained_18M': 'O',
+        'ppo_otimizado_trained_50M': 'P'
     },
     'complex_scenario': {
-        'random_heuristic': 'P',
-        'first_driver_heuristic': 'Q',
-        'nearest_driver_heuristic': 'R',
-        'lowest_cost_driver_heuristic': 'S',
-        'ppo_otimizado': 'T'
+        'random_heuristic': 'R',
+        'first_driver_heuristic': 'S',
+        'nearest_driver_heuristic': 'T',
+        'lowest_cost_driver_heuristic': 'U',
+        'ppo_otimizado_trained_18M': 'V',
+        'ppo_otimizado_trained_50M': 'W'
     }
 }
 

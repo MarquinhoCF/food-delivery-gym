@@ -35,7 +35,7 @@ def create_environment(reward_objective: int = 1):
     elif reward_objective not in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]:
         raise ValueError("reward_objective deve ser um valor entre 1 e 10.")
 
-    scenario_path = str(files("food_delivery_gym.main.scenarios").joinpath("complex_obj3.json"))
+    scenario_path = str(files("food_delivery_gym.main.scenarios").joinpath("complex_obj4.json"))
     gym_env: FoodDeliveryGymEnv = FoodDeliveryGymEnv(scenario_json_file_path=scenario_path)
     gym_env.set_mode(EnvMode.EVALUATING)
     gym_env.set_reward_objective(reward_objective)
@@ -68,43 +68,42 @@ def load_with_separate_vecnormalize(model_path: str, vecnormalize_path: str = No
 def main():
     num_runs = 20
     
-    base_path = "./data/ppo_training/otimizacao_1M_steps_200_trials/obj_3/medium/otimizacao_1/"
-    #base_path = "data/ppo_training/teste/obj_1/medium_scenario/otimization/normalized/1M5k-timesteps_50-max-trials/18000000_time_steps_best_params/"
+    base_path = "./data/ppo_training/otimizacao_1M_steps_200_trials/obj_4/medium/18000000_time_steps/"
 
     model_path = base_path + "best_model.zip"
     
-    vecnormalize_path = base_path + "food_delivery_gym-FoodDelivery-medium-obj3-v0/vecnormalize.pkl"
+    vecnormalize_path = base_path + "food_delivery_gym-FoodDelivery-medium-obj4-v0/vecnormalize.pkl"
 
     print("=== Executando otimizadores heurísticos ===")
     
-    for i in range(3, 4):
+    for i in range(4, 5):
         results_dir = BASE_RESULTS_DIR.format(i)
         if SAVE_LOG_TO_FILE:
             log_file = setup_logging(results_dir)
         
-        # print(f"\n=== Iniciando simulações para Objetivo {i} ===")
+        print(f"\n=== Iniciando simulações para Objetivo {i} ===")
         
-        # # Para heurísticas, use ambiente original
-        # base_env = create_environment(reward_objective=i)
+        # Para heurísticas, use ambiente original
+        base_env = create_environment(reward_objective=i)
         
-        # optimizer = RandomDriverOptimizerGym(base_env)
-        # optimizer.run_simulations(num_runs, results_dir + "random_heuristic/", seed=SEED)
+        optimizer = RandomDriverOptimizerGym(base_env)
+        optimizer.run_simulations(num_runs, results_dir + "random_heuristic/", seed=SEED)
 
-        # optimizer = FirstDriverOptimizerGym(base_env)
-        # optimizer.run_simulations(num_runs, results_dir + "first_driver_heuristic/", seed=SEED)
+        optimizer = FirstDriverOptimizerGym(base_env)
+        optimizer.run_simulations(num_runs, results_dir + "first_driver_heuristic/", seed=SEED)
 
-        # optimizer = NearestDriverOptimizerGym(base_env)
-        # optimizer.run_simulations(num_runs, results_dir + "nearest_driver_heuristic/", seed=SEED)
+        optimizer = NearestDriverOptimizerGym(base_env)
+        optimizer.run_simulations(num_runs, results_dir + "nearest_driver_heuristic/", seed=SEED)
 
-        # if i in [1, 3, 5, 7, 9, 10]:
-        #     # Seleciona a função de custo baseada em tempo de entrega
-        #     objective_for_cost_function = 1
-        # elif i in [2, 4, 6, 8]:
-        #     # Seleciona a função de custo baseada em custo de operação (distância)
-        #     objective_for_cost_function = 2
+        if i in [1, 3, 5, 7, 9, 10]:
+            # Seleciona a função de custo baseada em tempo de entrega
+            objective_for_cost_function = 1
+        elif i in [2, 4, 6, 8]:
+            # Seleciona a função de custo baseada em custo de operação (distância)
+            objective_for_cost_function = 2
 
-        # optimizer = LowestCostDriverOptimizerGym(base_env, cost_function=ObjectiveBasedCostFunction(objective=objective_for_cost_function))
-        # optimizer.run_simulations(num_runs, results_dir + "lowest_cost_driver_heuristic/", seed=SEED)
+        optimizer = LowestCostDriverOptimizerGym(base_env, cost_function=ObjectiveBasedCostFunction(objective=objective_for_cost_function))
+        optimizer.run_simulations(num_runs, results_dir + "lowest_cost_driver_heuristic/", seed=SEED)
         
         print("=== Execução do Modelo de Aprendizado Por Reforço ===\n")
 
@@ -124,7 +123,7 @@ def main():
             rl_optimizer = RLModelOptimizerGym(rl_env, model)
             rl_optimizer.run_simulations(
                 num_runs, 
-                results_dir + "ppo_otimizado/", 
+                results_dir + "ppo_otimizado_trained_18M/", 
                 seed=SEED
             )
             
