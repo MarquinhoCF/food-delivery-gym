@@ -21,12 +21,6 @@ from food_delivery_gym.main.statistic.summarized_data_board import SummarizedDat
 class OptimizerGym(Optimizer, ABC):
 
     def __init__(self, environment: Union[FoodDeliveryGymEnv, VecEnv]):
-        """
-        Inicializa o OptimizerGym com suporte a ambientes wrapped.
-        
-        Args:
-            environment: Pode ser o ambiente original ou um ambiente vectorizado/wrapped
-        """
         self.wrapped_env = environment
         self.gym_env = self._unwrap_environment(environment)
         self.state = None
@@ -34,16 +28,8 @@ class OptimizerGym(Optimizer, ABC):
         self.truncated = False
         self.is_vectorized = isinstance(environment, VecEnv)
 
+    # Desembrulha o ambiente para acessar o FoodDeliveryGymEnv original.
     def _unwrap_environment(self, env) -> FoodDeliveryGymEnv:
-        """
-        Desembrulha o ambiente para acessar o FoodDeliveryGymEnv original.
-        
-        Args:
-            env: Ambiente que pode estar wrapped
-            
-        Returns:
-            FoodDeliveryGymEnv: O ambiente original
-        """
         current_env = env
         
         # Se for um ambiente vectorizado
@@ -72,8 +58,7 @@ class OptimizerGym(Optimizer, ABC):
         
         return current_env
 
-    def _call_env_method(self, method_name: str, *args, **kwargs):
-        """
+    """
         Chama um método no ambiente, lidando com ambientes vectorizados.
         
         Args:
@@ -83,7 +68,8 @@ class OptimizerGym(Optimizer, ABC):
             
         Returns:
             Resultado do método
-        """
+    """
+    def _call_env_method(self, method_name: str, *args, **kwargs):
         if self.is_vectorized:
             # Para ambientes vectorizados, usa env_method se disponível
             if hasattr(self.wrapped_env, 'env_method'):
