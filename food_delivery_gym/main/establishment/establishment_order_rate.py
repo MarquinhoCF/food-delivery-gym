@@ -1,6 +1,5 @@
 from numbers import Number
 
-import numpy as np
 from simpy.core import SimTime
 from food_delivery_gym.main.environment.food_delivery_simpy_env import FoodDeliverySimpyEnv
 from food_delivery_gym.main.establishment.catalog import Catalog

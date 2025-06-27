@@ -4,7 +4,7 @@ from openpyxl import load_workbook
 from shutil import copyfile
 
 # Caminhos
-TEMPLATE_PATH = '.\\objective_table\\template_objective_table.xlsx'
+TEMPLATE_PATH = '.\\templates\\template_objective_table.xlsx'
 OUTPUT_PATH = 'objective_table.xlsx'
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # Volta da pasta /objective_table
 ROOT_DIR = os.path.join(BASE_DIR, 'data', 'runs', 'teste')
