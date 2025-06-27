@@ -224,7 +224,7 @@ class OptimizerGym(Optimizer, ABC):
             results_file.write("---> Registro de execuções:\n")
             
             for i in range(num_runs):
-                print(f"Run {i + 1}")
+                print(f"-> Execução {i + 1} de {num_runs}...")
 
                 try:
                     resultado = self.run()

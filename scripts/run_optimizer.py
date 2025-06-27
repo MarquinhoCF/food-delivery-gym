@@ -1,6 +1,7 @@
 from importlib.resources import files
 import sys
 import os
+import traceback
 
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv
@@ -14,12 +15,14 @@ from food_delivery_gym.main.optimizer.optimizer_gym.nearest_driver_optimizer_gym
 from food_delivery_gym.main.optimizer.optimizer_gym.random_driver_optimizer_gym import RandomDriverOptimizerGym
 from food_delivery_gym.main.optimizer.optimizer_gym.rl_model_optimizer_gym import RLModelOptimizerGym
 
-SEED = 101010
-
 # Escolha se deseja salvar o log em um arquivo
 SAVE_LOG_TO_FILE = False
 
-BASE_RESULTS_DIR = "./data/runs/teste/obj_{}/initial_scenario/"
+SCENARIOS = ["initial", "medium", "complex"]
+TIMESTEPS_OPTIONS = ["18M_steps", "50M_steps", "100M_steps"]
+MODEL_BASE_DIR = "./data/ppo_training/otimizacao_1M_steps_200_trials"
+
+BASE_RESULTS_DIR = "./data/runs/execucoes/obj_{}/{}_scenario/"
 
 def setup_logging(results_dir: str):
     os.makedirs(results_dir, exist_ok=True)
@@ -29,14 +32,13 @@ def setup_logging(results_dir: str):
     sys.stderr = log_file
     return log_file
 
-def create_environment(reward_objective: int = 1):
-    if reward_objective is None:
-        raise ValueError("reward_objective não pode ser None. Deve ser um valor entre 1 e 10.")
-    elif reward_objective not in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]:
+def create_environment(reward_objective: int, scenario_name: str):
+    if reward_objective not in range(1, 11):
         raise ValueError("reward_objective deve ser um valor entre 1 e 10.")
 
-    scenario_path = str(files("food_delivery_gym.main.scenarios").joinpath("initial_obj3.json"))
-    gym_env: FoodDeliveryGymEnv = FoodDeliveryGymEnv(scenario_json_file_path=scenario_path)
+    scenario_file = scenario_name + "_obj1.json"
+    scenario_path = str(files("food_delivery_gym.main.scenarios").joinpath(scenario_file))
+    gym_env = FoodDeliveryGymEnv(scenario_json_file_path=scenario_path)
     gym_env.set_mode(EnvMode.EVALUATING)
     gym_env.set_reward_objective(reward_objective)
     return gym_env
@@ -49,89 +51,93 @@ def create_normalized_environment(reward_objective: int = 1):
     
     return normalized_env
 
-def load_with_separate_vecnormalize(model_path: str, vecnormalize_path: str = None, reward_objective: int = None):
+def load_with_separate_vecnormalize(model_path: str, vecnormalize_path: str, reward_objective: int, scenario_name: str):
     model = PPO.load(model_path)
-    
-    if vecnormalize_path and os.path.exists(vecnormalize_path):
-        print(f"Carregando VecNormalize de: {vecnormalize_path}")
-        base_env = create_environment(reward_objective=reward_objective)
-        vec_env = DummyVecEnv([lambda: base_env])
-        env = VecNormalize.load(vecnormalize_path, vec_env)
-        env.training = False
-        env.norm_reward = False
-    else:
-        print("AVISO: VecNormalize não encontrado!")
-        raise FileNotFoundError("O arquivo VecNormalize não foi encontrado. Verifique o caminho fornecido.")
-    
+
+    base_env = create_environment(reward_objective=reward_objective, scenario_name=scenario_name)
+    vec_env = DummyVecEnv([lambda: base_env])
+    env = VecNormalize.load(vecnormalize_path, vec_env)
+    env.training = False
+    env.norm_reward = False
+
     return model, env
 
 def main():
     num_runs = 20
-    
-    base_path = "./data/ppo_training/otimizacao_1M_steps_200_trials/obj_3/medium/100000000_time_steps/"
+    seed = 101010
 
-    model_path = base_path + "best_model.zip"
-    
-    vecnormalize_path = base_path + "food_delivery_gym-FoodDelivery-medium-obj3-v0/vecnormalize.pkl"
+    print("=== Executando Agentes Otimizadores ao Ambiente de Entrega de Última Milha ===")
 
-    print("=== Executando otimizadores heurísticos ===")
-    
-    for i in range(1, 2):
-        results_dir = BASE_RESULTS_DIR.format(i)
-        if SAVE_LOG_TO_FILE:
-            log_file = setup_logging(results_dir)
-        
-        print(f"\n=== Iniciando simulações para Objetivo {i} ===")
-        
-        # Para heurísticas, use ambiente original
-        base_env = create_environment(reward_objective=i)
-        
-        optimizer = RandomDriverOptimizerGym(base_env)
-        optimizer.run_simulations(num_runs, results_dir + "random_heuristic/", seed=SEED)
+    for i in range(1, 11):  # objetivos de 1 a 10
+        for scenario in SCENARIOS:
+            results_dir = BASE_RESULTS_DIR.format(i, scenario)
+            if SAVE_LOG_TO_FILE:
+                log_file = setup_logging(results_dir)
 
-        optimizer = FirstDriverOptimizerGym(base_env)
-        optimizer.run_simulations(num_runs, results_dir + "first_driver_heuristic/", seed=SEED)
+            print(f"\n\n=== Iniciando simulações para Objetivo {i} no cenário '{scenario}' ===")
+            base_env = create_environment(reward_objective=i, scenario_name=scenario)
 
-        optimizer = NearestDriverOptimizerGym(base_env)
-        optimizer.run_simulations(num_runs, results_dir + "nearest_driver_heuristic/", seed=SEED)
+            print("\n=== Executando Heurísticas ===")
 
-        if i in [1, 3, 5, 7, 9, 10]:
-            # Seleciona a função de custo baseada em tempo de entrega
-            objective_for_cost_function = 1
-        elif i in [2, 4, 6, 8]:
-            # Seleciona a função de custo baseada em custo de operação (distância)
-            objective_for_cost_function = 2
+            # Heurísticas
+            print(f"\n=== Executando simulações com o Agente aleatório no cenário '{scenario}' ===")
+            RandomDriverOptimizerGym(base_env).run_simulations(num_runs, results_dir + "random_heuristic/", seed=seed)
 
-        optimizer = LowestCostDriverOptimizerGym(base_env, cost_function=ObjectiveBasedCostFunction(objective=objective_for_cost_function))
-        optimizer.run_simulations(num_runs, results_dir + "lowest_cost_driver_heuristic/", seed=SEED)
-        
-        print("=== Execução do Modelo de Aprendizado Por Reforço ===\n")
+            print(f"\n=== Executando simulações com o Agente do Primeiro Motorista no cenário '{scenario}' ===")
+            FirstDriverOptimizerGym(base_env).run_simulations(num_runs, results_dir + "first_driver_heuristic/", seed=seed)
 
-        try:
-            # OPÇÃO 1: Recontruir o modelo com VecNormalize separado
-            model, rl_env = load_with_separate_vecnormalize(model_path, vecnormalize_path, reward_objective=i)
+            print(f"\n=== Executando simulações com o Agente do Motorista mais Próximo no cenário '{scenario}' ===")
+            NearestDriverOptimizerGym(base_env).run_simulations(num_runs, results_dir + "nearest_driver_heuristic/", seed=seed)
 
-            # # OPÇÃO 2: Configurar o modelo e o ambiente diretamente:
-            # model = PPO.load(model_path)
-            # rl_env = create_normalized_environment(reward_objective=i)
-            
-            print(f"Configuração do ambiente RL:")
-            print(f"  Tipo: {type(rl_env).__name__}")
-            print(f"  É vectorizado: {hasattr(rl_env, 'num_envs')}")
-            
-            # Cria e executa o otimizador RL
-            rl_optimizer = RLModelOptimizerGym(rl_env, model)
-            rl_optimizer.run_simulations(
-                num_runs, 
-                results_dir + "ppo_otimizado_trained_100M/", 
-                seed=SEED
-            )
-            
-        except Exception as e:
-            print(f"Erro ao executar otimizador RL: {e}")
-            import traceback
-            traceback.print_exc()
-    
+            if i in [1, 3, 5, 7, 9, 10]:
+                # Seleciona a função de custo baseada em tempo de entrega
+                objective_for_cost_function = 1
+            elif i in [2, 4, 6, 8]:
+                # Seleciona a função de custo baseada em custo de operação (distância)
+                objective_for_cost_function = 2
+            else:
+                raise ValueError(f"Objetivo {i} não reconhecido.")
+
+            print(f"\n=== Executando simulações com o Agente do Motorista de Menor Custo no cenário '{scenario}' ===")
+            LowestCostDriverOptimizerGym(base_env, cost_function=ObjectiveBasedCostFunction(objective=objective_for_cost_function))\
+                .run_simulations(num_runs, results_dir + "lowest_cost_driver_heuristic/", seed=seed)
+
+            # RL - tenta os 3 time steps possíveis
+            print("\n=== Tentando executar modelos de Aprendizado por Reforço ===")
+            for timestep in TIMESTEPS_OPTIONS:
+                model_dir = f"{MODEL_BASE_DIR}/obj_{i}/medium/{timestep}/"
+                model_path = model_dir + "best_model.zip"
+                vecnormalize_path = model_dir + f"food_delivery_gym-FoodDelivery-medium-obj{i}-v0/vecnormalize.pkl"
+
+                if not os.path.exists(model_path):
+                    print(f"\n[AVISO] Modelo não encontrado: {model_path}")
+                    continue
+                if not os.path.exists(vecnormalize_path):
+                    print(f"\n[AVISO] VecNormalize não encontrado: {vecnormalize_path}")
+                    continue
+
+                print(f"\nExecutando PPO para Objetivo {i}, cenário '{scenario}', timestep {timestep}")
+                try:
+                    # OPÇÃO 1: Recontruir o modelo com VecNormalize separado
+                    model, rl_env = load_with_separate_vecnormalize(model_path, vecnormalize_path, reward_objective=i, scenario_name=scenario)
+                    
+                    # # OPÇÃO 2: Configurar o modelo e o ambiente diretamente:
+                    # model = PPO.load(model_path)
+                    # rl_env = create_normalized_environment(reward_objective=i)
+
+                    rl_optimizer = RLModelOptimizerGym(rl_env, model)
+                    rl_optimizer.run_simulations(
+                        num_runs,
+                        results_dir + f"ppo_otimizado_trained_{timestep}/",
+                        seed=seed
+                    )
+                except Exception as e:
+                    print(f"Erro ao executar PPO para objetivo {i}, cenário {scenario}, timestep {timestep}: {e}")
+                    traceback.print_exc()
+
+            if SAVE_LOG_TO_FILE:
+                log_file.close()
+
     print("=== Execução concluída ===")
 
     if SAVE_LOG_TO_FILE:

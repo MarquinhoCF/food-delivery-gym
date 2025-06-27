@@ -34,10 +34,11 @@ class DriverTotalDistanceMetric(Metric):
             ids = [driver.driver_id for driver in drivers]
             total_distances = [driver.total_distance for driver in drivers]
             title = 'Total Distance Traveled per Driver'
-            print("\nDistância Total Percorrida por Motorista:")
+            # print("\nDistância Total Percorrida por Motorista:")
 
-            for driver_id, distance in zip(ids, total_distances):
-                print(f"Motorista {driver_id}: {distance:.2f} percorridos")
+            # # TODO: Logs
+            # for driver_id, distance in zip(ids, total_distances):
+            #     print(f"Motorista {driver_id}: {distance:.2f} percorridos")
             
             ax.barh(ids, total_distances, color='red')
             ax.set_xlabel('Total Distance Traveled')

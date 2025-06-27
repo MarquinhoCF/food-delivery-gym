@@ -37,10 +37,11 @@ class EstablishmentActiveTimeMetric(Metric):
             ids = [establishment.establishment_id for establishment in establishments]
             active_times: List[int] = [int(establishment.active_time) for establishment in establishments]
             title = 'Active Time per Establishment'
-            print("\nTempo Ativo por Estabelecimento:")
+            # print("\nTempo Ativo por Estabelecimento:")
 
-            for est_id, active_time in zip(ids, active_times):
-                print(f"Estabelecimento {est_id}: {active_time:.2f} minutos ativo")
+            # # TODO: Logs
+            # for est_id, active_time in zip(ids, active_times):
+            #     print(f"Estabelecimento {est_id}: {active_time:.2f} minutos ativo")
 
             ax.barh(ids, active_times, color='purple')
             ax.set_xlabel('Active Time')
