@@ -37,10 +37,11 @@ class DriverTimeWaitingForOrderMetric(Metric):
             ids = [driver.driver_id for driver in drivers]
             times_waiting_for_order: List[int] = [int(driver.time_waiting_for_order) for driver in drivers]
             title = 'Time waiting for order per Driver'
-            print("\nTempo que cada motorista passou esperando pelo pedido no Estabelecimento:")
+            # print("\nTempo que cada motorista passou esperando pelo pedido no Estabelecimento:")
 
-            for driver_id, time in zip(ids, times_waiting_for_order):
-                print(f"Motorista {driver_id}: {time:.2f} minutos esperando pelo pedido")
+            # # TODO: Logs
+            # for driver_id, time in zip(ids, times_waiting_for_order):
+            #     print(f"Motorista {driver_id}: {time:.2f} minutos esperando pelo pedido")
 
             ax.barh(ids, times_waiting_for_order, color='blue')
             ax.set_xlabel('Time waiting for order')

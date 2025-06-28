@@ -40,10 +40,11 @@ class DriverTimeSpentOnDelivery(Metric):
 
             times_spent_on_delivery: List[int] = [sum(drivers_metrics[driver.driver_id]["time_spent_on_delivey"]) for driver in drivers]
             title = 'Time spent on delivery per Driver'
-            print("\nTempo que cada motorista gastou entregando os pedidos:")
+            # print("\nTempo que cada motorista gastou entregando os pedidos:")
 
-            for driver_id, time in zip(ids, times_spent_on_delivery):
-                print(f"Motorista {driver_id}: {time:.2f} minutos totais gastos entregando pedidos")
+            # # TODO: Logs
+            # for driver_id, time in zip(ids, times_spent_on_delivery):
+            #     print(f"Motorista {driver_id}: {time:.2f} minutos totais gastos entregando pedidos")
 
             ax.barh(ids, times_spent_on_delivery, color='blue')
             ax.set_xlabel('Time spent on delivery')

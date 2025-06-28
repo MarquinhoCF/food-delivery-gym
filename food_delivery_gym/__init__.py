@@ -39,6 +39,22 @@ register(
 )
 
 register(
+    id='food_delivery_gym/FoodDelivery-initial-obj7-v0',
+    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
+    kwargs={
+        "scenario_json_file_path": get_scenario_path("initial_obj7.json"),
+    }
+)
+
+register(
+    id='food_delivery_gym/FoodDelivery-initial-obj8-v0',
+    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
+    kwargs={
+        "scenario_json_file_path": get_scenario_path("initial_obj8.json"),
+    }
+)
+
+register(
     id='food_delivery_gym/FoodDelivery-medium-obj1-v0',
     entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
     kwargs={
@@ -71,6 +87,22 @@ register(
 )
 
 register(
+    id='food_delivery_gym/FoodDelivery-medium-obj7-v0',
+    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
+    kwargs={
+        "scenario_json_file_path": get_scenario_path("medium_obj7.json"),
+    }
+)
+
+register(
+    id='food_delivery_gym/FoodDelivery-medium-obj8-v0',
+    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
+    kwargs={
+        "scenario_json_file_path": get_scenario_path("medium_obj8.json"),
+    }
+)
+
+register(
     id='food_delivery_gym/FoodDelivery-complex-obj1-v0',
     entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
     kwargs={
@@ -99,5 +131,21 @@ register(
     entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
     kwargs={
         "scenario_json_file_path": get_scenario_path("complex_obj4.json"),
+    }
+)
+
+register(
+    id='food_delivery_gym/FoodDelivery-complex-obj7-v0',
+    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
+    kwargs={
+        "scenario_json_file_path": get_scenario_path("complex_obj7.json"),
+    }
+)
+
+register(
+    id='food_delivery_gym/FoodDelivery-complex-obj8-v0',
+    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
+    kwargs={
+        "scenario_json_file_path": get_scenario_path("complex_obj8.json"),
     }
 )

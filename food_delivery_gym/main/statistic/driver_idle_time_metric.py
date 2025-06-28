@@ -37,10 +37,11 @@ class DriverIdleTimeMetric(Metric):
             ids = [driver.driver_id for driver in drivers]
             idle_times: List[int] = [int(driver.idle_time) for driver in drivers]
             title = 'Idle Time per Driver'
-            print("\nTempo Ocioso por Motorista:")
+            # print("\nTempo Ocioso por Motorista:")
 
-            for driver_id, idle_time in zip(ids, idle_times):
-                print(f"Motorista {driver_id}: {idle_time:.2f} minutos ocioso")
+            # # TODO: Logs
+            # for driver_id, idle_time in zip(ids, idle_times):
+            #     print(f"Motorista {driver_id}: {idle_time:.2f} minutos ocioso")
 
             ax.barh(ids, idle_times, color='green')
             ax.set_xlabel('Idle Time')

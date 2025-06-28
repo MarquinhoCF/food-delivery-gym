@@ -4,7 +4,7 @@ pygame
 gymnasium
 numpy
 ortools
-stable-baselines3
+stable-baselines3[extra,tests,docs]>=2.6.1a1,<3.0
 rl_zoo3
 sb3-contrib
 tensorflow

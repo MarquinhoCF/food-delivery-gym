@@ -38,10 +38,11 @@ class EstablishmentOrdersFulfilledMetric(Metric):
             ids = [establishment.establishment_id for establishment in establishments]
             orders_fulfilled = [int(establishment.orders_fulfilled) for establishment in establishments]
             title = 'Orders Fulfilled per Establishment'
-            print("\nPedidos Atendidos por Estabelecimento:")
+            # print("\nPedidos Atendidos por Estabelecimento:")
 
-            for est_id, count in zip(ids, orders_fulfilled):
-                print(f"Estabelecimento {est_id}: {count} pedidos atendidos")
+            # # TODO: Logs
+            # for est_id, count in zip(ids, orders_fulfilled):
+            #     print(f"Estabelecimento {est_id}: {count} pedidos atendidos")
 
             ax.barh(ids, orders_fulfilled, color='skyblue')
             ax.set_xlabel('Orders Fulfilled')

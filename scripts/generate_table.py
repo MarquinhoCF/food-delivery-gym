@@ -4,10 +4,10 @@ from openpyxl import load_workbook
 from shutil import copyfile
 
 # Caminhos
-TEMPLATE_PATH = '.\\objective_table\\template_objective_table.xlsx'
+TEMPLATE_PATH = '.\\templates\\template_objective_table.xlsx'
 OUTPUT_PATH = 'objective_table.xlsx'
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # Volta da pasta /objective_table
-ROOT_DIR = os.path.join(BASE_DIR, 'data', 'runs', 'teste')
+ROOT_DIR = os.path.join(BASE_DIR, 'data', 'runs', 'execucoes')
 
 # Mapear heurísticas para colunas por cenário
 HEURISTIC_TO_COLUMN = {
@@ -16,21 +16,27 @@ HEURISTIC_TO_COLUMN = {
         'first_driver_heuristic': 'E',
         'nearest_driver_heuristic': 'F',
         'lowest_cost_driver_heuristic': 'G',
-        'ppo_otimizado': 'H'
+        'ppo_otimizado_trained_18M_steps': 'H',
+        'ppo_otimizado_trained_50M_steps': 'I',
+        'ppo_otimizado_trained_100M_steps': 'J'
     },
     'medium_scenario': {
-        'random_heuristic': 'J',
-        'first_driver_heuristic': 'K',
-        'nearest_driver_heuristic': 'L',
-        'lowest_cost_driver_heuristic': 'M',
-        'ppo_otimizado': 'N'
+        'random_heuristic': 'L',
+        'first_driver_heuristic': 'M',
+        'nearest_driver_heuristic': 'N',
+        'lowest_cost_driver_heuristic': 'O',
+        'ppo_otimizado_trained_18M_steps': 'P',
+        'ppo_otimizado_trained_50M_steps': 'Q',
+        'ppo_otimizado_trained_100M_steps': 'R'
     },
     'complex_scenario': {
-        'random_heuristic': 'P',
-        'first_driver_heuristic': 'Q',
-        'nearest_driver_heuristic': 'R',
-        'lowest_cost_driver_heuristic': 'S',
-        'ppo_otimizado': 'T'
+        'random_heuristic': 'T',
+        'first_driver_heuristic': 'U',
+        'nearest_driver_heuristic': 'V',
+        'lowest_cost_driver_heuristic': 'W',
+        'ppo_otimizado_trained_18M_steps': 'X',
+        'ppo_otimizado_trained_50M_steps': 'Y',
+        'ppo_otimizado_trained_100M_steps': 'Z'
     }
 }
 

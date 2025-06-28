@@ -36,11 +36,11 @@ class EstablishmentMaxOrdersInQueueMetric(Metric):
             ids = [establishment.establishment_id for establishment in establishments]
             max_orders_in_queue: List[int] = [int(establishment.max_orders_in_queue) for establishment in establishments]
             title = 'Max Orders in Queue per Establishment'
-            print("\nMáximo de Pedidos na Fila por Estabelecimento:")
+            # print("\nMáximo de Pedidos na Fila por Estabelecimento:")
 
-            print("\nMáximo de Pedidos na Fila por Estabelecimento:")
-            for est_id, max_queue in zip(ids, max_orders_in_queue):
-                print(f"Estabelecimento {est_id}: {max_queue} pedidos na fila")
+            # # TODO: Logs
+            # for est_id, max_queue in zip(ids, max_orders_in_queue):
+            #     print(f"Estabelecimento {est_id}: {max_queue} pedidos na fila")
 
             ax.barh(ids, max_orders_in_queue, color='orange')
             ax.set_xlabel('Max Orders in Queue')

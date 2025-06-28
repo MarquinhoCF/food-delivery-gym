@@ -37,10 +37,11 @@ class DriverOrdersDeliveredMetric(Metric):
             ids = [driver.driver_id for driver in drivers]
             orders_delivered: List[int] = [int(driver.orders_delivered) for driver in drivers]
             title = 'Orders Delivered per Driver'
-            print("\nPedidos Entregues por Motorista:")
+            # print("\nPedidos Entregues por Motorista:")
 
-            for driver_id, count in zip(ids, orders_delivered):
-                print(f"Motorista {driver_id}: {count} pedidos entregues")
+            # # TODO: Logs
+            # for driver_id, count in zip(ids, orders_delivered):
+            #     print(f"Motorista {driver_id}: {count} pedidos entregues")
 
             ax.barh(ids, orders_delivered, color='blue')
             ax.set_xlabel('Orders Delivered')
