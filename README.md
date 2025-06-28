@@ -82,7 +82,7 @@ O ambiente de simulação foi formulado como um Processo de Decisão de Markov (
 
 | Variável      | Descrição                                                                                          |
 |---------------|----------------------------------------------------------------------------------------------------|
-| `FUNCTION`    | Função lambda que define o número de pedidos gerados por passo de tempo. Deve ser passada como uma string |
+| `FUNCTION`    | Função lambda que define o número de pedidos gerados por passo de tempo. Deve ser passada como uma string. |
 | `TIME_SHIFT`  | Intervalo de tempo (em minutos) entre criações de novos pedidos.                                  |
 
 ### 🚗 Configurações dos Motoristas
@@ -136,7 +136,7 @@ Este exemplo define um cenário com 10 motoristas, 288 pedidos, 10 estabelecimen
 
 ### 📝 Registro do Cenário Experimental
 
-Para registrar o cenário ambiental criado deve ser acessado o arquivo `food_delivery_gym/__init__.py`. No arquivo o cenário criado deve incluído seguindo o padrão observado e passando o nome do arquivo JSON criado anteriormente:
+Para registrar o cenário ambiental criado deve ser acessado o arquivo `food_delivery_gym/__init__.py`. No arquivo o cenário criado deve ser incluído seguindo o padrão observado e passando o nome do arquivo JSON criado anteriormente:
 
 ```python
 register(
@@ -146,12 +146,6 @@ register(
         "scenario_json_file_path": get_scenario_path("medium_obj1.json"),
     }
 )
-```
-
-Dessa forma os cenários criados poderão ser acessados via instalação do pacote com os ambientes `food_delivery_gym`. O pacote pode ser instalado a partir do comando:
-
-```bash
-pip install .
 ```
 
 ## 🤖 Treinamento de Agentes de Aprendizado por Reforço
@@ -265,7 +259,7 @@ O pacote `food_delivery_gym` permite a criação de agentes otimizadores persona
 
 Essa abordagem é útil para avaliar o desempenho de algoritmos customizados no ambiente de entrega de última milha e comparar com agentes baseados em AR.
 
-Para desenvolver um novo agente deve-se herdar `OptimizerGym` e implementar o método `select_driver`.
+Para desenvolver um novo agente deve herdar `OptimizerGym` e implementar o método `select_driver`.
 
 ### 🔧 Implementando um Otimizador Heurístico
 
