@@ -59,7 +59,7 @@ source venv/bin/activate
 
 ### 🔹 Rodar o script do teste do simulador:
 ```shell
-python -m food_delivery_gym.examples.test
+python -m scripts.test
 ```
 
 ## 🎯 Configuração dos Cenários Experimentais
@@ -429,4 +429,4 @@ notebooks/
 > 📂 **Download dos dados completos (Google Drive):**
 > [Clique aqui para acessar](https://drive.google.com/drive/folders/1YzpAzy5L5YcqjMntWio_5JnyfXeccu-S?usp=sharing)
 
-Caso deseje rodar os scripts localmente com todos os dados originais, baixe e extraia o conteúdo do diretório `data/` os arquivos, de forma a garantir que a estrutura, descrita na seção anterior, se mantenha.
+Caso deseje rodar os scripts localmente com todos os dados originais, baixe e extraia o conteúdo do diretório `data/`, de forma a garantir que a estrutura, descrita na seção anterior, se mantenha.
