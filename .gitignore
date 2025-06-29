@@ -27,7 +27,6 @@ share/python-wheels/
 MANIFEST
 
 data/*
-notebooks/data_notebooks/*
 *.xlsx
 *.prof
 .vscode

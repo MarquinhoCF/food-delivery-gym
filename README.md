@@ -184,10 +184,10 @@ python -m pip install -r requirements.txt
 python -m pip install huggingface_hub huggingface_sb3 sb3-contrib
 ```
 
-**5º Passo**: Navegue até o diretório do projeto `food_delivery_gym`:
+**5º Passo**: Navegue até o diretório do projeto `food-delivery-gym`:
 
 ```bash
-cd ../food_delivery_gym/
+cd ../food-delivery-gym/
 ```
 
 **6º Passo**: Instale o pacote local:
@@ -377,3 +377,56 @@ python -m scripts.generate_table
 ```
 
 > O Excel final será salvo com o nome `objective_table.xlsx` no diretório atual.
+
+---
+
+## 📂 Acesso aos Dados Experimentais
+
+Os resultados completos dos experimentos realizados com o simulador, incluindo logs, métricas agregadas, modelos treinados, arquivos de normalização e tabelas comparativas, estão disponíveis na nuvem.
+
+A estrutura de diretórios de saída segue o seguinte padrão:
+
+```
+data/
+├── ppo_training/
+│   └── otimizacao_1M_steps_200_trials
+│        ├── otimização
+│        │    ├── logs
+│        │    │    └── ... (modelos treinados e logs)
+│        │    └── ppo_best_hyperparameters_food_delivery_gym.yml  # Resultados dos ajustes de hiperparâmetros
+│        └── treinamento
+│             └── ... (modelos treinados e arquivos de normalização)
+└── runs/
+    └── execucoes/
+        ├── obj_<N>/               # Objetivos 1 a 10
+        │    └── <cenario>_scenario/
+        │        └── <heuristica>/
+        │            ├── results.txt
+        │            ├── mean_results_(valor).png
+        │            └── figs/
+        └── objective_table.xlsx   # Tabela consolidada com resultados
+
+notebooks/
+├── reward_objective_graphs.ipynb (Notebook com análises preliminares das funções de recompensa)
+│
+└── data_notebooks
+     ├── ppo_training/
+     │   └── ... (modelos treinados, logs e resultados)
+     │  
+     │       
+     │        
+     │             
+     └── runs/
+         └── obj_<N>/               # Objetivos 1 a 10
+              └── <cenario>_scenario/
+                  └── <heuristica>/
+                      ├── results.txt
+                      ├── metrics_data.npz
+                      ├── mean_results_(valor).png
+                      └── figs/
+```
+
+> 📂 **Download dos dados completos (Google Drive):**
+> [Clique aqui para acessar](https://drive.google.com/drive/folders/1YzpAzy5L5YcqjMntWio_5JnyfXeccu-S?usp=sharing)
+
+Caso deseje rodar os scripts localmente com todos os dados originais, baixe e extraia o conteúdo do diretório `data/` os arquivos, de forma a garantir que a estrutura, descrita na seção anterior, se mantenha.
