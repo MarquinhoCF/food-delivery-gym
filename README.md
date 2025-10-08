@@ -58,8 +58,56 @@ source venv/bin/activate
 ```
 
 ### 🔹 Rodar o script do teste do simulador:
+
+#### 1. **Modo Automático**
 ```shell
-python -m scripts.test
+python -m scripts.test_runner --mode auto --scenario medium_obj1.json --render
+```
+- Executa automaticamente com ações aleatórias
+- Útil para testes rápidos
+
+#### 2. **Modo Interativo** (Recomendado para desenvolvimento)
+```shell
+python -m scripts.test_runner --mode interactive --scenario medium_obj1.json --render
+```
+- Executa passo-a-passo esperando sua entrada
+- **Comandos disponíveis**:
+  - `Enter`: ação aleatória
+  - `run`: executa automaticamente até o fim
+  - `quit`: sai do programa
+  - Números/ações: entrada manual personalizada
+
+#### 3. **Modo com Agente PPO** (Requer modelo treinado)
+```shell
+python -m scripts.test_runner --mode agent --scenario medium_obj1.json --model-path models/ppo_food_delivery --render
+```
+
+### ⚙️ Opções de Configuração
+
+| Opção | Descrição | Exemplo |
+|-------|-----------|---------|
+| `--mode` | Modo de execução: `interactive`, `auto`, `agent` | `--mode interactive` |
+| `--scenario` | Arquivo de cenário JSON | `--scenario medium_obj1.json` |
+| `--render` | Ativa visualização gráfica | `--render` |
+| `--seed` | Seed para reproducibilidade | `--seed 42` |
+| `--max-steps` | Limite máximo de passos | `--max-steps 1000` |
+| `--save-log` | Salva output em arquivo log.txt | `--save-log` |
+| `--model-path` | Caminho para modelo PPO (modo agent) | `--model-path models/ppo_model` |
+
+#### Exemplos:
+
+```shell
+# Teste rápido com cenário padrão
+python -m scripts.test_runner --mode auto --max-steps 100
+
+# Debug interativo com renderização
+python -m scripts.test_runner --mode interactive --render --seed 123
+
+# Teste de performance com log
+python -m scripts.test_runner --mode auto --max-steps 5000 --save-log
+
+# Testar cenário específico
+python -m scripts.test_runner --scenario meu_cenario.json --mode interactive --render
 ```
 
 ## 🎯 Configuração dos Cenários Experimentais
