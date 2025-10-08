@@ -181,7 +181,7 @@ class Establishment(MapActor):
 
         self.finish_order(cook, order)
 
-    def _handle_driver_allocation(self, order, allocation_time):
+    def _handle_driver_allocation(self, order: Order, allocation_time: SimTime):
         # Gerencia a alocação do motorista.
         yield self.timeout(allocation_time)
         allocation_event = TimeForAgentAllocateDriver(
@@ -265,3 +265,6 @@ class Establishment(MapActor):
             self.active_time += 1
         else:
             self.idle_time += 1
+
+    def get_coordinate(self) -> Coordinate:
+        return self.coordinate

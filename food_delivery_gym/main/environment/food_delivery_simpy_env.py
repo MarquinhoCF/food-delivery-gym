@@ -128,7 +128,6 @@ class FoodDeliverySimpyEnv(Environment):
         
         if mode == EnvMode.EVALUATING and self.last_time_step < self.now:
             self.update_statistcs_variables()
-            #self.print_enviroment_state()
             self.last_time_step = self.now
 
     def render(self):
@@ -140,15 +139,6 @@ class FoodDeliverySimpyEnv(Environment):
             self.view.quit()
 
     def print_enviroment_state(self, options = None):
-        if options is None:
-            options = {
-                "customers": False,
-                "establishments": True,
-                "drivers": True,
-                "orders": False,
-                "events": False,
-                "orders_delivered": True
-            }
         print(f'time_step = {self.now}')
         self._state.print_state(options)
 

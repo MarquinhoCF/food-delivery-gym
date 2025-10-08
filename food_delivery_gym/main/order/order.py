@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, TYPE_CHECKING
 
 from food_delivery_gym.main.base.dimensions import Dimensions
 from food_delivery_gym.main.base.types import Number
@@ -6,19 +6,24 @@ from food_delivery_gym.main.order.delivery_rejection import DeliveryRejection
 from food_delivery_gym.main.order.item import Item
 from food_delivery_gym.main.order.order_status import OrderStatus
 
+if TYPE_CHECKING:
+    # Importações apenas para anotação de tipos (não executam em runtime)
+    from food_delivery_gym.main.customer.customer import Customer
+    from food_delivery_gym.main.establishment.establishment import Establishment
+
 
 class Order:
     def __init__(
             self,
             id: Number,
-            customer,
-            establishment,
+            customer: "Customer",
+            establishment: "Establishment",
             request_date: int,
             items: List[Item],
     ):
         self.order_id = id
-        self.customer = customer
-        self.establishment = establishment
+        self.customer: "Customer" = customer
+        self.establishment: "Establishment" = establishment
         self.request_date = request_date
         self.items = items
         self.status: OrderStatus = OrderStatus.CREATED
@@ -79,6 +84,15 @@ class Order:
 
     def add_delivery_rejection(self, delivery_rejection: DeliveryRejection):
         self.delivery_rejections.append(delivery_rejection)
+
+    def get_establishment(self) -> "Establishment":
+        return self.establishment
+
+    def get_customer(self) -> "Customer":
+        return self.customer
+
+    def get_estimated_time_to_ready(self) -> int:
+        return self.estimated_time_to_ready
 
     def __str__(self):
         return (

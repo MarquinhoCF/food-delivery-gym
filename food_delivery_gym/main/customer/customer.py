@@ -47,3 +47,5 @@ class Customer(MapActor):
     def time_to_receive_order(self):
         return self.rng.randrange(2, 10)
 
+    def get_coordinate(self) -> Coordinate:
+        return self.coordinate

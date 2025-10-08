@@ -118,7 +118,7 @@ class OptimizerGym(Optimizer, ABC):
         
         while not (self.done or self.truncated):
             try:
-                order = self.gym_env.get_last_order()
+                order = self.gym_env.get_current_order()
                 action = self.assign_driver_to_order(self.state, order)
                 
                 if self.is_vectorized:

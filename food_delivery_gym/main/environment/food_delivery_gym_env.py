@@ -6,12 +6,14 @@ import numpy as np
 from gymnasium import Env
 from gymnasium.spaces import Dict, Box, Discrete
 
+from food_delivery_gym.main.driver.driver_status import DriverStatus
 from food_delivery_gym.main.environment.env_mode import EnvMode
 from food_delivery_gym.main.environment.food_delivery_simpy_env import FoodDeliverySimpyEnv
 from food_delivery_gym.main.generator.initial_driver_generator import InitialDriverGenerator
 from food_delivery_gym.main.generator.initial_establishment_order_rate_generator import InitialEstablishmentOrderRateGenerator
 from food_delivery_gym.main.generator.time_shift_order_establishment_rate_generator import TimeShiftOrderEstablishmentRateGenerator
 from food_delivery_gym.main.map.grid_map import GridMap
+from food_delivery_gym.main.order.order import Order
 from food_delivery_gym.main.route.delivery_route_segment import DeliveryRouteSegment
 from food_delivery_gym.main.route.pickup_route_segment import PickupRouteSegment
 from food_delivery_gym.main.route.route import Route
@@ -100,27 +102,57 @@ class FoodDeliveryGymEnv(Env):
             self.dtype_observation = np.float32
 
             self.observation_space = Dict({
-                'drivers_busy_time': Box(low=-1, high=1, shape=(self.num_drivers,), dtype=self.dtype_observation),
-                'time_to_drivers_complete_order': Box(low=-1, high=1, shape=(self.num_drivers,), dtype=self.dtype_observation),
-                'remaining_orders': Box(low=-1, high=1, shape=(1,), dtype=self.dtype_observation),
-                'establishment_busy_time': Box(low=-1, high=1, shape=(self.num_establishments,), dtype=self.dtype_observation),
+                # --- Motoristas ---
+                'drivers_coord': Box(low=-1, high=1, shape=(self.num_drivers*2,), dtype=self.dtype_observation),
+                'drivers_estimated_remaining_time': Box(low=-1, high=1, shape=(self.num_drivers,), dtype=self.dtype_observation),
+                'driver_status': Box(low=-1, high=1, shape=(self.num_drivers,), dtype=self.dtype_observation),
+                'drivers_queue_size': Box(low=-1, high=1, shape=(self.num_drivers,), dtype=self.dtype_observation),
+                'drivers_velocity': Box(low=-1, high=1, shape=(self.num_drivers,), dtype=self.dtype_observation),
+
+                # --- Pedido Atual ---  
+                'order_restaurant_coord': Box(low=-1, high=1, shape=(2,), dtype=self.dtype_observation),
+                'order_customer_coord': Box(low=-1, high=1, shape=(2,), dtype=self.dtype_observation),
+                'order_estimated_ready_time': Box(low=-1, high=1, shape=(1,), dtype=self.dtype_observation),
+                'order_estimated_delivery_time': Box(low=-1, high=1, shape=(1,), dtype=self.dtype_observation),
+
+                # --- Ambiente ---
                 'current_time_step': Box(low=-1, high=1, shape=(1,), dtype=self.dtype_observation)
             })
             
             self.limits_observation_space = {
-                'drivers_busy_time': (0, self.max_time_step),
-                'time_to_drivers_complete_order': (0, self.max_time_step),
-                'remaining_orders': (0, self.num_orders + 1),
-                'establishment_busy_time': (0, self.max_time_step),
+                # --- Motoristas ---
+                'drivers_coord': (0, self.grid_map_size - 1),
+                'drivers_estimated_remaining_time': (0, self.max_time_step),
+                'driver_status': (1, len(DriverStatus)),
+                'drivers_queue_size': (0, self.num_orders),
+                'drivers_velocity': (min(self.vel_drivers), max(self.vel_drivers)),
+
+                # --- Pedido Atual ---  
+                'order_restaurant_coord': (0, self.grid_map_size - 1),
+                'order_customer_coord': (0, self.grid_map_size - 1),
+                'order_estimated_ready_time': (0, self.max_time_step),
+                'order_estimated_delivery_time': (0, self.max_time_step),
+
+                # --- Ambiente ---
                 'current_time_step': (0, self.max_time_step)
             }
         else:
             self.dtype_observation = np.int32
             self.observation_space = Dict({
-                'drivers_busy_time': Box(low=0, high=self.max_time_step, shape=(self.num_drivers,), dtype=self.dtype_observation),
-                'time_to_drivers_complete_order': Box(low=0, high=self.max_time_step, shape=(self.num_drivers,), dtype=self.dtype_observation),
-                'remaining_orders': Box(low=0, high=self.num_orders + 1, shape=(1,), dtype=self.dtype_observation),
-                'establishment_busy_time': Box(low=0, high=self.max_time_step, shape=(self.num_establishments,), dtype=self.dtype_observation),
+                # --- Motoristas ---
+                'drivers_coord': Box(low=0, high=self.grid_map_size - 1, shape=(self.num_drivers*2,), dtype=self.dtype_observation),
+                'drivers_estimated_remaining_time': Box(low=0, high=self.max_time_step, shape=(self.num_drivers,), dtype=self.dtype_observation),
+                'driver_status': Box(low=1, high=len(DriverStatus), shape=(self.num_drivers,), dtype=self.dtype_observation),
+                'drivers_queue_size': Box(low=0, high=self.num_orders, shape=(self.num_drivers,), dtype=self.dtype_observation),
+                'drivers_velocity': Box(low=min(self.vel_drivers), high=max(self.vel_drivers), shape=(self.num_drivers,), dtype=self.dtype_observation),
+
+                # --- Pedido Atual ---  
+                'order_restaurant_coord': Box(low=0, high=self.grid_map_size - 1, shape=(2,), dtype=self.dtype_observation),
+                'order_customer_coord': Box(low=0, high=self.grid_map_size - 1, shape=(2,), dtype=self.dtype_observation),
+                'order_estimated_ready_time': Box(low=0, high=self.max_time_step, shape=(1,), dtype=self.dtype_observation),
+                'order_estimated_delivery_time': Box(low=0, high=self.max_time_step, shape=(1,), dtype=self.dtype_observation),
+
+                # --- Ambiente ---
                 'current_time_step': Box(low=0, high=self.max_time_step, shape=(1,), dtype=self.dtype_observation)
             })
 
@@ -139,35 +171,67 @@ class FoodDeliveryGymEnv(Env):
         return normalized_obs
 
     def get_observation(self):
-        # 1. drivers_busy_time: Tempo de ocupação de cada motorista
-        drivers_busy_time = np.zeros((self.num_drivers,), dtype=self.dtype_observation)
+        # --- Motoristas ---
+        # 1. drivers_coord: Coordenada atual de cada motorista (posição no grid)
+        drivers_coord = np.zeros((self.num_drivers*2,), dtype=self.dtype_observation)
         for i, driver in enumerate(self.simpy_env.state.drivers):
-            drivers_busy_time[i] = driver.estimate_total_busy_time()
-
-        # 2. time_to_drivers_complete_order: Tempo estimado para cada motorista completar o próximo pedido
-        time_to_drivers_complete_order = np.zeros((self.num_drivers,), dtype=self.dtype_observation)
+            coords = driver.get_coordinate()
+            index = i * 2
+            drivers_coord[index] = coords[0]
+            drivers_coord[index + 1] = coords[1]
+        # 2. drivers_estimated_remaining_time: Tempo estimado restante para cada motorista completar todas as entregas na sua lista
+        drivers_estimated_remaining_time = np.zeros((self.num_drivers,), dtype=self.dtype_observation)
         for i, driver in enumerate(self.simpy_env.state.drivers):
-            time_to_drivers_complete_order[i] = driver.estimate_time_to_complete_next_order(self.last_order)
+            drivers_estimated_remaining_time[i] = driver.estimate_total_busy_time()
+        # 3. driver_status: Status atual de cada motorista (disponível, coletando, entregando, etc.)
+        driver_status = np.zeros((self.num_drivers,), dtype=self.dtype_observation)
+        for i, driver in enumerate(self.simpy_env.state.drivers):
+            driver_status[i] = driver.get_status_for_observation().value
+        # 4. drivers_queue_size: Número de pedidos na lista de cada motorista
+        drivers_queue_size = np.zeros((self.num_drivers,), dtype=self.dtype_observation)
+        for i, driver in enumerate(self.simpy_env.state.drivers):
+            drivers_queue_size[i] = driver.get_number_of_orders_in_list()
+        # 5. drivers_velocity: Velocidade de cada motorista
+        drivers_velocity = np.zeros((self.num_drivers,), dtype=self.dtype_observation)
+        for i, driver in enumerate(self.simpy_env.state.drivers):
+            drivers_velocity[i] = driver.get_velocity()
 
-        # 3. orders_remaining: Número de pedidos que faltam ser atribuidos a um motorista
-        orders_remaining = self.num_orders - self.simpy_env.state.successfully_assigned_routes
-        orders_remaining = np.array([orders_remaining], dtype=self.dtype_observation)
+        # --- Pedido Atual ---
+        # 1. order_restaurant_coord: Coordenada do restaurante do pedido atual
+        order_restaurant_coord = np.zeros((2,), dtype=self.dtype_observation)
+        if self.current_order:
+            order_restaurant_coord[0] = self.current_order.get_establishment().get_coordinate()[0]
+            order_restaurant_coord[1] = self.current_order.get_establishment().get_coordinate()[1]
+        # 2. order_customer_coord: Coordenada do cliente do pedido atual
+        order_customer_coord = np.zeros((2,), dtype=self.dtype_observation)
+        if self.current_order:
+            order_customer_coord[0] = self.current_order.get_customer().get_coordinate()[0]
+            order_customer_coord[1] = self.current_order.get_customer().get_coordinate()[1]
+        # 3. order_estimated_ready_time: Tempo estimado para o pedido atual ficar pronto no restaurante
+        order_estimated_ready_time = np.zeros((1,), dtype=self.dtype_observation)
+        if self.current_order:
+            order_estimated_ready_time[0] = self.current_order.get_estimated_time_to_ready()
+        # 4. order_estimated_delivery_time: Tempo estimado para o pedido atual ser entregue ao cliente
+        order_estimated_delivery_time = np.zeros((self.num_drivers,), dtype=self.dtype_observation)
+        for i, driver in enumerate(self.simpy_env.state.drivers):
+                    order_estimated_delivery_time[i] = driver.estimate_time_to_complete_next_order(self.current_order)
 
-        # 4. establishment_next_order_ready_time: Tempo que falta para o próximo pedido em preparação de cada restaurante ficar pronto
-        establishment_busy_time = np.zeros((self.num_establishments,), dtype=self.dtype_observation)
-        for i, establishment in enumerate(self.simpy_env.state.establishments):
-            establishment_busy_time[i] = establishment.calculate_mean_overload_time()
-
-        # 5. current_time_step: O tempo atual da simulação (número do passo)
+        # --- Ambiente ---
+        # 1. current_time_step: O tempo atual da simulação (número do passo)
         current_time_step = self.simpy_env.now
         current_time_step = np.array([current_time_step], dtype=self.dtype_observation)
 
         # Criando a observação final no formato esperado
         obs = {
-            'drivers_busy_time': drivers_busy_time,
-            'time_to_drivers_complete_order': time_to_drivers_complete_order,
-            'remaining_orders': orders_remaining,
-            'establishment_busy_time': establishment_busy_time,
+            'drivers_coord': drivers_coord,
+            'drivers_estimated_remaining_time': drivers_estimated_remaining_time,
+            'driver_status': driver_status,
+            'drivers_queue_size': drivers_queue_size,
+            'drivers_velocity': drivers_velocity,
+            'order_restaurant_coord': order_restaurant_coord,
+            'order_customer_coord': order_customer_coord,
+            'order_estimated_ready_time': order_estimated_ready_time,
+            'order_estimated_delivery_time': order_estimated_delivery_time,
             'current_time_step': current_time_step
         }
 
@@ -253,7 +317,7 @@ class FoodDeliveryGymEnv(Env):
 
         # self.last_num_orders_delivered = 0
         core_event, _, _ = self.advance_simulation_until_event()
-        self.last_order = core_event.order if core_event else None
+        self.current_order: Order = core_event.order if core_event else None
 
         observation = self.get_observation()
         info = self._get_info()
@@ -353,13 +417,13 @@ class FoodDeliveryGymEnv(Env):
 
             terminated = False
             # print("action: {}".format(action))
-            # print("last_order: {}".format(vars(self.last_order)))
+            # print("current_order: {}".format(vars(self.current_order)))
             selected_driver = self.simpy_env.state.drivers[action]
-            self.select_driver_to_order(selected_driver, self.last_order)
+            self.select_driver_to_order(selected_driver, self.current_order)
 
             core_event, terminated, truncated = self.advance_simulation_until_event()
 
-            self.last_order = core_event.order if core_event else None
+            self.current_order = core_event.order if core_event else None
 
             observation = self.get_observation()
 
@@ -459,8 +523,8 @@ class FoodDeliveryGymEnv(Env):
     def get_simpy_env(self):
         return self.simpy_env
 
-    def get_last_order(self):
-        return self.last_order
+    def get_current_order(self):
+        return self.current_order
     
     def get_drivers(self):
         return self.simpy_env.get_drivers()
@@ -496,6 +560,20 @@ class FoodDeliveryGymEnv(Env):
         if reward_objective not in valid_objectives:
             raise ValueError(f"Objetivo inválido! Escolha entre {valid_objectives}")
         self.reward_objective = reward_objective
+    
+    def print_enviroment_state(self, options = None):
+        if options is None:
+            options = {
+                "customers": False,
+                "establishments": True,
+                "drivers": True,
+                "orders": False,
+                "events": False,
+                "orders_delivered": True
+            }
+        if self.current_order:
+            print(f'current_order:\n{self.current_order.__str__()}')
+        self.simpy_env.print_enviroment_state(options=options)
     
     def get_description(self):
         descricao = []

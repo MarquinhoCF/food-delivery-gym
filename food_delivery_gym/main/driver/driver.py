@@ -99,10 +99,12 @@ class Driver(MapActor):
     def process_route_requests(self) -> ProcessGenerator:
         while True:
             if self.route_requests:
+                self.status = DriverStatus.CHECKING_ORDERS
                 route = self.route_requests.pop(0)
                 self.process_route_request(route)
                 yield self.timeout(self.time_to_accept_or_reject_route())
             else:
+                self.status = DriverStatus.AVAILABLE
                 yield self.timeout(1)
 
     def process_route_request(self, route: Route) -> None:
@@ -285,7 +287,7 @@ class Driver(MapActor):
             driver_id=self.driver_id,
             time=self.now
         ))
-        self.status = DriverStatus.AVAILABLE
+        self.status = DriverStatus.CHECKING_ORDERS
         order.update_status(OrderStatus.DELIVERED)
         self.process(self.sequential_processor())
         self.orders_delivered += 1
@@ -390,7 +392,8 @@ class Driver(MapActor):
                     if self.status == DriverStatus.DELIVERING:
                         total_busy_time += add_travel_time(self.coordinate, current_order.customer.coordinate)
 
-                if self.status != DriverStatus.AVAILABLE:
+                # Se o motorista está entregando, considera o tempo para o cliente receber o pedido
+                if not self.status in [DriverStatus.AVAILABLE, DriverStatus.CHECKING_ORDERS]:
                     total_busy_time += self.estimate_time_to_costumer_receive_order(current_order)
 
                 # Atualiza a posição do motorista para o local da entrega
@@ -532,6 +535,23 @@ class Driver(MapActor):
         self.total_penalty_for_time_spent += total_penalty
         return total_penalty
     
+    def get_coordinate(self) -> Coordinate:
+        return self.coordinate
+    
+    def get_number_of_orders_in_list(self) -> int:
+        return len(self.orders_list)
+    
+    def get_status(self) -> DriverStatus:
+        return self.status
+    
+    def get_status_for_observation(self) -> DriverStatus:
+        if len(self.orders_list) > 1:
+            return DriverStatus.PROCESSING_PREVIOUS_ORDERS
+        return self.status
+    
+    def get_velocity(self) -> Number:
+        return self.movement_rate
+
     def get_penality_for_late_orders(self) -> Number:
         penalty = (self.now - self.last_time_check) * len(self.orders_list)
         return penalty
