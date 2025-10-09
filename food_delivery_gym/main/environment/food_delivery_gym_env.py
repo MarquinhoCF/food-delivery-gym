@@ -210,7 +210,7 @@ class FoodDeliveryGymEnv(Env):
         # 3. order_estimated_ready_time: Tempo estimado para o pedido atual ficar pronto no restaurante
         order_estimated_ready_time = np.zeros((1,), dtype=self.dtype_observation)
         if self.current_order:
-            order_estimated_ready_time[0] = self.current_order.get_estimated_time_to_ready()
+            order_estimated_ready_time[0] = self.current_order.get_estimated_ready_time()
         # 4. order_estimated_delivery_time: Tempo estimado para o pedido atual ser entregue ao cliente
         order_estimated_delivery_time = np.zeros((self.num_drivers,), dtype=self.dtype_observation)
         for i, driver in enumerate(self.simpy_env.state.drivers):

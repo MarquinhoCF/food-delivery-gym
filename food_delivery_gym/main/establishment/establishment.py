@@ -139,13 +139,13 @@ class Establishment(MapActor):
             for cook in self.cooks:
                 if cook.get_length_orders_accepted() > 0 and not cook.get_is_cooking():
                     order = cook.pop_order()
-                    cook.update_overload_time(order.estimated_time_to_prepare, True)
+                    cook.update_overload_time(order.estimated_preparation_duration, True)
 
                     updated_estimated_time = None
                     if cook.get_length_orders_accepted() == 0:
                         updated_estimated_time = cook.get_overloaded_until()
                     else:
-                        updated_estimated_time = self.now + order.estimated_time_to_prepare
+                        updated_estimated_time = self.now + order.estimated_preparation_duration
                     
                     cook.set_is_cooking(True)
                     self.orders_in_preparation += 1
@@ -163,8 +163,8 @@ class Establishment(MapActor):
         ))
 
         order.update_status(OrderStatus.PREPARING)
-        time_to_prepare = self.time_to_prepare_order(order.estimated_time_to_prepare)
-        order.set_real_time_to_prepare(time_to_prepare)
+        time_to_prepare = self.time_to_prepare_order(order.estimated_preparation_duration)
+        order.set_actual_preparation_duration(time_to_prepare)
 
         time_to_allocate_driver = round(time_to_prepare * self.percentage_allocation_driver)
 
@@ -192,7 +192,6 @@ class Establishment(MapActor):
         )
         self.publish_event(allocation_event)
         self.environment.add_core_event(allocation_event)
-        order.driver_allocated(self.now)
 
     def finish_order(self, cook, order: Order) -> None:
         event = EstablishmentFinishedOrder(

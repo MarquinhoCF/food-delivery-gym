@@ -325,7 +325,7 @@ class NearestDriverOptimizerGym(OptimizerGym):
         return "Otimizador do Motorista Mais Próximo"
 
     def compare_distance(self, map: Map, driver: Driver, route: Route):
-        return map.distance(driver.get_last_coordinate_from_routes_list(), route.route_segments[0].coordinate)
+        return map.distance(driver.get_last_valid_coordinate(), route.route_segments[0].coordinate)
 
     def select_driver(self, obs: dict, drivers: List[Driver], route: Route):
         nearest_driver = min(drivers, key=lambda driver: self.compare_distance(self.gym_env.simpy_env.map, driver, route))
