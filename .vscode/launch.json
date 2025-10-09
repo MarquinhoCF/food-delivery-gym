@@ -6,6 +6,15 @@
         "type": "debugpy",
         "request": "launch",
         "module": "scripts.test_runner",
+        "args": ["--mode", "interactive", "--scenario", "medium_obj1.json"],
+        "console": "integratedTerminal",
+        "justMyCode": true
+    },
+    {
+        "name": "Debug FoodDeliveryGymEnv (interactive render)",
+        "type": "debugpy",
+        "request": "launch",
+        "module": "scripts.test_runner",
         "args": ["--mode", "interactive", "--scenario", "medium_obj1.json", "--render"],
         "console": "integratedTerminal",
         "justMyCode": true

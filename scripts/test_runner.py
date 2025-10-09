@@ -25,19 +25,15 @@ def parse_action_input(action_space: gym.Space, text: str):
     if text.lower() in ("", "rand", "random"):
         return action_space.sample()
 
-    try:
-        # Discrete
-        if isinstance(action_space, gym.spaces.Discrete):
-            try:
-                action = int(text)
-            except ValueError:
-                raise ValueError(f"ação inválida para espaço discreto '{text}'")
-            if not action_space.contains(action):
-                raise ValueError(f"ação {action} fora do espaço válido '{action_space}'")
-            return action
-
-    except Exception as e:
-        raise ValueError(f"Não foi possível interpretar a ação, {e}")
+    # Discrete
+    if isinstance(action_space, gym.spaces.Discrete):
+        try:
+            action = int(text)
+        except ValueError:
+            raise ValueError(f"Ação inválida para espaço discreto '{text}'")
+        if not action_space.contains(action):
+            raise ValueError(f"Ação {action} fora do espaço válido '{action_space}'")
+        return action
 
     # fallback: tentar converter para número
     try:
@@ -140,33 +136,68 @@ def main():
         done = False
         truncated = False
 
+        steps_to_run = 0
+
         while step < args.max_steps and not (done or truncated):
             step += 1
             print(f"--- Step {step} ---")
             print(f"Observação atual: {np.array(obs)}")
 
+            # Reduz o contador se estiver no modo limitado
+            if mode == "auto_limited":
+                if steps_to_run > 0:
+                    steps_to_run -= 1
+                if steps_to_run == 0:
+                    print("\nExecução automática limitada finalizada. Voltando ao modo interativo.")
+                    mode = "interactive"
+
             if mode == "agent":
-                # usar modelo para escolher ação
                 action, _ = model.predict(obs, deterministic=True)
-            elif mode == "auto":
+
+            elif mode in ("auto", "auto_limited"):
                 action = action_space.sample()
+
             else:  # interactive
                 invalid_action = True
+
                 while invalid_action:
                     prompt = (
-                        f"\n---> Pressione 'Enter' para ação aleatória; Digite uma ação manualmente (Número inteiro [min: 0, max: {action_space.n - 1}]); Digite 'run' para executar até o fim; Digite 'quit' para sair\n> "
+                        f"\n---> Pressione 'Enter' para ação aleatória;"
+                        f" Digite uma ação manualmente (Número inteiro [min: 0, max: {action_space.n - 1}]);"
+                        f" Digite 'run' para executar até o fim;"
+                        f" Digite 'run <n>' para executar automaticamente por N passos;"
+                        f" Digite 'quit' para sair\n> "
                     )
                     user_in = input(prompt).strip()
+
+                    # Executar até o fim
                     if user_in.lower() == "run":
                         mode = "auto"
                         action = action_space.sample()
                         invalid_action = False
+
+                    # Executar por N steps (ex: "run 50")
+                    elif user_in.lower().startswith("run "):
+                        try:
+                            steps_to_run = int(user_in.split()[1])
+                            mode = "auto_limited"
+                            action = action_space.sample()
+                            invalid_action = False
+                            print(f"Executando automaticamente por {steps_to_run} steps...")
+                        except (IndexError, ValueError):
+                            print("Uso inválido: digite 'run <n>' com um número inteiro positivo.")
+
+                    # Encerrar
                     elif user_in.lower() in ("q", "quit", "exit"):
                         print("Saindo por solicitação do usuário.")
                         break
+
+                    # Ação aleatória (Enter)
                     elif user_in == "":
                         action = action_space.sample()
                         invalid_action = False
+
+                    # Ação manual
                     else:
                         try:
                             action = parse_action_input(action_space, user_in)
