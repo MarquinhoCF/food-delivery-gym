@@ -11,7 +11,7 @@ from stable_baselines3 import PPO
 from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
 
 # --- Config padrão ---
-DEFAULT_SEED = 101010
+DEFAULT_SEED = 123456789
 
 """
     Interpreta a string do usuário de acordo com o tipo do action_space.
@@ -151,8 +151,8 @@ def main():
             elif mode == "auto":
                 action = action_space.sample()
             else:  # interactive
-                invalid_action = False
-                while not invalid_action:
+                invalid_action = True
+                while invalid_action:
                     prompt = (
                         f"\n---> Pressione 'Enter' para ação aleatória; Digite uma ação manualmente (Número inteiro [min: 0, max: {action_space.n - 1}]); Digite 'run' para executar até o fim; Digite 'quit' para sair\n> "
                     )
@@ -160,16 +160,18 @@ def main():
                     if user_in.lower() == "run":
                         mode = "auto"
                         action = action_space.sample()
+                        invalid_action = False
                     elif user_in.lower() in ("q", "quit", "exit"):
                         print("Saindo por solicitação do usuário.")
                         break
                     elif user_in == "":
                         action = action_space.sample()
+                        invalid_action = False
                     else:
                         try:
                             action = parse_action_input(action_space, user_in)
+                            invalid_action = False
                         except Exception as e:
-                            invalid_action = True
                             print(f"Erro ao interpretar ação: {e}")
 
             try:
@@ -187,11 +189,9 @@ def main():
             print(f"Recompensa do passo: {reward}")
             print(f"Info: {info}\n")
 
-            # continuar loop — a condição de parada é verified no topo do while
             done = bool(terminated)
 
         print("\n== FIM DA EXECUÇÃO ==")
-        # imprimir estatísticas finais (se o env tiver métodos conhecidos)
         env.print_enviroment_state()
         try:
             print(f"Observação final: {env.get_observation()}")
@@ -204,6 +204,7 @@ def main():
         try:
             print(f"quantidade de rotas criadas = {env.simpy_env.state.get_length_orders()}")
             print(f"quantidade de rotas entregues = {env.simpy_env.state.orders_delivered}")
+            env.show_statistcs_board()
         except Exception:
             pass
 

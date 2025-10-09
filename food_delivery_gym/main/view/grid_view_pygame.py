@@ -105,12 +105,6 @@ class GridViewPygame(FoodDeliveryView):
 
         self.draw_grid(canvas)
 
-        # Desenhar os clientes
-        for customer in environment.state.customers:
-            if customer.status == CustumerStatus.WAITING_DELIVERY:
-                mapped_x, mapped_y = self.coordinate(customer.coordinate)
-                self.draw_customer(canvas, mapped_x, mapped_y)
-
         # Desenhar os estabelecimentos
         for establishment in environment.state.establishments:
             mapped_x, mapped_y = self.coordinate(establishment.coordinate)
@@ -119,6 +113,12 @@ class GridViewPygame(FoodDeliveryView):
             if hasattr(establishment, "operating_radius"):
                 operating_radius_mapped = map_coordinate(establishment.operating_radius, 0, 100, 0, min(self.window_size))
                 pygame.draw.circle(canvas, GREEN, (int(mapped_x), int(mapped_y)), int(operating_radius_mapped), 1)
+            
+        # Desenhar os clientes
+        for customer in environment.state.customers:
+            if customer.status == CustumerStatus.WAITING_DELIVERY:
+                mapped_x, mapped_y = self.coordinate(customer.coordinate)
+                self.draw_customer(canvas, mapped_x, mapped_y)
 
         # Desenhar os motoristas
         for driver in environment.state.drivers:

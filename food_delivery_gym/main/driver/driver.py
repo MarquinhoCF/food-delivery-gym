@@ -99,12 +99,10 @@ class Driver(MapActor):
     def process_route_requests(self) -> ProcessGenerator:
         while True:
             if self.route_requests:
-                self.status = DriverStatus.CHECKING_ORDERS
                 route = self.route_requests.pop(0)
                 self.process_route_request(route)
                 yield self.timeout(self.time_to_accept_or_reject_route())
             else:
-                self.status = DriverStatus.AVAILABLE
                 yield self.timeout(1)
 
     def process_route_request(self, route: Route) -> None:
@@ -287,7 +285,7 @@ class Driver(MapActor):
             driver_id=self.driver_id,
             time=self.now
         ))
-        self.status = DriverStatus.CHECKING_ORDERS
+        self.status = DriverStatus.AVAILABLE
         order.update_status(OrderStatus.DELIVERED)
         self.process(self.sequential_processor())
         self.orders_delivered += 1
@@ -393,7 +391,7 @@ class Driver(MapActor):
                         total_busy_time += add_travel_time(self.coordinate, current_order.customer.coordinate)
 
                 # Se o motorista está entregando, considera o tempo para o cliente receber o pedido
-                if not self.status in [DriverStatus.AVAILABLE, DriverStatus.CHECKING_ORDERS]:
+                if not self.status in [DriverStatus.AVAILABLE]:
                     total_busy_time += self.estimate_time_to_costumer_receive_order(current_order)
 
                 # Atualiza a posição do motorista para o local da entrega
