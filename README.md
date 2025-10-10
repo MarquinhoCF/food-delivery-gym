@@ -235,7 +235,7 @@ python -m pip install huggingface_hub huggingface_sb3 sb3-contrib
 **5º Passo**: Navegue até o diretório do projeto `food-delivery-gym`:
 
 ```bash
-cd ../food-delivery-gym/
+cd ../food_delivery_gym/
 ```
 
 **6º Passo**: Instale o pacote local:

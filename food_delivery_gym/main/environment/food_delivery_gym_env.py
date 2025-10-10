@@ -113,7 +113,7 @@ class FoodDeliveryGymEnv(Env):
                 'order_restaurant_coord': Box(low=-1, high=1, shape=(2,), dtype=self.dtype_observation),
                 'order_customer_coord': Box(low=-1, high=1, shape=(2,), dtype=self.dtype_observation),
                 'order_estimated_ready_time': Box(low=-1, high=1, shape=(1,), dtype=self.dtype_observation),
-                'order_estimated_delivery_time': Box(low=-1, high=1, shape=(1,), dtype=self.dtype_observation),
+                'order_estimated_delivery_time': Box(low=-1, high=1, shape=(self.num_drivers,), dtype=self.dtype_observation),
 
                 # --- Ambiente ---
                 'current_time_step': Box(low=-1, high=1, shape=(1,), dtype=self.dtype_observation)
@@ -150,7 +150,7 @@ class FoodDeliveryGymEnv(Env):
                 'order_restaurant_coord': Box(low=0, high=self.grid_map_size - 1, shape=(2,), dtype=self.dtype_observation),
                 'order_customer_coord': Box(low=0, high=self.grid_map_size - 1, shape=(2,), dtype=self.dtype_observation),
                 'order_estimated_ready_time': Box(low=0, high=self.max_time_step, shape=(1,), dtype=self.dtype_observation),
-                'order_estimated_delivery_time': Box(low=0, high=self.max_time_step, shape=(1,), dtype=self.dtype_observation),
+                'order_estimated_delivery_time': Box(low=0, high=self.max_time_step, shape=(self.num_drivers,), dtype=self.dtype_observation),
 
                 # --- Ambiente ---
                 'current_time_step': Box(low=0, high=self.max_time_step, shape=(1,), dtype=self.dtype_observation)
