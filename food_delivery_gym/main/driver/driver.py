@@ -382,7 +382,6 @@ class Driver(MapActor):
 
     def estimate_total_busy_time(self) -> Number:
         total_busy_time = 0
-        valid_coordinate = self.coordinate  # Posição atual do motorista
 
         def add_travel_time(from_coord, to_coord):
             return self.environment.map.estimated_time(from_coord, to_coord, self.movement_rate)
@@ -412,9 +411,6 @@ class Driver(MapActor):
                 # Se o motorista está entregando, considera o tempo para o cliente receber o pedido
                 if not self.status in [DriverStatus.AVAILABLE]:
                     total_busy_time += current_order.estimated_time_to_costumer_receive_order
-
-                # Atualiza a posição do motorista para o local da entrega
-                valid_coordinate = current_order.customer.coordinate
         
         # Considera o tempo para processar todas as rotas na fila de pedidos
         for order in self.orders_list:
@@ -423,11 +419,10 @@ class Driver(MapActor):
 
             total_busy_time += self.time_to_accept_or_reject_route(average_time=True)
             total_busy_time += order.estimated_time_between_accept_and_start_picking_up
-            total_busy_time += add_travel_time(valid_coordinate, order.establishment.coordinate)
+            total_busy_time += order.estimated_pickup_travel_time
             total_busy_time += order.estimated_time_between_picked_up_and_start_delivery
-            total_busy_time += add_travel_time(order.establishment.coordinate, order.customer.coordinate)
+            total_busy_time += order.estimated_delivery_travel_time
             total_busy_time += order.estimated_time_to_costumer_receive_order
-            valid_coordinate = order.customer.coordinate
 
         return total_busy_time
 
