@@ -18,12 +18,13 @@ def map_coordinate(value, min_val, max_val, min_screen, max_screen):
 
 class GridViewPygame(FoodDeliveryView):
 
-    def __init__(self, grid_size=100, window_size=(900, 700), fps=30):
+    def __init__(self, grid_size=100, draw_grid=True, window_size=(900, 700), fps=30):
         super().__init__(grid_size, window_size, fps)
         pygame.init()
         pygame.display.init()
         self.screen = pygame.display.set_mode(window_size)
         self.clock = pygame.time.Clock()
+        self.draw_grid = draw_grid
         pygame.display.set_caption('Map of Establishments, Customers and Drivers')
 
     def coordinate(self, coordinate):
@@ -102,8 +103,9 @@ class GridViewPygame(FoodDeliveryView):
         canvas = pygame.Surface(self.window_size)
 
         canvas.fill(WHITE)
-
-        self.draw_grid(canvas)
+        
+        if self.draw_grid:
+            self.draw_grid(canvas)
 
         # Desenhar os estabelecimentos
         for establishment in environment.state.establishments:
