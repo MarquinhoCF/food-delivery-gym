@@ -219,6 +219,7 @@ class OptimizerGym(Optimizer, ABC):
         file_path = dir_path + "results.txt"
 
         total_rewards = []
+        truncated_runs = []
         with open(file_path, "w", encoding="utf-8") as results_file:
             self.get_description(results_file, num_runs, seed)
             results_file.write("---> Registro de execuções:\n")
@@ -230,6 +231,7 @@ class OptimizerGym(Optimizer, ABC):
                     resultado = self.run()
 
                     sum_reward = resultado["sum_reward"]
+                    was_truncated = resultado["truncated"]
                     
                     # Tenta mostrar o board de estatísticas
                     try:
@@ -238,6 +240,7 @@ class OptimizerGym(Optimizer, ABC):
                         print(f"Aviso: Não foi possível mostrar o board de estatísticas: {e}")
                     
                     total_rewards.append(sum_reward)
+                    truncated_runs.append(was_truncated)
                     results_file.write(f"Execução {i + 1}: Soma das Recompensas = {sum_reward} (Passos: {resultado.get('steps', 'N/A')})\n")
 
                 except Exception as e:
@@ -278,10 +281,11 @@ class OptimizerGym(Optimizer, ABC):
                             sum_time_spent_on_delivery_i += metrics["time_spent_on_delivey"][i]
                         time_spent_on_delivery_list.append(sum_time_spent_on_delivery_i)
 
-                        sum_total_distance_traveled_i = 0
-                        for driver_id, metrics in driver_metrics.items():
-                            sum_total_distance_traveled_i += metrics["total_distance"][i]
-                        total_distance_traveled_list.append(sum_total_distance_traveled_i)
+                        if not truncated_runs[i]:
+                            sum_total_distance_traveled_i = 0
+                            for driver_id, metrics in driver_metrics.items():
+                                sum_total_distance_traveled_i += metrics["total_distance"][i]
+                            total_distance_traveled_list.append(sum_total_distance_traveled_i)
 
                     time_spent_on_delivery_statistics = {}
                     time_spent_on_delivery_statistics["avg"] = stt.mean(time_spent_on_delivery_list)
@@ -295,17 +299,31 @@ class OptimizerGym(Optimizer, ABC):
                     results_file.write(f"* Mediana: {time_spent_on_delivery_statistics['median']:.2f}\n")
                     results_file.write(f"* Moda: {time_spent_on_delivery_statistics['mode']}\n")
 
-                    total_distance_traveled_statistics = {}
-                    total_distance_traveled_statistics["avg"] = stt.mean(total_distance_traveled_list)
-                    total_distance_traveled_statistics["std_dev"] = stt.stdev(total_distance_traveled_list)
-                    total_distance_traveled_statistics["median"] = stt.median(total_distance_traveled_list)
-                    total_distance_traveled_statistics["mode"] = stt.mode(total_distance_traveled_list)
+                    # Verifica se há dados confiáveis de distância
+                    num_truncated = sum(truncated_runs)
+                    num_valid = num_runs - num_truncated
                     
-                    results_file.write("\n---> Estatísticas da Distância Percorrida:\n")
-                    results_file.write(f"* Média: {total_distance_traveled_statistics['avg']:.2f}\n")
-                    results_file.write(f"* Desvio Padrão: {total_distance_traveled_statistics['std_dev']:.2f}\n")
-                    results_file.write(f"* Mediana: {total_distance_traveled_statistics['median']:.2f}\n")
-                    results_file.write(f"* Moda: {total_distance_traveled_statistics['mode']}\n")
+                    results_file.write(f"\n---> Execuções válidas para métricas de distância: {num_valid}/{num_runs}\n")
+                    if num_truncated > 0:
+                        results_file.write(f"* {num_truncated} execução(ões) truncada(s) foram excluídas das estatísticas de distância\n")
+
+                    # Calcula estatísticas apenas se houver dados válidos
+                    if total_distance_traveled_list and len(total_distance_traveled_list) > 0:
+                        total_distance_traveled_statistics = {}
+                        total_distance_traveled_statistics["avg"] = stt.mean(total_distance_traveled_list)
+                        total_distance_traveled_statistics["std_dev"] = stt.stdev(total_distance_traveled_list)
+                        total_distance_traveled_statistics["median"] = stt.median(total_distance_traveled_list)
+                        total_distance_traveled_statistics["mode"] = stt.mode(total_distance_traveled_list)
+                        
+                        results_file.write("\n---> Estatísticas da Distância Percorrida:\n")
+                        results_file.write(f"* Média: {total_distance_traveled_statistics['avg']:.2f}\n")
+                        results_file.write(f"* Desvio Padrão: {total_distance_traveled_statistics['std_dev']:.2f}\n")
+                        results_file.write(f"* Mediana: {total_distance_traveled_statistics['median']:.2f}\n")
+                        results_file.write(f"* Moda: {total_distance_traveled_statistics['mode']}\n")
+                    else:
+                        total_distance_traveled_statistics = None
+                        results_file.write("\n---> Estatísticas da Distância Percorrida:\n")
+                        results_file.write("* NULO - Todas as execuções foram truncadas\n")
 
                     geral_statistics = self._call_env_method('get_statistics')
                     results_file.write(f"\n---> Estatísticas Finais:\n")

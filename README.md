@@ -28,7 +28,7 @@ Set-ExecutionPolicy Unrestricted -Scope Process
 
 #### No Linux/Mac:
 ```shell
-python -m venv venv
+python3 -m venv venv
 source venv/bin/activate
 ```
 
@@ -221,7 +221,7 @@ cd rl-baselines3-zoo
 **3º Passo**: Crie e ative um ambiente virtual Python:
 
 ```bash
-python -m venv venv
+python3 -m venv venv
 source venv/bin/activate  # No Windows, use: venv\Scripts\activate
 ```
 
@@ -229,13 +229,13 @@ source venv/bin/activate  # No Windows, use: venv\Scripts\activate
 
 ```bash
 python -m pip install -r requirements.txt
-python -m pip install huggingface_hub huggingface_sb3 sb3-contrib
+python -m pip install huggingface_hub huggingface_sb3 sb3-contrib optuna
 ```
 
 **5º Passo**: Navegue até o diretório do projeto `food-delivery-gym`:
 
 ```bash
-cd ../food_delivery_gym/
+cd ../food-delivery-gym/
 ```
 
 **6º Passo**: Instale o pacote local:
@@ -298,7 +298,7 @@ python train.py --algo ppo --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
 **3º Passo**: Visualize a curva de aprendizado:
 
 ```bash
-python3 scripts/plot_train.py -a ppo -e FoodDelivery-medium-obj1-v0 -f logs/
+python scripts/plot_train.py -a ppo -e FoodDelivery-medium-obj1-v0 -f logs/
 ```
 
 ## 🧩 Criação de Agentes Otimizadores com `OptimizerGym`
