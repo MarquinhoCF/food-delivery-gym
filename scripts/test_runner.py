@@ -233,8 +233,8 @@ def main():
         except Exception:
             pass
         try:
-            print(f"quantidade de rotas criadas = {env.simpy_env.state.get_length_orders()}")
-            print(f"quantidade de rotas entregues = {env.simpy_env.state.orders_delivered}")
+            print(f"Quantidade de rotas criadas = {env.simpy_env.state.get_length_orders()}")
+            print(f"Quantidade de rotas entregues = {env.simpy_env.state.orders_delivered}")
             env.show_statistcs_board()
         except Exception:
             pass

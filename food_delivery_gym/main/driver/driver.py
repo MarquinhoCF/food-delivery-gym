@@ -54,7 +54,7 @@ class Driver(MapActor):
             self.capacity = capacity
         
         self.status = status
-        self.movement_rate = round(movement_rate)
+        self.movement_rate = movement_rate
         self.reward_objective = reward_objective
 
         self.current_route: Optional[Route] = None
