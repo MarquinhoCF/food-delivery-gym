@@ -434,7 +434,7 @@ class FoodDeliveryGymEnv(Env):
             reward = self.calculate_reward(terminated, truncated)
             # print(f"reward: {reward}")
 
-            if (self.env_mode == EnvMode.EVALUATING) and (terminated or truncated):
+            if (self.env_mode != EnvMode.TRAINING) and (terminated or truncated):
                 self.register_statistic_data()
                 self.last_simpy_env = self.simpy_env
 
@@ -456,27 +456,31 @@ class FoodDeliveryGymEnv(Env):
             raise
 
     def show_statistics_board(self, sum_reward = None, dir_path = None):
-        if self.last_simpy_env == None:
-            raise ValueError(
-                "Dados de simulação indisponíveis. Certifique-se de que o ambiente foi executado ao menos uma vez "
-                "e que o método 'reset_last_simpy_env' não foi chamado antes da coleta ou exibição das estatísticas."
-            )
-        
+        if self.env_mode == EnvMode.EVALUATING:
+            if self.last_simpy_env == None:
+                raise ValueError(
+                    "Dados de simulação indisponíveis. Certifique-se de que o ambiente foi executado ao menos uma vez "
+                    "e que o método 'reset_last_simpy_env' não foi chamado antes da coleta ou exibição das estatísticas."
+                )
+            simpy_env = self.last_simpy_env
+        else:
+            simpy_env = self.simpy_env
+
         if sum_reward is None and dir_path is None:
             save_figs = False
         else:
             save_figs = True
         
         custom_board = SummarizedDataBoard(metrics=[
-            OrderCurveMetric(self.last_simpy_env),
-            EstablishmentOrdersFulfilledMetric(self.last_simpy_env),
-            EstablishmentMaxOrdersInQueueMetric(self.last_simpy_env),
-            EstablishmentActiveTimeMetric(self.last_simpy_env),
-            DriverTimeSpentOnDelivery(self.last_simpy_env),
-            DriverOrdersDeliveredMetric(self.last_simpy_env),
-            DriverTotalDistanceMetric(self.last_simpy_env),
-            DriverIdleTimeMetric(self.last_simpy_env),
-            DriverTimeWaitingForOrderMetric(self.last_simpy_env)
+            OrderCurveMetric(simpy_env),
+            EstablishmentOrdersFulfilledMetric(simpy_env),
+            EstablishmentMaxOrdersInQueueMetric(simpy_env),
+            EstablishmentActiveTimeMetric(simpy_env),
+            DriverTimeSpentOnDelivery(simpy_env),
+            DriverOrdersDeliveredMetric(simpy_env),
+            DriverTotalDistanceMetric(simpy_env),
+            DriverIdleTimeMetric(simpy_env),
+            DriverTimeWaitingForOrderMetric(simpy_env)
         ],
             num_drivers=self.num_drivers,
             num_establishments=self.num_establishments,

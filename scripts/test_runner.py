@@ -8,6 +8,7 @@ import numpy as np
 import gymnasium as gym
 
 from stable_baselines3 import PPO
+from food_delivery_gym.main.environment.env_mode import EnvMode
 from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
 
 # --- Config padrão ---
@@ -48,6 +49,7 @@ def parse_action_input(action_space: gym.Space, text: str):
 def prepare_env(scenario_filename: str, seed: int, render: bool) -> Tuple[FoodDeliveryGymEnv, Any]:
     scenario_path = str(files("food_delivery_gym.main.scenarios").joinpath(scenario_filename))
     env: FoodDeliveryGymEnv = FoodDeliveryGymEnv(scenario_json_file_path=scenario_path)
+    env.set_mode(EnvMode.TESTING)
 
     # Reset com compatibilidade (alguns ambientes retornam apenas obs, outros (obs, info))
     reset_options = {"render_mode": "human"} if render else None
@@ -190,7 +192,8 @@ def main():
                     # Encerrar
                     elif user_in.lower() in ("q", "quit", "exit"):
                         print("Saindo por solicitação do usuário.")
-                        break
+                        env.close()
+                        sys.exit(0)
 
                     # Ação aleatória (Enter)
                     elif user_in == "":
@@ -235,8 +238,9 @@ def main():
         try:
             print(f"Quantidade de rotas criadas = {env.simpy_env.state.get_length_orders()}")
             print(f"Quantidade de rotas entregues = {env.simpy_env.state.orders_delivered}")
-            env.show_statistcs_board()
-        except Exception:
+            env.show_statistics_board()
+        except Exception as e:
+            print(f"Erro ao mostrar estatísticas do ambiente: {e}")
             pass
 
     except Exception as e:

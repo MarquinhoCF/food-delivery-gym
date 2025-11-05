@@ -126,8 +126,8 @@ class FoodDeliverySimpyEnv(Environment):
             if self.view.quited:
                 self.view.quit()
         
-        if mode == EnvMode.EVALUATING and self.last_time_step < self.now:
-            self.update_statistcs_variables()
+        if mode != EnvMode.TRAINING and self.last_time_step < self.now:
+            self.update_statistics_variables()
             self.last_time_step = self.now
 
     def render(self):
