@@ -64,7 +64,7 @@ def load_with_separate_vecnormalize(model_path: str, vecnormalize_path: str, rew
 
 def main():
     num_runs = 20
-    seed = 101010
+    seed = 123456789
 
     print("=== Executando Agentes Otimizadores ao Ambiente de Entrega de Última Milha ===")
 

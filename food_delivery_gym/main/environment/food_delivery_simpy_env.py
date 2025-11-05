@@ -142,12 +142,12 @@ class FoodDeliverySimpyEnv(Environment):
         print(f'time_step = {self.now}')
         self._state.print_state(options)
 
-    def update_statistcs_variables(self):
+    def update_statistics_variables(self):
         for establishment in self._state.establishments:
-            establishment.update_statistcs_variables()
+            establishment.update_statistics_variables()
         
         for driver in self._state.drivers:
-            driver.update_statistcs_variables()
+            driver.update_statistics_variables()
     
     def update_spent_drivers(self):
         for driver in self._state.drivers:
@@ -164,7 +164,7 @@ class FoodDeliverySimpyEnv(Environment):
         for driver in self._state.drivers:
             id = driver.driver_id
             FoodDeliverySimpyEnv.driver_metrics[id]["orders_delivered"].append(driver.orders_delivered)
-            FoodDeliverySimpyEnv.driver_metrics[id]["time_spent_on_delivey"].append(driver.get_time_spent_on_delivery())
+            FoodDeliverySimpyEnv.driver_metrics[id]["time_spent_on_delivery"].append(driver.get_time_spent_on_delivery())
             FoodDeliverySimpyEnv.driver_metrics[id]["idle_time"].append(driver.idle_time)
             FoodDeliverySimpyEnv.driver_metrics[id]["time_waiting_for_order"].append(driver.time_waiting_for_order)
             FoodDeliverySimpyEnv.driver_metrics[id]["total_distance"].append(driver.total_distance)
@@ -183,7 +183,7 @@ class FoodDeliverySimpyEnv(Environment):
         for driver in self._state.drivers:
             id = driver.driver_id
             FoodDeliverySimpyEnv.driver_metrics[id]["orders_delivered"].clear()
-            FoodDeliverySimpyEnv.driver_metrics[id]["time_spent_on_delivey"].clear()
+            FoodDeliverySimpyEnv.driver_metrics[id]["time_spent_on_delivery"].clear()
             FoodDeliverySimpyEnv.driver_metrics[id]["idle_time"].clear()
             FoodDeliverySimpyEnv.driver_metrics[id]["time_waiting_for_order"].clear()
             FoodDeliverySimpyEnv.driver_metrics[id]["total_distance"].clear()

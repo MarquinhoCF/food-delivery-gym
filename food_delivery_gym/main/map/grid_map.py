@@ -32,10 +32,10 @@ class GridMap(Map):
         return round(self.distance(coord1, coord2) / rate)
 
     def random_point(self, not_repeated=False) -> Coordinate:
-        point = self.rng.randrange(self.size), self.rng.randrange(self.size)
+        point = self.rng.integers(self.size), self.rng.integers(self.size)
         if not_repeated:
             while point in self.generated_points:
-                point = self.rng.randrange(self.size), self.rng.randrange(self.size)
+                point = self.rng.integers(self.size), self.rng.integers(self.size)
             self.generated_points[point] = True
         return point
 

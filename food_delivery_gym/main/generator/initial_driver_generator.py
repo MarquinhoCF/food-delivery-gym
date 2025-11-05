@@ -25,9 +25,9 @@ class InitialDriverGenerator(InitialGenerator):
                 capacity=None if self.desconsider_capacity else capacity,
                 available=True,
                 status=DriverStatus.AVAILABLE,
-                movement_rate=self.rng.randint(self.vel_drivers[0], self.vel_drivers[1]),
+                movement_rate=self.rng.integers(self.vel_drivers[0], self.vel_drivers[1]+1),
                 # Gerar uma cor aleatória RGB para cada motorista
-                color=(self.rng.randint(0, 255), self.rng.randint(0, 255), self.rng.randint(0, 255)),
+                color=(self.rng.integers(0, 255+1), self.rng.integers(0, 255+1), self.rng.integers(0, 255+1)),
                 reward_objective=self.reward_objective,
             ) for i in range(self.num_drivers)
         ]

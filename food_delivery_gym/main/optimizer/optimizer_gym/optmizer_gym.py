@@ -152,8 +152,8 @@ class OptimizerGym(Optimizer, ABC):
             "steps": step_count
         }
     
-    def show_statistcs_board(self):
-        self._call_env_method('show_statistcs_board')
+    def show_statistics_board(self):
+        self._call_env_method('show_statistics_board')
     
     def show_mean_statistic_board(self):
         self._call_env_method('show_total_mean_statistics_board')
@@ -235,7 +235,7 @@ class OptimizerGym(Optimizer, ABC):
                     
                     # Tenta mostrar o board de estatísticas
                     try:
-                        self._call_env_method('show_statistcs_board', sum_reward=sum_reward, dir_path=dir_path)
+                        self._call_env_method('show_statistics_board', sum_reward=sum_reward, dir_path=dir_path)
                     except Exception as e:
                         print(f"Aviso: Não foi possível mostrar o board de estatísticas: {e}")
                     
@@ -278,7 +278,7 @@ class OptimizerGym(Optimizer, ABC):
                     for i in range(num_runs):
                         sum_time_spent_on_delivery_i = 0
                         for driver_id, metrics in driver_metrics.items():
-                            sum_time_spent_on_delivery_i += metrics["time_spent_on_delivey"][i]
+                            sum_time_spent_on_delivery_i += metrics["time_spent_on_delivery"][i]
                         time_spent_on_delivery_list.append(sum_time_spent_on_delivery_i)
 
                         if not truncated_runs[i]:

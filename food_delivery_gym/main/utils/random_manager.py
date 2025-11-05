@@ -1,5 +1,5 @@
 import random
-
+import numpy as np
 
 class RandomManager:
     _instance = None
@@ -12,13 +12,12 @@ class RandomManager:
 
     def _initialize(self):
         self.seed = None
-        self._random_instance = random.Random()
+        self._random_instance = np.random.default_rng() 
 
     def set_seed(self, seed: int | None = None):
         if seed is not None:
             self.seed = seed
-            random.seed(seed)
-            self._random_instance = random.Random(self.seed)
+            self._random_instance = np.random.default_rng(seed)
 
     def get_random_instance(self):
         return self._random_instance

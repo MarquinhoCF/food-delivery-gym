@@ -13,10 +13,10 @@ class DriverTimeSpentOnDelivery(Metric):
     def view(self, ax) -> None:
         if self.drivers_statistics is not None:
             est_ids = list(self.drivers_statistics.keys())
-            means = [self.drivers_statistics[e]['time_spent_on_delivey']['mean'] for e in est_ids]
-            medians = [self.drivers_statistics[e]['time_spent_on_delivey']['median'] for e in est_ids]
-            modes = [self.drivers_statistics[e]['time_spent_on_delivey']['mode'] for e in est_ids]
-            std_devs = [self.drivers_statistics[e]['time_spent_on_delivey']['std_dev'] for e in est_ids]
+            means = [self.drivers_statistics[e]['time_spent_on_delivery']['mean'] for e in est_ids]
+            medians = [self.drivers_statistics[e]['time_spent_on_delivery']['median'] for e in est_ids]
+            modes = [self.drivers_statistics[e]['time_spent_on_delivery']['mode'] for e in est_ids]
+            std_devs = [self.drivers_statistics[e]['time_spent_on_delivery']['std_dev'] for e in est_ids]
 
             # Criando o gráfico
             ax.errorbar(est_ids, means, yerr=std_devs, fmt='o', label='Média', capsize=5)
@@ -38,7 +38,7 @@ class DriverTimeSpentOnDelivery(Metric):
 
             _, drivers_metrics = self.environment.get_statistics_data()
 
-            times_spent_on_delivery: List[int] = [sum(drivers_metrics[driver.driver_id]["time_spent_on_delivey"]) for driver in drivers]
+            times_spent_on_delivery: List[int] = [sum(drivers_metrics[driver.driver_id]["time_spent_on_delivery"]) for driver in drivers]
             title = 'Time spent on delivery per Driver'
             # print("\nTempo que cada motorista gastou entregando os pedidos:")
 

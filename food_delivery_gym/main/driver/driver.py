@@ -353,7 +353,7 @@ class Driver(MapActor):
         return self.fits(route) and self.available
 
     def estimate_time_to_driver_receive_order(self) -> int:
-        return self.rng.randrange(1, 5)
+        return self.rng.integers(1, 5)
 
     def time_to_accept_or_reject_route(self, average_time: bool = False) -> int:
         min_time = 3
@@ -361,16 +361,16 @@ class Driver(MapActor):
         if average_time:
             return ((max_time - min_time) // 2) + min_time
         else:
-            return self.rng.randrange(min_time, max_time)
+            return self.rng.integers(min_time, max_time)
 
     def time_between_accept_and_start_picking_up(self) -> int:
-        return self.rng.randrange(0, 3)
+        return self.rng.integers(0, 3)
 
     def time_to_picking_up_order(self, order: Order):
         return self.environment.map.estimated_time(self.coordinate, order.establishment.coordinate, self.movement_rate)
 
     def time_between_picked_up_and_start_delivery(self) -> int:
-        return self.rng.randrange(0, 3)
+        return self.rng.integers(0, 3)
 
     def time_to_deliver_order(self, order: Order) -> int:
         establishment_coordinates = order.establishment.coordinate
@@ -481,7 +481,7 @@ class Driver(MapActor):
         
         return estimated_time
     
-    def update_statistcs_variables(self):
+    def update_statistics_variables(self):
         if not self.is_active():
             self.idle_time += 1
         

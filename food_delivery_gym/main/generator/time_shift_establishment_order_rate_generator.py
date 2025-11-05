@@ -22,8 +22,8 @@ class TimeShiftEstablishmentOrderRateGenerator(TimeShiftGenerator):
                 catalog=catalog,
                 production_capacity=1,
                 use_estimate=self.use_estimate,
-                order_production_time_rate=self.rng.randint(1, 10),
-                operating_radius=self.rng.randint(10, 30)
+                order_production_time_rate=self.rng.integers(1, 10+1),
+                operating_radius=self.rng.integers(10, 30+1)
             )
             for _ in self.range(env)
         ]

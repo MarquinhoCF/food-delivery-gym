@@ -10,4 +10,4 @@ class RandomDriverOptimizerSimpy(OptimizerSimpy):
 
     def select_driver(self, env: FoodDeliverySimpyEnv, route: Route):
         drivers = env.available_drivers(route)
-        return self.rng.choice(drivers) if len(drivers) > 0 else None
+        return self.rng.choice(drivers, size=None) if len(drivers) > 0 else None

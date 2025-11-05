@@ -455,7 +455,7 @@ class FoodDeliveryGymEnv(Env):
             print(traceback.format_exc())
             raise
 
-    def show_statistcs_board(self, sum_reward = None, dir_path = None):
+    def show_statistics_board(self, sum_reward = None, dir_path = None):
         if self.last_simpy_env == None:
             raise ValueError(
                 "Dados de simulação indisponíveis. Certifique-se de que o ambiente foi executado ao menos uma vez "
