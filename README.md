@@ -112,49 +112,97 @@ python -m scripts.test_runner --scenario meu_cenario.json --mode interactive --r
 
 ## 🎯 Configuração dos Cenários Experimentais
 
-O ambiente de simulação foi formulado como um Processo de Decisão de Markov (MDP) voltado ao problema de entrega de última milha. A seguir, listamos as principais constantes de configuração para a criação de cenários experimentais.
+O ambiente de simulação foi formulado como um **Processo de Decisão de Markov (MDP)** voltado ao **problema de entrega de última milha**.
+A seguir são apresentadas as principais constantes e parâmetros utilizados na criação dos **cenários experimentais**.
 
 ### 📊 Parâmetros Principais
 
-| Variável             | Descrição                                                                                         |
-|----------------------|---------------------------------------------------------------------------------------------------|
-| `NUM_DRIVERS`        | Número total de motoristas disponíveis.                                                          |
-| `NUM_ORDERS`         | Total de pedidos a serem gerados na simulação.                                                   |
-| `NUM_ESTABLISHMENTS` | Quantidade de restaurantes ou estabelecimentos.                                                  |
-| `GRID_MAP_SIZE`      | Tamanho do mapa da cidade (em um grid quadrado, por exemplo `50x50`).                            |
-| `REWARD_OBJECTIVE`   | Define como as recompensas serão calculadas. Os valores possíveis vão de 1 a 10. Uma descrição dos possíveis `reward objectives` está disponível no arquivo `food_delivery_gym/main/scenarios/reward_objectives.txt` |
-| `MAX_TIME_STEP`      | Tempo máximo da simulação (em minutos).                                                          |
+| Variável             | Descrição                                                             |
+| -------------------- | --------------------------------------------------------------------- |
+| `num_drivers`        | Número total de motoristas disponíveis.                               |
+| `num_orders`         | Total de pedidos a serem gerados na simulação.                        |
+| `num_establishments` | Quantidade de restaurantes ou estabelecimentos.                       |
+| `grid_map_size`      | Tamanho do mapa da cidade (em um grid quadrado, por exemplo `50x50`). |
+| `max_time_step`      | Tempo máximo da simulação (em minutos).                               |
 
-### 📦 Geração de Pedidos
+---
 
-| Variável      | Descrição                                                                                          |
-|---------------|----------------------------------------------------------------------------------------------------|
-| `FUNCTION`    | Função lambda que define o número de pedidos gerados por passo de tempo. Deve ser passada como uma string. |
-| `TIME_SHIFT`  | Intervalo de tempo (em minutos) entre criações de novos pedidos.                                  |
+### 📦 Geração de Pedidos (Processos de Poisson)
+
+A criação de novos pedidos é controlada por um gerador configurável no campo `order_generator`.
+Atualmente, o ambiente suporta dois tipos de geradores:
+
+| Tipo                        | Classe Interna                                                                                   | Descrição                                                                     |
+| --------------------------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| `"poisson"`                 | [`PoissonOrderGenerator`](../generator/poisson_order_generator.py)                               | Gera pedidos de forma homogênea com taxa constante λ.                         |
+| `"non_homogeneous_poisson"` | [`NonHomogeneousPoissonOrderGenerator`](../generator/non_homogeneous_poisson_order_generator.py) | Gera pedidos de forma não homogênea com taxa variável no tempo (função λ(t)). |
+
+#### 🔹 Parâmetros Disponíveis
+
+| Campo           | Descrição                                                                                                |
+| --------------- | -------------------------------------------------------------------------------------------------------- |
+| `type`          | Define o tipo de processo (`"poisson"` ou `"non_homogeneous_poisson"`).                                  |
+| `time_window`   | Janela total de tempo da geração de pedidos (em minutos).                                                |
+| `lambda_rate`   | Taxa média de chegada (λ) — usada apenas no gerador `"poisson"`. Não é necessária, caso não seja passado o sistema definirá a taxa como `num_orders/time_window`.  |
+| `rate_function` | Função lambda que define a taxa variável de chegada λ(t) — usada no gerador `"non_homogeneous_poisson"`. |
+| `max_rate`      | Taxa máxima usada para o método de *thinning* (necessária no gerador `"non_homogeneous_poisson"`).       |
+
+#### 🔸 Exemplo — Processo de Poisson Homogêneo
+
+```json
+"order_generator": {
+  "type": "poisson",
+  "time_window": 1440,
+  "lambda_rate": 0.2
+}
+```
+
+Nesse exemplo, pedidos são gerados de acordo com um **processo de Poisson homogêneo** com taxa média de **0,2 pedidos por minuto** durante um período de **1440 minutos** (1 dia).
+
+#### 🔸 Exemplo — Processo de Poisson Não Homogêneo
+
+```json
+"order_generator": {
+    "type": "non_homogeneous_poisson",
+    "time_window": 960,
+    "rate_function": "lambda t: 0.3115 + 0.9345 * (np.exp(-((t - 330)**2) / 7000) + np.exp(-((t - 630)**2) / 7000))"
+},
+```
+
+Neste caso, a taxa de geração de pedidos **varia ao longo do tempo** de forma senoidal, simulando períodos de alta e baixa demanda (por exemplo, picos no horário de almoço e jantar).
+
+---
 
 ### 🚗 Configurações dos Motoristas
 
-| Variável      | Descrição                                                                                          |
-|---------------|----------------------------------------------------------------------------------------------------|
-| `VEL_DRIVERS` | Lista com [mínimo, máximo] de velocidade dos motoristas. Ex.: `[3, 5]`.                          |
+| Variável      | Descrição                                                                     |
+| ------------- | ----------------------------------------------------------------------------- |
+| `vel_drivers` | Lista com `[mínimo, máximo]` de velocidade dos motoristas. Exemplo: `[3, 5]`. |
+
+---
 
 ### 🏪 Configurações dos Estabelecimentos
 
-| Variável              | Descrição                                                                                          |
-|-----------------------|----------------------------------------------------------------------------------------------------|
-| `PREPARE_TIME`        | Tempo de preparo dos pedidos: `[mínimo, máximo]` (em minutos).                                   |
-| `OPERATING_RADIUS`    | Raio de operação dos estabelecimentos: `[mínimo, máximo]` (em unidades do grid).                 |
-| `PRODUCTION_CAPACITY` | Capacidade de produção (número de cozinheiros): `[mínimo, máximo]`.                              |
+| Variável              | Descrição                                                                       |
+| --------------------- | ------------------------------------------------------------------------------- |
+| `prepare_time`        | Tempo de preparo dos pedidos `[mínimo, máximo]` (em minutos).                   |
+| `operating_radius`    | Raio de operação dos estabelecimentos `[mínimo, máximo]` (em unidades do grid). |
+| `production_capacity` | Capacidade de produção (número de cozinheiros) `[mínimo, máximo]`.              |
+
+---
 
 ### 🎛️ Alocação
 
-| Variável                       | Descrição                                                                                          |
-|--------------------------------|----------------------------------------------------------------------------------------------------|
-| `PERCENTAGE_ALLOCATION_DRIVER` | Define o percentual de preparo necessário para acionar a alocação do motorista (ex.: `0.7`).     |
+| Variável                       | Descrição                                                                               |
+| ------------------------------ | --------------------------------------------------------------------------------------- |
+| `percentage_allocation_driver` | Percentual de preparo necessário para acionar a alocação do motorista (exemplo: `0.7`). |
+
+---
 
 ### 💾 Exemplo de Cenário Experimental
 
-Para configurar um cenário experimental no ambiente de simulação, é necessário criar um arquivo JSON dentro do diretório `food_delivery_gym/main/scenarios` contendo todos os parâmetros desejados, como no exemplo abaixo:
+O cenário é configurado por um arquivo JSON dentro de
+`food_delivery_gym/main/scenarios/`, como mostrado a seguir:
 
 ```json
 {
@@ -162,32 +210,39 @@ Para configurar um cenário experimental no ambiente de simulação, é necessá
     "num_establishments": 10,
     "num_orders": 288,
     "grid_map_size": 50,
-    "vel_drivers": [3, 5],
-    "prepare_time": [20, 60],
-    "operating_radius": [5, 30],
-    "production_capacity": [4, 4],
-    "percentage_allocation_driver": 0.7,
-    "use_estimate": true,
-    "desconsider_capacity": true,
     "max_time_step": 2880,
-    "reward_objective": 1,
-    "function_code": "lambda time: 2",
-    "time_shift": 10,
+    "order_generator": {
+      "type": "poisson",
+      "time_window": 1440
+    },
+    "vel_drivers": [3,5],
+    "prepare_time": [20,60],
+    "operating_radius": [5,30],
+    "production_capacity": [4,4],
+    "percentage_allocation_driver": 0.7
 }
 ```
 
-Este exemplo define um cenário com 10 motoristas, 288 pedidos, 10 estabelecimentos e um ambiente de 50x50 unidades. Novos pedidos são criados a cada 10 minutos, 2 por vez.
+Esse cenário define:
+
+* 10 motoristas e 10 estabelecimentos;
+* 288 pedidos ao longo de 1440 minutos e tempo limite de 2880 minutos;
+* geração de pedidos por **processo de Poisson homogêneo**.
+
 
 ### 📝 Registro do Cenário Experimental
 
-Para registrar o cenário ambiental criado deve ser acessado o arquivo `food_delivery_gym/__init__.py`. No arquivo o cenário criado deve ser incluído seguindo o padrão observado e passando o nome do arquivo JSON criado anteriormente:
+Para registrar o cenário ambiental criado deve ser acessado o arquivo `food_delivery_gym/__init__.py`. No arquivo o cenário criado deve ser incluído seguindo o padrão observado, passando o nome do arquivo JSON criado anteriormente e definindo o objetivo de recompensas (como as recompensas serão calculadas):
+
+Obs: Os valores possíveis dos `reward objectives` vão de 1 a 10. As descrições de cada objetivo estão disponíveis no arquivo `food_delivery_gym/main/scenarios/reward_objectives.txt`:
 
 ```python
 register(
     id='food_delivery_gym/FoodDelivery-medium-obj1-v0',
     entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
     kwargs={
-        "scenario_json_file_path": get_scenario_path("medium_obj1.json"),
+        "scenario_json_file_path": get_scenario_path("medium.json"),
+        "reward_objective": 1
     }
 )
 ```

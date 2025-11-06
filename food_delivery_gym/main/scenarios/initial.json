@@ -25,8 +25,5 @@
         4,
         4
     ],
-    "percentage_allocation_driver": 0.7,
-    "use_estimate": true,
-    "desconsider_capacity": true,
-    "reward_objective": 1
+    "percentage_allocation_driver": 0.7
 }

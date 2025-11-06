@@ -36,7 +36,7 @@ class FoodDeliveryGymEnv(Env):
 
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 4}
 
-    def __init__(self, scenario_json_file_path = str, render_mode=None):
+    def __init__(self, scenario_json_file_path = str, reward_objective: int = 1, render_mode=None):
 
         path = Path(scenario_json_file_path)
 
@@ -55,8 +55,7 @@ class FoodDeliveryGymEnv(Env):
             "operating_radius",
             "production_capacity",
             "percentage_allocation_driver",
-            "max_time_step",
-            "reward_objective"
+            "max_time_step"
         ]
 
         missing_keys = [key for key in required_keys if key not in scenario]
@@ -93,7 +92,9 @@ class FoodDeliveryGymEnv(Env):
         self.last_simpy_env = None # Ambiente de simulação da execução anterior -> para fins de computação de estatísticas
 
         # Definindo o objetivo da recompensa
-        self.set_reward_objective(scenario["reward_objective"])
+        if reward_objective not in range(1, 11):
+            raise ValueError("reward_objective deve ser um valor entre 1 e 10.")
+        self.set_reward_objective(reward_objective)
 
         # Espaço de Observação
         self.dtype_observation = np.int32

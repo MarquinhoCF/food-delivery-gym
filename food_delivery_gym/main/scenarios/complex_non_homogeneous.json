@@ -5,9 +5,9 @@
     "grid_map_size": 50,
     "max_time_step": 5760,
     "order_generator": {
-      "type": "poisson",
-      "total_orders": 576,
-      "time_window": 960
+      "type": "non_homogeneous_poisson",
+      "time_window": 960,
+      "rate_function": "lambda t: 0.3115 + 0.9345 * (np.exp(-((t - 330)**2) / 7000) + np.exp(-((t - 630)**2) / 7000))"
     },
     "vel_drivers": [
         3,
@@ -25,8 +25,5 @@
         3,
         3
     ],
-    "percentage_allocation_driver": 0.7,
-    "use_estimate": true,
-    "desconsider_capacity": true,
-    "reward_objective": 8
+    "percentage_allocation_driver": 0.7
 }
