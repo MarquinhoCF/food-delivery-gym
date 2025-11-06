@@ -121,7 +121,6 @@ O ambiente de simulação foi formulado como um Processo de Decisão de Markov (
 | `NUM_DRIVERS`        | Número total de motoristas disponíveis.                                                          |
 | `NUM_ORDERS`         | Total de pedidos a serem gerados na simulação.                                                   |
 | `NUM_ESTABLISHMENTS` | Quantidade de restaurantes ou estabelecimentos.                                                  |
-| `NUM_COSTUMERS`      | Número de clientes. Deve ser igual ao número de pedidos.                                         |
 | `GRID_MAP_SIZE`      | Tamanho do mapa da cidade (em um grid quadrado, por exemplo `50x50`).                            |
 | `REWARD_OBJECTIVE`   | Define como as recompensas serão calculadas. Os valores possíveis vão de 1 a 10. Uma descrição dos possíveis `reward objectives` está disponível no arquivo `food_delivery_gym/main/scenarios/reward_objectives.txt` |
 | `MAX_TIME_STEP`      | Tempo máximo da simulação (em minutos).                                                          |
@@ -147,12 +146,11 @@ O ambiente de simulação foi formulado como um Processo de Decisão de Markov (
 | `OPERATING_RADIUS`    | Raio de operação dos estabelecimentos: `[mínimo, máximo]` (em unidades do grid).                 |
 | `PRODUCTION_CAPACITY` | Capacidade de produção (número de cozinheiros): `[mínimo, máximo]`.                              |
 
-### 🎛️ Alocação e Observações
+### 🎛️ Alocação
 
 | Variável                       | Descrição                                                                                          |
 |--------------------------------|----------------------------------------------------------------------------------------------------|
 | `PERCENTAGE_ALLOCATION_DRIVER` | Define o percentual de preparo necessário para acionar a alocação do motorista (ex.: `0.7`).     |
-| `NORMALIZE`                    | Se `True`, normaliza as observações do estado para o intervalo `[0, 1]`.                         |
 
 ### 💾 Exemplo de Cenário Experimental
 
@@ -163,7 +161,6 @@ Para configurar um cenário experimental no ambiente de simulação, é necessá
     "num_drivers": 10,
     "num_establishments": 10,
     "num_orders": 288,
-    "num_costumers": 288,
     "grid_map_size": 50,
     "vel_drivers": [3, 5],
     "prepare_time": [20, 60],
@@ -176,7 +173,6 @@ Para configurar um cenário experimental no ambiente de simulação, é necessá
     "reward_objective": 1,
     "function_code": "lambda time: 2",
     "time_shift": 10,
-    "normalize": false
 }
 ```
 

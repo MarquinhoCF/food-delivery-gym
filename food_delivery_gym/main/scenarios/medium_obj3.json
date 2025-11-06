@@ -2,8 +2,13 @@
     "num_drivers": 10,
     "num_establishments": 10,
     "num_orders": 480,
-    "num_costumers": 480,
     "grid_map_size": 50,
+    "max_time_step": 5760,
+    "order_generator": {
+      "type": "poisson",
+      "total_orders": 480,
+      "time_window": 960
+    },
     "vel_drivers": [
         3,
         4
@@ -23,9 +28,5 @@
     "percentage_allocation_driver": 0.7,
     "use_estimate": true,
     "desconsider_capacity": true,
-    "max_time_step": 5760,
-    "reward_objective": 3,
-    "function_code": "lambda time: 3",
-    "time_shift": 6,
-    "normalize": false
+    "reward_objective": 3
 }
