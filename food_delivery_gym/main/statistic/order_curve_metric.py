@@ -49,10 +49,10 @@ class OrderCurveMetric(Metric):
         ax.set_ylim(bottom=0)
 
         # Configurações do gráfico
-        ax.set_xlabel('Time')
-        ax.set_ylabel('Number of orders')
-        ax.set_title('Number of orders by state over time')
-        ax.legend('Number of orders by state over time')
+        ax.set_xlabel('Time', fontsize=11, fontweight='bold')
+        ax.set_ylabel('Number of orders', fontsize=11, fontweight='bold')
+        ax.set_title('Number of orders by state over time', fontsize=12, fontweight='bold', pad=15)
+        ax.legend(title='Order States', fontsize=10, title_fontsize='11')
         ax.grid(False)
 
 

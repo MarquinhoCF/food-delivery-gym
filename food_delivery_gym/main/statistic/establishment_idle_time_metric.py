@@ -24,9 +24,9 @@ class EstablishmentIdleTimeMetric(Metric):
             ax.plot(est_ids, modes, marker='^', linestyle='', label='Moda')
 
             # Adicionando títulos e legendas
-            ax.set_xlabel('Estabelecimento')
-            ax.set_ylabel('Tempo Ocioso')
-            ax.set_title('Estatísticas do Tempo Ocioso por Estabelecimento')
+            ax.set_xlabel('Estabelecimento', fontsize=11, fontweight='bold')
+            ax.set_ylabel('Tempo Ocioso', fontsize=11, fontweight='bold')
+            ax.set_title('Estatísticas do Tempo Ocioso por Estabelecimento', fontsize=12, fontweight='bold', pad=15)
             ax.legend()
             ax.grid(True)
 
@@ -43,9 +43,9 @@ class EstablishmentIdleTimeMetric(Metric):
                 print(f"Estabelecimento {est_id}: {idle_time:.2f} minutos ocioso")
 
             ax.barh(ids, idle_times, color='green')
-            ax.set_xlabel('Idle Time')
-            ax.set_ylabel('Establishments')
-            ax.set_title(title)
+            ax.set_xlabel('Idle Time', fontsize=11, fontweight='bold')
+            ax.set_ylabel('Establishments', fontsize=11, fontweight='bold')
+            ax.set_title(title, fontsize=12, fontweight='bold', pad=15)
 
             ax.set_yticks(ids)
             ax.set_yticklabels([str(int(driver_id)) for driver_id in ids])

@@ -24,9 +24,9 @@ class DriverOrdersDeliveredMetric(Metric):
             ax.plot(est_ids, modes, marker='^', linestyle='', label='Moda')
 
             # Adicionando títulos e legendas
-            ax.set_xlabel('Motoristas')
-            ax.set_ylabel('Pedidos Entregues')
-            ax.set_title('Estatísticas dos Pedidos Entregues por Motorista')
+            ax.set_xlabel('Motoristas', fontsize=11, fontweight='bold')
+            ax.set_ylabel('Pedidos Entregues', fontsize=11, fontweight='bold')
+            ax.set_title('Estatísticas dos Pedidos Entregues por Motorista', fontsize=12, fontweight='bold', pad=15)
             ax.legend()
             ax.grid(True)
             
@@ -44,9 +44,9 @@ class DriverOrdersDeliveredMetric(Metric):
             #     print(f"Motorista {driver_id}: {count} pedidos entregues")
 
             ax.barh(ids, orders_delivered, color='blue')
-            ax.set_xlabel('Orders Delivered')
-            ax.set_ylabel('Drivers')
-            ax.set_title(title)
+            ax.set_xlabel('Orders Delivered', fontsize=11, fontweight='bold')
+            ax.set_ylabel('Drivers', fontsize=11, fontweight='bold')
+            ax.set_title(title, fontsize=12, fontweight='bold', pad=15)
 
             ax.set_yticks(ids)
             ax.set_yticklabels([str(int(driver_id)) for driver_id in ids])

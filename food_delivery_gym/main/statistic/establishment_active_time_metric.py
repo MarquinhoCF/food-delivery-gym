@@ -24,9 +24,9 @@ class EstablishmentActiveTimeMetric(Metric):
             ax.plot(est_ids, modes, marker='^', linestyle='', label='Moda')
 
             # Adicionando títulos e legendas
-            ax.set_xlabel('Estabelecimento')
-            ax.set_ylabel('Tempo Ativo')
-            ax.set_title('Estatísticas do Tempo Ativo por Estabelecimento')
+            ax.set_xlabel('Estabelecimento', fontsize=11, fontweight='bold')
+            ax.set_ylabel('Tempo Ativo', fontsize=11, fontweight='bold')
+            ax.set_title('Estatísticas do Tempo Ativo por Estabelecimento', fontsize=12, fontweight='bold', pad=15)
             ax.legend()
             ax.grid(True)
 
@@ -44,9 +44,9 @@ class EstablishmentActiveTimeMetric(Metric):
             #     print(f"Estabelecimento {est_id}: {active_time:.2f} minutos ativo")
 
             ax.barh(ids, active_times, color='purple')
-            ax.set_xlabel('Active Time')
-            ax.set_ylabel('Establishments')
-            ax.set_title(title)
+            ax.set_xlabel('Active Time', fontsize=11, fontweight='bold')
+            ax.set_ylabel('Establishments', fontsize=11, fontweight='bold')
+            ax.set_title(title, fontsize=12, fontweight='bold', pad=15)
 
             ax.set_yticks(ids)
             ax.set_yticklabels([str(int(driver_id)) for driver_id in ids])

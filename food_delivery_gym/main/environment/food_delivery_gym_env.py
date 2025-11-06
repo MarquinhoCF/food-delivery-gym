@@ -11,7 +11,8 @@ from food_delivery_gym.main.environment.env_mode import EnvMode
 from food_delivery_gym.main.environment.food_delivery_simpy_env import FoodDeliverySimpyEnv
 from food_delivery_gym.main.generator.initial_driver_generator import InitialDriverGenerator
 from food_delivery_gym.main.generator.initial_establishment_order_rate_generator import InitialEstablishmentOrderRateGenerator
-from food_delivery_gym.main.generator.time_shift_order_establishment_rate_generator import TimeShiftOrderEstablishmentRateGenerator
+from food_delivery_gym.main.generator.poisson_order_generator import PoissonOrderGenerator
+from food_delivery_gym.main.generator.non_homogeneous_poisson_order_generator import NonHomogeneousPoissonOrderGenerator
 from food_delivery_gym.main.map.grid_map import GridMap
 from food_delivery_gym.main.order.order import Order
 from food_delivery_gym.main.route.delivery_route_segment import DeliveryRouteSegment
@@ -19,6 +20,7 @@ from food_delivery_gym.main.route.pickup_route_segment import PickupRouteSegment
 from food_delivery_gym.main.route.route import Route
 from food_delivery_gym.main.statistic.driver_idle_time_metric import DriverIdleTimeMetric
 from food_delivery_gym.main.statistic.driver_time_waiting_for_order_metric import DriverTimeWaitingForOrderMetric
+from food_delivery_gym.main.statistic.poisson_order_generation_metric import PoissonOrderGenerationMetric
 from food_delivery_gym.main.statistic.summarized_data_board import SummarizedDataBoard
 from food_delivery_gym.main.statistic.driver_orders_delivered_metric import DriverOrdersDeliveredMetric
 from food_delivery_gym.main.statistic.driver_total_distance_metric import DriverTotalDistanceMetric
@@ -305,11 +307,10 @@ class FoodDeliveryGymEnv(Env):
                     self.reward_objective,
                     desconsider_capacity=self.desconsider_capacity,
                 ),
-                TimeShiftOrderEstablishmentRateGenerator(
-                    self.function, 
-                    time_shift=self.time_shift, 
-                    max_orders=self.num_orders,
-                ),
+                PoissonOrderGenerator(
+                    total_orders=570,
+                    time_window=1920
+                )
             ],
             optimizer=None,
             view=GridViewPygame(grid_size=self.grid_map_size) if self.render_mode == "human" else None
@@ -472,7 +473,7 @@ class FoodDeliveryGymEnv(Env):
             save_figs = True
         
         custom_board = SummarizedDataBoard(metrics=[
-            OrderCurveMetric(simpy_env),
+            PoissonOrderGenerationMetric(simpy_env),
             EstablishmentOrdersFulfilledMetric(simpy_env),
             EstablishmentMaxOrdersInQueueMetric(simpy_env),
             EstablishmentActiveTimeMetric(simpy_env),

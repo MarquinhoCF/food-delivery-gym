@@ -24,9 +24,9 @@ class EstablishmentMaxOrdersInQueueMetric(Metric):
             ax.plot(est_ids, modes, marker='^', linestyle='', label='Moda')
 
             # Adicionando títulos e legendas
-            ax.set_xlabel('Estabelecimento')
-            ax.set_ylabel('Máximo de Pedidos na Fila')
-            ax.set_title('Estatísticas do Máximo de Pedidos na Fila por Estabelecimento')
+            ax.set_xlabel('Estabelecimento', fontsize=11, fontweight='bold')
+            ax.set_ylabel('Máximo de Pedidos na Fila', fontsize=11, fontweight='bold')
+            ax.set_title('Estatísticas do Máximo de Pedidos na Fila por Estabelecimento', fontsize=12, fontweight='bold', pad=15)
             ax.legend()
             ax.grid(True)
         else:
@@ -43,9 +43,9 @@ class EstablishmentMaxOrdersInQueueMetric(Metric):
             #     print(f"Estabelecimento {est_id}: {max_queue} pedidos na fila")
 
             ax.barh(ids, max_orders_in_queue, color='orange')
-            ax.set_xlabel('Max Orders in Queue')
-            ax.set_ylabel('Establishments')
-            ax.set_title(title)
+            ax.set_xlabel('Max Orders in Queue', fontsize=11, fontweight='bold')
+            ax.set_ylabel('Establishments', fontsize=11, fontweight='bold')
+            ax.set_title(title, fontsize=12, fontweight='bold', pad=15)
 
             ax.set_yticks(ids)
             ax.set_yticklabels([str(int(driver_id)) for driver_id in ids])
