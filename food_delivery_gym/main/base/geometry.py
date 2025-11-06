@@ -11,7 +11,7 @@ def random_point_in_radius(centroid, inf_limit, sup_limit, rng_generator: Random
 
 def point_in_gauss_radius(centroid, radius, rng_generator: RandomManager):
     theta = rng_generator.uniform(0, 2 * math.pi)
-    r = abs(rng_generator.gauss(0, radius))
+    r = abs(rng_generator.normal(loc=0, scale=radius))  # gauss
     x = centroid[0] + r * math.cos(theta)
     y = centroid[1] + r * math.sin(theta)
     return round(x), round(y)

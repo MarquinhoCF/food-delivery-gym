@@ -28,7 +28,7 @@ Set-ExecutionPolicy Unrestricted -Scope Process
 
 #### No Linux/Mac:
 ```shell
-python -m venv venv
+python3 -m venv venv
 source venv/bin/activate
 ```
 
@@ -58,8 +58,56 @@ source venv/bin/activate
 ```
 
 ### 🔹 Rodar o script do teste do simulador:
+
+#### 1. **Modo Automático**
 ```shell
-python -m scripts.test
+python -m scripts.test_runner --mode auto --scenario medium_obj1.json --render
+```
+- Executa automaticamente com ações aleatórias
+- Útil para testes rápidos
+
+#### 2. **Modo Interativo** (Recomendado para desenvolvimento)
+```shell
+python -m scripts.test_runner --mode interactive --scenario medium_obj1.json --render
+```
+- Executa passo-a-passo esperando sua entrada
+- **Comandos disponíveis**:
+  - `Enter`: ação aleatória
+  - `run`: executa automaticamente até o fim
+  - `quit`: sai do programa
+  - Números/ações: entrada manual personalizada
+
+#### 3. **Modo com Agente PPO** (Requer modelo treinado)
+```shell
+python -m scripts.test_runner --mode agent --scenario medium_obj1.json --model-path models/ppo_food_delivery --render
+```
+
+### ⚙️ Opções de Configuração
+
+| Opção | Descrição | Exemplo |
+|-------|-----------|---------|
+| `--mode` | Modo de execução: `interactive`, `auto`, `agent` | `--mode interactive` |
+| `--scenario` | Arquivo de cenário JSON | `--scenario medium_obj1.json` |
+| `--render` | Ativa visualização gráfica | `--render` |
+| `--seed` | Seed para reproducibilidade | `--seed 42` |
+| `--max-steps` | Limite máximo de passos | `--max-steps 1000` |
+| `--save-log` | Salva output em arquivo log.txt | `--save-log` |
+| `--model-path` | Caminho para modelo PPO (modo agent) | `--model-path models/ppo_model` |
+
+#### Exemplos:
+
+```shell
+# Teste rápido com cenário padrão
+python -m scripts.test_runner --mode auto --max-steps 100
+
+# Debug interativo com renderização
+python -m scripts.test_runner --mode interactive --render --seed 123
+
+# Teste de performance com log
+python -m scripts.test_runner --mode auto --max-steps 5000 --save-log
+
+# Testar cenário específico
+python -m scripts.test_runner --scenario meu_cenario.json --mode interactive --render
 ```
 
 ## 🎯 Configuração dos Cenários Experimentais
@@ -173,7 +221,7 @@ cd rl-baselines3-zoo
 **3º Passo**: Crie e ative um ambiente virtual Python:
 
 ```bash
-python -m venv venv
+python3 -m venv venv
 source venv/bin/activate  # No Windows, use: venv\Scripts\activate
 ```
 
@@ -181,7 +229,7 @@ source venv/bin/activate  # No Windows, use: venv\Scripts\activate
 
 ```bash
 python -m pip install -r requirements.txt
-python -m pip install huggingface_hub huggingface_sb3 sb3-contrib
+python -m pip install huggingface_hub huggingface_sb3 sb3-contrib optuna
 ```
 
 **5º Passo**: Navegue até o diretório do projeto `food-delivery-gym`:
@@ -250,7 +298,7 @@ python train.py --algo ppo --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
 **3º Passo**: Visualize a curva de aprendizado:
 
 ```bash
-python3 scripts/plot_train.py -a ppo -e FoodDelivery-medium-obj1-v0 -f logs/
+python scripts/plot_train.py -a ppo -e FoodDelivery-medium-obj1-v0 -f logs/
 ```
 
 ## 🧩 Criação de Agentes Otimizadores com `OptimizerGym`
@@ -277,7 +325,7 @@ class NearestDriverOptimizerGym(OptimizerGym):
         return "Otimizador do Motorista Mais Próximo"
 
     def compare_distance(self, map: Map, driver: Driver, route: Route):
-        return map.distance(driver.get_last_coordinate_from_routes_list(), route.route_segments[0].coordinate)
+        return map.distance(driver.get_last_valid_coordinate(), route.route_segments[0].coordinate)
 
     def select_driver(self, obs: dict, drivers: List[Driver], route: Route):
         nearest_driver = min(drivers, key=lambda driver: self.compare_distance(self.gym_env.simpy_env.map, driver, route))

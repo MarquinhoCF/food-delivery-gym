@@ -159,4 +159,3 @@ class SummarizedDataBoard(Board):
             # Mostrar gráficos
             plt.show()
         
-        matplotlib.pyplot.close()

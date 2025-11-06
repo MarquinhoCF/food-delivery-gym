@@ -12,9 +12,9 @@ class TimeShiftOrderGenerator(TimeShiftGenerator):
         orders = []
 
         for _ in self.range(env):
-            customer = self.rng.choice(env.state.customers)
-            establishment = self.rng.choice(env.state.establishments)
-            items = self.rng.sample(establishment.catalog.items, 2)
+            customer = self.rng.choice(env.state.customers, size=None)
+            establishment = self.rng.choice(env.state.establishments, size=None)
+            items = self.rng.choice(establishment.catalog.items, size=2, replace=False).tolist()
             order = Order(customer, establishment, env.now, items)
             orders.append(order)
             customer.place_order(order, establishment)

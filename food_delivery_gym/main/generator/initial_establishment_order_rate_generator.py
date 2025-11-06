@@ -26,13 +26,13 @@ class InitialEstablishmentOrderRateGenerator(InitialGenerator):
                 coordinate=env.map.random_point(),
                 available=True,
                 catalog=catalog,
-                production_capacity=self.rng.randint(self.production_capacity[0], self.production_capacity[1]),
+                production_capacity=self.rng.integers(self.production_capacity[0], self.production_capacity[1]+1),
                 use_estimate=self.use_estimate,
                 order_production_time_rate=self.rng.uniform(self.prepare_time[0], self.prepare_time[1]),
                 percentage_allocation_driver=self.percentage_allocation_driver,
                 max_prepare_time=self.prepare_time[1],
                 min_prepare_time=self.prepare_time[0],
-                operating_radius=self.rng.randint(self.operating_radius[0], self.operating_radius[1]),
+                operating_radius=self.rng.integers(self.operating_radius[0], self.operating_radius[1]+1),
             )
             for i in range(self.num_establishments)
         ]

@@ -88,7 +88,7 @@ class DeliveryEnvState:
         if options.get("drivers", False):
             print("\nMotoristas:")
             for _, driver in enumerate(self.drivers):
-                print(f"Motorista {driver.driver_id}: Coordenadas = {driver.coordinate}, Última coordenada futura = {driver.last_future_coordinate}, Status = {driver.status} ")
+                print(f"Motorista {driver.driver_id}: Coordenadas = {driver.coordinate}, Última coordenada futura = {driver.get_last_valid_coordinate()}, Status = {driver.status}, Quantidade de pedidos na lista = {len(driver.orders_list)}")
                 if driver.current_route_segment and driver.current_route_segment.order:
                     print(f"             ID do Pedido Atual: {driver.current_route_segment.order.order_id}, Status do Pedido Atual: {driver.current_route_segment.order.status}, Estabelecimento do Pedido Atual = {driver.current_route_segment.order.establishment.establishment_id}")
 

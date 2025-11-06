@@ -1,11 +1,12 @@
 from food_delivery_gym.main.events.event import Event
 from food_delivery_gym.main.events.event_type import EventType
+from food_delivery_gym.main.order.order import Order
 
 
 class TimeForAgentAllocateDriver(Event):
-    def __init__(self, order, customer_id, establishment_id, time):
+    def __init__(self, order: Order, customer_id: int, establishment_id: int, time):
         super().__init__(time, EventType.TIME_FOR_AGENT_ALLOCATE_DRIVER)
-        self.order = order
+        self.order: Order = order
         self.customer_id = customer_id
         self.establishment_id = establishment_id
 

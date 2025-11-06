@@ -1,0 +1,59 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+        "name": "Debug FoodDeliveryGymEnv (interactive)",
+        "type": "python",
+        "request": "launch",
+        "module": "scripts.test_runner",
+        "args": ["--mode", "interactive", "--scenario", "medium_obj1.json"],
+        "console": "integratedTerminal",
+        "justMyCode": true
+    },
+    {
+        "name": "Debug FoodDeliveryGymEnv (interactive render)",
+        "type": "python",
+        "request": "launch",
+        "module": "scripts.test_runner",
+        "args": ["--mode", "interactive", "--scenario", "medium_obj1.json", "--render"],
+        "console": "integratedTerminal",
+        "justMyCode": true
+    },
+    {
+      "name": "Debug FoodDeliveryGymEnv (auto)",
+      "type": "python",
+      "request": "launch",
+      "module": "scripts.test_runner",
+      "args": ["--mode", "auto", "--scenario", "medium_obj1.json", "--render", "--max-steps", "100"],
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Debug FoodDeliveryGymEnv (auto with log)",
+      "type": "python",
+      "request": "launch",
+      "module": "scripts.test_runner",
+      "args": ["--mode", "auto", "--scenario", "medium_obj1.json", "--max-steps", "500", "--save-log"],
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Debug FoodDeliveryGymEnv (agent)",
+      "type": "python",
+      "request": "launch",
+      "module": "scripts.test_runner",
+      "args": ["--mode", "agent", "--scenario", "medium_obj1.json", "--model-path", "data/ppo_training/otimizacao_1M_steps_200_trials/treinamento/obj_1/medium/18M_steps/best_model.zip", "--render"],
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Debug FoodDeliveryGymEnv (help)",
+      "type": "python",
+      "request": "launch",
+      "module": "scripts.test_runner",
+      "args": ["--help"],
+      "console": "integratedTerminal",
+      "justMyCode": true
+    }
+  ]
+}

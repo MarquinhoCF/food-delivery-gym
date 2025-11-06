@@ -139,13 +139,13 @@ class Establishment(MapActor):
             for cook in self.cooks:
                 if cook.get_length_orders_accepted() > 0 and not cook.get_is_cooking():
                     order = cook.pop_order()
-                    cook.update_overload_time(order.estimated_time_to_prepare, True)
+                    cook.update_overload_time(order.estimated_preparation_duration, True)
 
                     updated_estimated_time = None
                     if cook.get_length_orders_accepted() == 0:
                         updated_estimated_time = cook.get_overloaded_until()
                     else:
-                        updated_estimated_time = self.now + order.estimated_time_to_prepare
+                        updated_estimated_time = self.now + order.estimated_preparation_duration
                     
                     cook.set_is_cooking(True)
                     self.orders_in_preparation += 1
@@ -163,8 +163,8 @@ class Establishment(MapActor):
         ))
 
         order.update_status(OrderStatus.PREPARING)
-        time_to_prepare = self.time_to_prepare_order(order.estimated_time_to_prepare)
-        order.set_real_time_to_prepare(time_to_prepare)
+        time_to_prepare = self.time_to_prepare_order(order.estimated_preparation_duration)
+        order.set_actual_preparation_duration(time_to_prepare)
 
         time_to_allocate_driver = round(time_to_prepare * self.percentage_allocation_driver)
 
@@ -181,7 +181,7 @@ class Establishment(MapActor):
 
         self.finish_order(cook, order)
 
-    def _handle_driver_allocation(self, order, allocation_time):
+    def _handle_driver_allocation(self, order: Order, allocation_time: SimTime):
         # Gerencia a alocação do motorista.
         yield self.timeout(allocation_time)
         allocation_event = TimeForAgentAllocateDriver(
@@ -192,7 +192,6 @@ class Establishment(MapActor):
         )
         self.publish_event(allocation_event)
         self.environment.add_core_event(allocation_event)
-        order.driver_allocated(self.now)
 
     def finish_order(self, cook, order: Order) -> None:
         event = EstablishmentFinishedOrder(
@@ -242,26 +241,29 @@ class Establishment(MapActor):
         return not self.is_empty() or self.orders_in_preparation > 0
 
     def time_to_process_order_requests(self) -> SimTime:
-        return self.rng.randrange(1, 5)
+        return self.rng.integers(1, 5)
 
     def time_to_accept_or_reject_order(self, order: Order) -> SimTime:
-        return self.rng.randrange(1, 5)
+        return self.rng.integers(1, 5)
 
     def time_check_to_start_preparation(self) -> SimTime:
-        return self.rng.randrange(1, 5)
+        return self.rng.integers(1, 5)
 
     def time_estimate_to_prepare_order(self) -> SimTime:
-        return self.rng.randrange(8, 20)
+        return self.rng.integers(8, 20)
 
     def time_to_prepare_order(self, estimated_time: SimTime) -> SimTime:
         # Não faz sentido o tempo de preparo ser menor que 1
-        return max(1, estimated_time + self.rng.randrange(-5, 5))
+        return max(1, estimated_time + self.rng.integers(-5, 5))
 
     def condition_to_accept(self, order) -> bool:
         return self.available
     
-    def update_statistcs_variables(self):
+    def update_statistics_variables(self):
         if self.is_active():
             self.active_time += 1
         else:
             self.idle_time += 1
+
+    def get_coordinate(self) -> Coordinate:
+        return self.coordinate

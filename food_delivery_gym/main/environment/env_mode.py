@@ -1,6 +1,7 @@
 from enum import Enum, auto
 
 class EnvMode(Enum):
+    TESTING = auto()
     TRAINING = auto()
     EVALUATING = auto()
 

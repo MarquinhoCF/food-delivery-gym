@@ -29,7 +29,7 @@ class TimeShiftOrderEstablishmentRateGenerator(TimeShiftGenerator):
                 single_order=True
             )
 
-            items = self.rng.sample(establishment.catalog.items, 2)
+            items = self.rng.choice(establishment.catalog.items, size=2, replace=False).tolist()
 
             order = Order(
                 id=self.current_order_id,
@@ -54,6 +54,6 @@ class TimeShiftOrderEstablishmentRateGenerator(TimeShiftGenerator):
                 # print(f'Número máximo de pedidos atingido: {self.max_orders}')
                 return
 
-            establishment = self.rng.choice(env.state.establishments)
+            establishment = self.rng.choice(env.state.establishments, size=None)
             #establishment = env.state.establishments[0]
             self.process_establishment(env, establishment)

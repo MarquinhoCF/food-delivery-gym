@@ -9,10 +9,10 @@ class InitialOrderGenerator(InitialGenerator):
 
     def run(self, env: FoodDeliverySimpyEnv):
         for _ in range(self.num_orders):
-            establishment = self.rng.choice(env.state.establishments)
-            customer = self.rng.choice(env.state.customers)
+            establishment = self.rng.choice(env.state.establishments, size=None)
+            customer = self.rng.choice(env.state.customers, size=None)
 
-            items = self.rng.sample(establishment.catalog.items, 2)
+            items = self.rng.choice(establishment.catalog.items, size=2, replace=False).tolist()
 
             order = Order(customer, establishment, env.now, items)
 
