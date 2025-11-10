@@ -11,7 +11,8 @@ from food_delivery_gym.main.environment.env_mode import EnvMode
 from food_delivery_gym.main.environment.food_delivery_simpy_env import FoodDeliverySimpyEnv
 from food_delivery_gym.main.generator.initial_driver_generator import InitialDriverGenerator
 from food_delivery_gym.main.generator.initial_establishment_order_rate_generator import InitialEstablishmentOrderRateGenerator
-from food_delivery_gym.main.generator.time_shift_order_establishment_rate_generator import TimeShiftOrderEstablishmentRateGenerator
+from food_delivery_gym.main.generator.poisson_order_generator import PoissonOrderGenerator
+from food_delivery_gym.main.generator.non_homogeneous_poisson_order_generator import NonHomogeneousPoissonOrderGenerator
 from food_delivery_gym.main.map.grid_map import GridMap
 from food_delivery_gym.main.order.order import Order
 from food_delivery_gym.main.route.delivery_route_segment import DeliveryRouteSegment
@@ -19,6 +20,7 @@ from food_delivery_gym.main.route.pickup_route_segment import PickupRouteSegment
 from food_delivery_gym.main.route.route import Route
 from food_delivery_gym.main.statistic.driver_idle_time_metric import DriverIdleTimeMetric
 from food_delivery_gym.main.statistic.driver_time_waiting_for_order_metric import DriverTimeWaitingForOrderMetric
+from food_delivery_gym.main.statistic.poisson_order_generation_metric import PoissonOrderGenerationMetric
 from food_delivery_gym.main.statistic.summarized_data_board import SummarizedDataBoard
 from food_delivery_gym.main.statistic.driver_orders_delivered_metric import DriverOrdersDeliveredMetric
 from food_delivery_gym.main.statistic.driver_total_distance_metric import DriverTotalDistanceMetric
@@ -34,7 +36,7 @@ class FoodDeliveryGymEnv(Env):
 
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 4}
 
-    def __init__(self, scenario_json_file_path = str, render_mode=None):
+    def __init__(self, scenario_json_file_path = str, reward_objective: int = 1, render_mode=None):
 
         path = Path(scenario_json_file_path)
 
@@ -48,16 +50,12 @@ class FoodDeliveryGymEnv(Env):
             "num_drivers",
             "num_establishments",
             "num_orders",
-            "num_costumers",
-            "function_code",
-            "time_shift",
             "vel_drivers",
             "prepare_time",
             "operating_radius",
             "production_capacity",
             "percentage_allocation_driver",
-            "max_time_step",
-            "reward_objective"
+            "max_time_step"
         ]
 
         missing_keys = [key for key in required_keys if key not in scenario]
@@ -67,20 +65,19 @@ class FoodDeliveryGymEnv(Env):
         self.num_drivers = scenario["num_drivers"]
         self.num_establishments = scenario["num_establishments"]
         self.num_orders = scenario["num_orders"]
-        self.num_costumers = scenario["num_costumers"]
-        self.function = eval(scenario["function_code"])
-        self.lambda_code = scenario["function_code"]
-        self.time_shift = scenario["time_shift"]
+        self.grid_map_size = scenario.get("grid_map_size", 100)
+        self.use_estimate = scenario.get("use_estimate", True)
+        self.desconsider_capacity = scenario.get("desconsider_capacity", True)
+        self.max_time_step = scenario["max_time_step"]
+
+        self.order_generator_config = scenario.get("order_generator", {})
+
         self.vel_drivers = scenario["vel_drivers"]
         self.prepare_time = scenario["prepare_time"]
         self.operating_radius = scenario["operating_radius"]
         self.production_capacity = scenario["production_capacity"]
         self.percentage_allocation_driver = scenario["percentage_allocation_driver"]
-        self.grid_map_size = scenario.get("grid_map_size", 100)
-        self.use_estimate = scenario.get("use_estimate", True)
-        self.desconsider_capacity = scenario.get("desconsider_capacity", True)
-        self.max_time_step = scenario["max_time_step"]
-        self.normalize = scenario.get("normalize", True)
+
         self.env_mode = EnvMode.TRAINING
         
         # Define o modo de renderização
@@ -95,80 +92,66 @@ class FoodDeliveryGymEnv(Env):
         self.last_simpy_env = None # Ambiente de simulação da execução anterior -> para fins de computação de estatísticas
 
         # Definindo o objetivo da recompensa
-        self.set_reward_objective(scenario["reward_objective"])
+        if reward_objective not in range(1, 11):
+            raise ValueError("reward_objective deve ser um valor entre 1 e 10.")
+        self.set_reward_objective(reward_objective)
 
         # Espaço de Observação
-        if self.normalize:
-            self.dtype_observation = np.float32
+        self.dtype_observation = np.int32
+        self.observation_space = Dict({
+            # --- Motoristas ---
+            'drivers_coord': Box(low=0, high=self.grid_map_size - 1, shape=(self.num_drivers*2,), dtype=self.dtype_observation),
+            'drivers_estimated_remaining_time': Box(low=0, high=self.max_time_step, shape=(self.num_drivers,), dtype=self.dtype_observation),
+            'driver_status': Box(low=1, high=len(DriverStatus), shape=(self.num_drivers,), dtype=self.dtype_observation),
+            'drivers_queue_size': Box(low=0, high=self.num_orders, shape=(self.num_drivers,), dtype=self.dtype_observation),
+            'drivers_velocity': Box(low=min(self.vel_drivers), high=max(self.vel_drivers), shape=(self.num_drivers,), dtype=self.dtype_observation),
 
-            self.observation_space = Dict({
-                # --- Motoristas ---
-                'drivers_coord': Box(low=-1, high=1, shape=(self.num_drivers*2,), dtype=self.dtype_observation),
-                'drivers_estimated_remaining_time': Box(low=-1, high=1, shape=(self.num_drivers,), dtype=self.dtype_observation),
-                'driver_status': Box(low=-1, high=1, shape=(self.num_drivers,), dtype=self.dtype_observation),
-                'drivers_queue_size': Box(low=-1, high=1, shape=(self.num_drivers,), dtype=self.dtype_observation),
-                'drivers_velocity': Box(low=-1, high=1, shape=(self.num_drivers,), dtype=self.dtype_observation),
+            # --- Pedido Atual ---  
+            'order_restaurant_coord': Box(low=0, high=self.grid_map_size - 1, shape=(2,), dtype=self.dtype_observation),
+            'order_customer_coord': Box(low=0, high=self.grid_map_size - 1, shape=(2,), dtype=self.dtype_observation),
+            'order_estimated_ready_time': Box(low=0, high=self.max_time_step, shape=(1,), dtype=self.dtype_observation),
+            'order_estimated_delivery_time': Box(low=0, high=self.max_time_step, shape=(self.num_drivers,), dtype=self.dtype_observation),
 
-                # --- Pedido Atual ---  
-                'order_restaurant_coord': Box(low=-1, high=1, shape=(2,), dtype=self.dtype_observation),
-                'order_customer_coord': Box(low=-1, high=1, shape=(2,), dtype=self.dtype_observation),
-                'order_estimated_ready_time': Box(low=-1, high=1, shape=(1,), dtype=self.dtype_observation),
-                'order_estimated_delivery_time': Box(low=-1, high=1, shape=(self.num_drivers,), dtype=self.dtype_observation),
-
-                # --- Ambiente ---
-                'current_time_step': Box(low=-1, high=1, shape=(1,), dtype=self.dtype_observation)
-            })
-            
-            self.limits_observation_space = {
-                # --- Motoristas ---
-                'drivers_coord': (0, self.grid_map_size - 1),
-                'drivers_estimated_remaining_time': (0, self.max_time_step),
-                'driver_status': (1, len(DriverStatus)),
-                'drivers_queue_size': (0, self.num_orders),
-                'drivers_velocity': (min(self.vel_drivers), max(self.vel_drivers)),
-
-                # --- Pedido Atual ---  
-                'order_restaurant_coord': (0, self.grid_map_size - 1),
-                'order_customer_coord': (0, self.grid_map_size - 1),
-                'order_estimated_ready_time': (0, self.max_time_step),
-                'order_estimated_delivery_time': (0, self.max_time_step),
-
-                # --- Ambiente ---
-                'current_time_step': (0, self.max_time_step)
-            }
-        else:
-            self.dtype_observation = np.int32
-            self.observation_space = Dict({
-                # --- Motoristas ---
-                'drivers_coord': Box(low=0, high=self.grid_map_size - 1, shape=(self.num_drivers*2,), dtype=self.dtype_observation),
-                'drivers_estimated_remaining_time': Box(low=0, high=self.max_time_step, shape=(self.num_drivers,), dtype=self.dtype_observation),
-                'driver_status': Box(low=1, high=len(DriverStatus), shape=(self.num_drivers,), dtype=self.dtype_observation),
-                'drivers_queue_size': Box(low=0, high=self.num_orders, shape=(self.num_drivers,), dtype=self.dtype_observation),
-                'drivers_velocity': Box(low=min(self.vel_drivers), high=max(self.vel_drivers), shape=(self.num_drivers,), dtype=self.dtype_observation),
-
-                # --- Pedido Atual ---  
-                'order_restaurant_coord': Box(low=0, high=self.grid_map_size - 1, shape=(2,), dtype=self.dtype_observation),
-                'order_customer_coord': Box(low=0, high=self.grid_map_size - 1, shape=(2,), dtype=self.dtype_observation),
-                'order_estimated_ready_time': Box(low=0, high=self.max_time_step, shape=(1,), dtype=self.dtype_observation),
-                'order_estimated_delivery_time': Box(low=0, high=self.max_time_step, shape=(self.num_drivers,), dtype=self.dtype_observation),
-
-                # --- Ambiente ---
-                'current_time_step': Box(low=0, high=self.max_time_step, shape=(1,), dtype=self.dtype_observation)
-            })
+            # --- Ambiente ---
+            'current_time_step': Box(low=0, high=self.max_time_step, shape=(1,), dtype=self.dtype_observation)
+        })
 
         # Espaço de Ação
         self.action_space = Discrete(self.num_drivers)  # Escolher qual driver pegará o pedido
-
-    def normalize_observation(self, obs):
-        normalized_obs = {}
-        for key, value in obs.items():
-            min_value, max_value = self.limits_observation_space[key]
-            normalized_value = 2 * (value - min_value) / (max_value - min_value) - 1
+    
+    def _create_order_generator(self):
+        if not self.order_generator_config:
+            return None
+            
+        generator_type = self.order_generator_config.get("type", "poisson")
+        total_orders = self.num_orders
+        time_window = self.order_generator_config.get("time_window", self.max_time_step)
         
-            # Garantir que o valor esteja dentro do intervalo [-1, 1]
-            normalized_obs[key] = np.clip(normalized_value, -1, 1)
-
-        return normalized_obs
+        if generator_type == "poisson":
+            return PoissonOrderGenerator(
+                total_orders=total_orders,
+                time_window=time_window,
+                lambda_rate=self.order_generator_config.get("lambda_rate", None)
+            )
+        
+        elif generator_type == "non_homogeneous_poisson":
+            # Obtém a função de taxa
+            rate_function_code = self.order_generator_config.get("rate_function")
+            if not rate_function_code:
+                raise ValueError("rate_function é obrigatório para non_homogeneous_poisson")
+            
+            # Cria a função de taxa a partir do código
+            rate_function = eval(rate_function_code)
+            
+            return NonHomogeneousPoissonOrderGenerator(
+                total_orders=total_orders,
+                time_window=time_window,
+                rate_function=rate_function,
+                max_rate=self.order_generator_config.get("max_rate", None)
+            )
+        
+        else:
+            raise ValueError(f"Tipo de gerador não suportado: {generator_type}")
 
     def get_observation(self):
         # --- Motoristas ---
@@ -235,7 +218,7 @@ class FoodDeliveryGymEnv(Env):
             'current_time_step': current_time_step
         }
 
-        return self.normalize_observation(obs) if self.normalize else obs
+        return obs
        
     def _get_info(self):
         return {'info': self.simpy_env.now}
@@ -288,29 +271,31 @@ class FoodDeliveryGymEnv(Env):
         if options:
             self.render_mode = options.get("render_mode", None)
 
+        generators = [
+            InitialEstablishmentOrderRateGenerator(
+                self.num_establishments, 
+                self.prepare_time, 
+                self.operating_radius, 
+                self.production_capacity,
+                self.percentage_allocation_driver, 
+                use_estimate=self.use_estimate,
+            ),
+            InitialDriverGenerator(
+                self.num_drivers, 
+                self.vel_drivers, 
+                self.reward_objective,
+                desconsider_capacity=self.desconsider_capacity,
+            )
+        ]
+
+        # Adiciona o gerador de pedidos configurado
+        order_generator = self._create_order_generator()
+        if order_generator is not None:
+            generators.append(order_generator)
+
         self.simpy_env = FoodDeliverySimpyEnv(
             map=GridMap(self.grid_map_size),
-            generators=[
-                InitialEstablishmentOrderRateGenerator(
-                    self.num_establishments, 
-                    self.prepare_time, 
-                    self.operating_radius, 
-                    self.production_capacity,
-                    self.percentage_allocation_driver, 
-                    use_estimate=self.use_estimate,
-                ),
-                InitialDriverGenerator(
-                    self.num_drivers, 
-                    self.vel_drivers, 
-                    self.reward_objective,
-                    desconsider_capacity=self.desconsider_capacity,
-                ),
-                TimeShiftOrderEstablishmentRateGenerator(
-                    self.function, 
-                    time_shift=self.time_shift, 
-                    max_orders=self.num_orders,
-                ),
-            ],
+            generators=generators,
             optimizer=None,
             view=GridViewPygame(grid_size=self.grid_map_size) if self.render_mode == "human" else None
         )
@@ -472,7 +457,7 @@ class FoodDeliveryGymEnv(Env):
             save_figs = True
         
         custom_board = SummarizedDataBoard(metrics=[
-            OrderCurveMetric(simpy_env),
+            PoissonOrderGenerationMetric(simpy_env),
             EstablishmentOrdersFulfilledMetric(simpy_env),
             EstablishmentMaxOrdersInQueueMetric(simpy_env),
             EstablishmentActiveTimeMetric(simpy_env),

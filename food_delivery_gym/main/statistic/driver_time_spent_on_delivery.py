@@ -24,9 +24,9 @@ class DriverTimeSpentOnDelivery(Metric):
             ax.plot(est_ids, modes, marker='^', linestyle='', label='Moda')
 
             # Adicionando títulos e legendas
-            ax.set_xlabel('Motoristas')
-            ax.set_ylabel('Tempo Gasto na Entrega')
-            ax.set_title('Estatísticas do Tempo Gasto na Entrega por Motorista')
+            ax.set_xlabel('Motoristas', fontsize=11, fontweight='bold')
+            ax.set_ylabel('Tempo Gasto na Entrega', fontsize=11, fontweight='bold')
+            ax.set_title('Estatísticas do Tempo Gasto na Entrega por Motorista', fontsize=12, fontweight='bold', pad=15)
             ax.legend()
             ax.grid(True)
 
@@ -47,9 +47,9 @@ class DriverTimeSpentOnDelivery(Metric):
             #     print(f"Motorista {driver_id}: {time:.2f} minutos totais gastos entregando pedidos")
 
             ax.barh(ids, times_spent_on_delivery, color='blue')
-            ax.set_xlabel('Time spent on delivery')
-            ax.set_ylabel('Drivers')
-            ax.set_title(title)
+            ax.set_xlabel('Time spent on delivery', fontsize=11, fontweight='bold')
+            ax.set_ylabel('Drivers', fontsize=11, fontweight='bold')
+            ax.set_title(title, fontsize=12, fontweight='bold', pad=15)
 
             ax.set_yticks(ids)
             ax.set_yticklabels([str(int(driver_id)) for driver_id in ids])

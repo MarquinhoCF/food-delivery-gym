@@ -6,7 +6,7 @@
         "type": "python",
         "request": "launch",
         "module": "scripts.test_runner",
-        "args": ["--mode", "interactive", "--scenario", "medium_obj1.json"],
+        "args": ["--mode", "interactive", "--scenario", "medium.json"],
         "console": "integratedTerminal",
         "justMyCode": true
     },
@@ -15,7 +15,7 @@
         "type": "python",
         "request": "launch",
         "module": "scripts.test_runner",
-        "args": ["--mode", "interactive", "--scenario", "medium_obj1.json", "--render"],
+        "args": ["--mode", "interactive", "--scenario", "medium.json", "--render"],
         "console": "integratedTerminal",
         "justMyCode": true
     },
@@ -24,7 +24,7 @@
       "type": "python",
       "request": "launch",
       "module": "scripts.test_runner",
-      "args": ["--mode", "auto", "--scenario", "medium_obj1.json", "--render", "--max-steps", "100"],
+      "args": ["--mode", "auto", "--scenario", "medium.json", "--render", "--max-steps", "100"],
       "console": "integratedTerminal",
       "justMyCode": true
     },
@@ -33,7 +33,7 @@
       "type": "python",
       "request": "launch",
       "module": "scripts.test_runner",
-      "args": ["--mode", "auto", "--scenario", "medium_obj1.json", "--max-steps", "500", "--save-log"],
+      "args": ["--mode", "auto", "--scenario", "medium.json", "--max-steps", "500", "--save-log"],
       "console": "integratedTerminal",
       "justMyCode": true
     },
@@ -42,7 +42,7 @@
       "type": "python",
       "request": "launch",
       "module": "scripts.test_runner",
-      "args": ["--mode", "agent", "--scenario", "medium_obj1.json", "--model-path", "data/ppo_training/otimizacao_1M_steps_200_trials/treinamento/obj_1/medium/18M_steps/best_model.zip", "--render"],
+      "args": ["--mode", "agent", "--scenario", "medium.json", "--model-path", "data/ppo_training/otimizacao_1M_steps_200_trials/treinamento/obj_1/medium/18M_steps/best_model.zip", "--render"],
       "console": "integratedTerminal",
       "justMyCode": true
     },

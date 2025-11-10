@@ -24,9 +24,9 @@ class DriverTimeWaitingForOrderMetric(Metric):
             ax.plot(est_ids, modes, marker='^', linestyle='', label='Moda')
 
             # Adicionando títulos e legendas
-            ax.set_xlabel('Motoristas')
-            ax.set_ylabel('Tempo Esperando pelo Pedido')
-            ax.set_title('Estatísticas do Tempo Esperando pelo Pedido por Motorista')
+            ax.set_xlabel('Motoristas', fontsize=11, fontweight='bold')
+            ax.set_ylabel('Tempo Esperando pelo Pedido', fontsize=11, fontweight='bold')
+            ax.set_title('Estatísticas do Tempo Esperando pelo Pedido por Motorista', fontsize=12, fontweight='bold', pad=15)
             ax.legend()
             ax.grid(True)
 
@@ -44,9 +44,9 @@ class DriverTimeWaitingForOrderMetric(Metric):
             #     print(f"Motorista {driver_id}: {time:.2f} minutos esperando pelo pedido")
 
             ax.barh(ids, times_waiting_for_order, color='blue')
-            ax.set_xlabel('Time waiting for order')
-            ax.set_ylabel('Drivers')
-            ax.set_title(title)
+            ax.set_xlabel('Time waiting for order', fontsize=11, fontweight='bold')
+            ax.set_ylabel('Drivers', fontsize=11, fontweight='bold')
+            ax.set_title(title, fontsize=12, fontweight='bold', pad=15)
 
             ax.set_yticks(ids)
             ax.set_yticklabels([str(int(driver_id)) for driver_id in ids])

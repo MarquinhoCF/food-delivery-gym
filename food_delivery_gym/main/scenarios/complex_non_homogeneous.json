@@ -2,8 +2,13 @@
     "num_drivers": 10,
     "num_establishments": 10,
     "num_orders": 576,
-    "num_costumers": 576,
     "grid_map_size": 50,
+    "max_time_step": 5760,
+    "order_generator": {
+      "type": "non_homogeneous_poisson",
+      "time_window": 960,
+      "rate_function": "lambda t: 0.3115 + 0.9345 * (np.exp(-((t - 330)**2) / 7000) + np.exp(-((t - 630)**2) / 7000))"
+    },
     "vel_drivers": [
         3,
         4
@@ -20,12 +25,5 @@
         3,
         3
     ],
-    "percentage_allocation_driver": 0.7,
-    "use_estimate": true,
-    "desconsider_capacity": true,
-    "max_time_step": 5760,
-    "reward_objective": 3,
-    "function_code": "lambda time: 3",
-    "time_shift": 5,
-    "normalize": false
+    "percentage_allocation_driver": 0.7
 }

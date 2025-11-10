@@ -21,9 +21,9 @@ class DriverTotalDistanceMetric(Metric):
             ax.plot(est_ids, modes, marker='^', linestyle='', label='Moda')
 
             # Adicionando títulos e legendas
-            ax.set_xlabel('Motoristas')
-            ax.set_ylabel('Distância Total Percorrida')
-            ax.set_title('Estatísticas da Distância Total Percorrida por Motorista')
+            ax.set_xlabel('Motoristas', fontsize=11, fontweight='bold')
+            ax.set_ylabel('Distância Total Percorrida', fontsize=11, fontweight='bold')
+            ax.set_title('Estatísticas da Distância Total Percorrida por Motorista', fontsize=12, fontweight='bold', pad=15)
             ax.legend()
             ax.grid(True)
 
@@ -41,9 +41,9 @@ class DriverTotalDistanceMetric(Metric):
             #     print(f"Motorista {driver_id}: {distance:.2f} percorridos")
             
             ax.barh(ids, total_distances, color='red')
-            ax.set_xlabel('Total Distance Traveled')
-            ax.set_ylabel('Drivers')
-            ax.set_title(title)
-            
+            ax.set_xlabel('Total Distance Traveled', fontsize=11, fontweight='bold')
+            ax.set_ylabel('Drivers', fontsize=11, fontweight='bold')
+            ax.set_title(title, fontsize=12, fontweight='bold', pad=15)
+
             ax.set_yticks(ids)
             ax.set_yticklabels([str(int(driver_id)) for driver_id in ids])

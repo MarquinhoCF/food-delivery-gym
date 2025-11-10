@@ -36,7 +36,7 @@ def create_environment(reward_objective: int, scenario_name: str):
     if reward_objective not in range(1, 11):
         raise ValueError("reward_objective deve ser um valor entre 1 e 10.")
 
-    scenario_file = scenario_name + "_obj1.json"
+    scenario_file = scenario_name + ".json"
     scenario_path = str(files("food_delivery_gym.main.scenarios").joinpath(scenario_file))
     gym_env = FoodDeliveryGymEnv(scenario_json_file_path=scenario_path)
     gym_env.set_mode(EnvMode.EVALUATING)
