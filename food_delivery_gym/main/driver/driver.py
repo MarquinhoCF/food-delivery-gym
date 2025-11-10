@@ -92,7 +92,8 @@ class Driver(MapActor):
     def receive_route_requests(self, route: Route) -> None:
         self.route_requests.append(route)
 
-        order = route.order
+        order = route.get_current_order()
+
         order.driver_allocated(
             self.now,
             self.time_between_accept_and_start_picking_up(),
@@ -121,7 +122,7 @@ class Driver(MapActor):
         self.accept_route(route) if accept else self.reject_route(route)
 
     def accept_route(self, route: Route) -> None:
-        self.orders_list.append(route.order)
+        self.orders_list.append(route.get_current_order())
 
         # Se estamos considerando a capacidade do motorista
         # Deverá ser contabilizado incremento nas rotas corretamente atribuídas quando o motorista aceita a requisição de rota
@@ -329,7 +330,7 @@ class Driver(MapActor):
                 break
 
         # TODO: Logs
-        # print(f"Driver {self.driver_id} entregou o pedido ao cliente no tempo {self.now}")
+        print(f"Driver {self.driver_id} entregou o pedido ao cliente no tempo {self.now}")
 
     def move(self) -> ProcessGenerator:
         while True:

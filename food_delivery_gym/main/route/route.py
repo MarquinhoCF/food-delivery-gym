@@ -11,7 +11,6 @@ class Route:
     def __init__(self, environment: FoodDeliverySimpyEnv, route_segments: List[RouteSegment]):
         self.route_id = Route._generate_id()
         self.environment = environment
-        self.order = route_segments[0].order
         self.route_segments = route_segments
         self.required_capacity = self.calculate_required_capacity()
         self.distance = self.calculate_total_distance()
@@ -34,6 +33,24 @@ class Route:
         self.required_capacity = self.calculate_required_capacity()
         self.distance = self.calculate_total_distance()
         return self.route_segments.pop(0)
+    
+    def get_current_order(self):
+        if self.has_next():
+            return self.route_segments[0].order
+        return None
+    
+    def swap_segments(self, index_a: int, index_b: int):
+        n = len(self.route_segments)
+        if not (0 <= index_a < n and 0 <= index_b < n):
+            raise IndexError("Índices fora do intervalo válido da rota.")
+        
+        self.route_segments[index_a], self.route_segments[index_b] = (
+            self.route_segments[index_b],
+            self.route_segments[index_a],
+        )
+
+        self.required_capacity = self.calculate_required_capacity()
+        self.distance = self.calculate_total_distance()
 
     def calculate_total_distance(self):
         coordinates = [segment.coordinate for segment in self.route_segments]

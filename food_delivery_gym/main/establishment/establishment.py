@@ -209,8 +209,8 @@ class Establishment(MapActor):
         self.orders_fulfilled += 1
 
         # TODO: Logs
-        # print(f"\nPedido pronto no estabelecimento {self.establishment_id}: ")
-        # print(order)
+        print(f"\nPedido pronto no estabelecimento {self.establishment_id}: ")
+        print(order)
 
         if not self.use_estimate:
             self.environment.add_ready_order(order, event)

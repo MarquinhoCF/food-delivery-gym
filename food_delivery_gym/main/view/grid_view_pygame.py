@@ -31,7 +31,7 @@ class GridViewPygame(FoodDeliveryView):
         return (map_coordinate(coordinate[0], self.min_x, self.max_x, 0, self.window_size[0]),
                 map_coordinate(coordinate[1], self.min_y, self.max_y, 0, self.window_size[1]))
     
-    def draw_grid(self, canvas, color=GRAY):
+    def draw_background_grid(self, canvas, color=GRAY):
         # Desenha a grade
         grid_size_x = self.window_size[0] // self.grid_size
         grid_size_y = self.window_size[1] // self.grid_size
@@ -105,7 +105,7 @@ class GridViewPygame(FoodDeliveryView):
         canvas.fill(WHITE)
         
         if self.draw_grid:
-            self.draw_grid(canvas)
+            self.draw_background_grid(canvas)
 
         # Desenhar os estabelecimentos
         for establishment in environment.state.establishments:

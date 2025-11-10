@@ -6,7 +6,7 @@
         "type": "python",
         "request": "launch",
         "module": "scripts.test_runner",
-        "args": ["--mode", "interactive", "--scenario", "medium.json"],
+        "args": ["--mode", "interactive", "--scenario", "teste_dynamic_route.json"],
         "console": "integratedTerminal",
         "justMyCode": true
     },
@@ -15,7 +15,7 @@
         "type": "python",
         "request": "launch",
         "module": "scripts.test_runner",
-        "args": ["--mode", "interactive", "--scenario", "medium.json", "--render"],
+        "args": ["--mode", "interactive", "--scenario", "teste_dynamic_route.json", "--render"],
         "console": "integratedTerminal",
         "justMyCode": true
     },

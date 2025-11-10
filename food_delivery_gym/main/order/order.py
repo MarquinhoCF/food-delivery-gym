@@ -24,6 +24,10 @@ class Order:
         self.order_id = id
         self.customer: "Customer" = customer
         self.establishment: "Establishment" = establishment
+
+        self.pick_up_route_segment_id = None
+        self.delivery_route_segment_id = None
+
         self.request_date = request_date # Momento em que o pedido foi criado
         self.delivery_rejections: List[DeliveryRejection] = []
         self.items = items
@@ -57,6 +61,12 @@ class Order:
 
     def update_status(self, status: OrderStatus):
         self.status = status
+
+    def set_pickup_segment(self, route_segment_id: Number):
+        self.pick_up_route_segment_id = route_segment_id
+    
+    def set_delivery_segment(self, route_segment_id: Number):
+        self.delivery_route_segment_id = route_segment_id
 
     def establishment_accepted(self, now, estimated_preparation_duration: int, estimated_ready_time: int):
         self.status = OrderStatus.ESTABLISHMENT_ACCEPTED

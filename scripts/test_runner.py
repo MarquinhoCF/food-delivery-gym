@@ -12,7 +12,7 @@ from food_delivery_gym.main.environment.env_mode import EnvMode
 from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
 
 # --- Config padrão ---
-DEFAULT_SEED = 123456789
+DEFAULT_SEED = 5434
 
 """
     Interpreta a string do usuário de acordo com o tipo do action_space.
