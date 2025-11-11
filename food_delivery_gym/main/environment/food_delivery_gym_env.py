@@ -44,7 +44,7 @@ class FoodDeliveryGymEnv(Env):
         with open(path, "r", encoding="utf-8") as f:
             scenario = json.load(f)
 
-        self.read_scenario_json(scenario)
+        self._read_scenario_json(scenario)
 
         self.env_mode = EnvMode.TRAINING
 
@@ -79,7 +79,7 @@ class FoodDeliveryGymEnv(Env):
         # Espaço de Ação
         self.action_space = Discrete(self.num_drivers)  # Escolher qual driver pegará o pedido
 
-    def read_scenario_json(self, scenario: dict):
+    def _read_scenario_json(self, scenario: dict):
         # Estrutura esperada
         required_sections = ["order_generator", "simpy_env", "grid_map", "drivers", "establishments"]
         for section in required_sections:
@@ -168,13 +168,10 @@ class FoodDeliveryGymEnv(Env):
         self.production_capacity = est["production_capacity"]
         self.percentage_allocation_driver = est["percentage_allocation_driver"]
     
-    def _create_order_generator(self):
-        if not self.order_generator_config:
-            return None
-            
-        generator_type = self.order_generator_config.get("type", "poisson")
-        total_orders = self.num_orders
-        time_window = self.order_generator_config.get("time_window", self.max_time_step)
+    def _create_order_generator(self) -> PoissonOrderGenerator | NonHomogeneousPoissonOrderGenerator:
+        generator_type = self.order_generator_config["type"]
+        total_orders = self.order_generator_config["total_orders"]
+        time_window = self.order_generator_config["time_window"]
         
         if generator_type == "poisson":
             return PoissonOrderGenerator(
@@ -184,7 +181,7 @@ class FoodDeliveryGymEnv(Env):
             )
         
         elif generator_type == "non_homogeneous_poisson":
-            rate_function_code = self.order_generator_config.get("rate_function")
+            rate_function_code = self.order_generator_config["rate_function"]
             rate_function = eval(rate_function_code) # Cria a função de taxa a partir do código
             
             return NonHomogeneousPoissonOrderGenerator(
@@ -193,9 +190,6 @@ class FoodDeliveryGymEnv(Env):
                 rate_function=rate_function,
                 max_rate=self.order_generator_config.get("max_rate", None)
             )
-        
-        else:
-            raise ValueError(f"Tipo de gerador não suportado: {generator_type}")
 
     def get_observation(self):
         # --- Motoristas ---
@@ -271,7 +265,7 @@ class FoodDeliveryGymEnv(Env):
         self.env_mode = mode
     
     # Avança na simulação até que um evento principal ocorra ou que a simulação termine/trunque.
-    def advance_simulation_until_event(self):
+    def _advance_simulation_until_event(self):
         terminated = False
         truncated = False
         core_event = None
@@ -315,37 +309,30 @@ class FoodDeliveryGymEnv(Env):
         if options:
             self.render_mode = options.get("render_mode", None)
 
-        generators = [
-            InitialEstablishmentOrderRateGenerator(
-                self.num_establishments, 
-                self.prepare_time, 
-                self.operating_radius, 
-                self.production_capacity,
-                self.percentage_allocation_driver, 
-            ),
-            InitialDynamicRouteDriverGenerator(
-                self.num_drivers,
-                self.vel_drivers,
-                self.max_delay_percentage,
-                self.max_capacity,
-                self.reward_objective
-            )
-        ]
-
-        # Adiciona o gerador de pedidos configurado
-        order_generator = self._create_order_generator()
-        if order_generator is not None:
-            generators.append(order_generator)
-
         self.simpy_env = FoodDeliverySimpyEnv(
             map=GridMap(self.grid_map_size),
-            generators=generators,
+            generators=[
+                InitialEstablishmentOrderRateGenerator(
+                    self.num_establishments, 
+                    self.prepare_time, 
+                    self.operating_radius, 
+                    self.production_capacity,
+                    self.percentage_allocation_driver, 
+                ),
+                InitialDynamicRouteDriverGenerator(
+                    self.num_drivers,
+                    self.vel_drivers,
+                    self.max_delay_percentage,
+                    self.max_capacity,
+                    self.reward_objective
+                ),
+                self._create_order_generator()
+            ],
             optimizer=None,
             view=GridViewPygame(grid_size=self.grid_map_size) if self.render_mode == "human" else None
         )
 
-        # self.last_num_orders_delivered = 0
-        core_event, _, _ = self.advance_simulation_until_event()
+        core_event, _, _ = self._advance_simulation_until_event()
         self.current_order: Order = core_event.order if core_event else None
 
         observation = self.get_observation()
@@ -353,13 +340,13 @@ class FoodDeliveryGymEnv(Env):
 
         return observation, info
     
-    def select_driver_to_order(self, selected_driver, order):
+    def _select_driver_to_order(self, selected_driver, order):
         segment_pickup = PickupRouteSegment(order)
         segment_delivery = DeliveryRouteSegment(order)
         route = Route(self.simpy_env, [segment_pickup, segment_delivery])
         selected_driver.receive_route_requests(route)
 
-    def calculate_reward(self, terminated, truncated):
+    def _calculate_reward(self, terminated, truncated):
         reward = 0
 
         # Objetivo 1: Minimizar o tempo de entrega a partir da expectativa de tempo gasto com a entrega -> Recompensa negativa a cada passo
@@ -448,9 +435,9 @@ class FoodDeliveryGymEnv(Env):
             # print("action: {}".format(action))
             # print("current_order: {}".format(vars(self.current_order)))
             selected_driver = self.simpy_env.state.drivers[action]
-            self.select_driver_to_order(selected_driver, self.current_order)
+            self._select_driver_to_order(selected_driver, self.current_order)
 
-            core_event, terminated, truncated = self.advance_simulation_until_event()
+            core_event, terminated, truncated = self._advance_simulation_until_event()
 
             self.current_order = core_event.order if core_event else None
 
@@ -460,7 +447,7 @@ class FoodDeliveryGymEnv(Env):
             
             info = self._get_info()
 
-            reward = self.calculate_reward(terminated, truncated)
+            reward = self._calculate_reward(terminated, truncated)
             # print(f"reward: {reward}")
 
             if (self.env_mode != EnvMode.TRAINING) and (terminated or truncated):

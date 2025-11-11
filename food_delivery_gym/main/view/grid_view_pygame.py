@@ -11,6 +11,9 @@ GREEN = (0, 255, 0)
 GRAY = (137, 137, 137)
 RED = (255, 0, 0)
 WHITE = (255, 255, 255)
+DARK_GRAY = (50, 50, 50)
+LIGHT_BLUE = (173, 216, 230)
+ORANGE = (255, 165, 0)
 
 def map_coordinate(value, min_val, max_val, min_screen, max_screen):
     return min_screen + (value - min_val) * (max_screen - min_screen) / (max_val - min_val)
@@ -18,28 +21,52 @@ def map_coordinate(value, min_val, max_val, min_screen, max_screen):
 
 class GridViewPygame(FoodDeliveryView):
 
-    def __init__(self, grid_size=100, draw_grid=True, window_size=(900, 700), fps=30):
+    def __init__(self, grid_size=50, draw_grid=True, window_size=(1800, 1400), fps=30):
+        # Adiciona espaço para a área de informações
+        self.info_panel_height = 180
+        self.frame_padding = 20
+        self.map_area_height = window_size[1] - self.info_panel_height - (2 * self.frame_padding)
+        self.map_area_width = window_size[0] - (2 * self.frame_padding)
+        
         super().__init__(grid_size, window_size, fps)
         pygame.init()
         pygame.display.init()
         self.screen = pygame.display.set_mode(window_size)
         self.clock = pygame.time.Clock()
         self.draw_grid = draw_grid
-        pygame.display.set_caption('Map of Establishments, Customers and Drivers')
+        pygame.display.set_caption('Food Delivery Simulation - Map View')
+        
+        # Fontes para texto
+        self.font_title = pygame.font.SysFont('Arial', 24, bold=True)
+        self.font_info = pygame.font.SysFont('Arial', 18)
+        self.font_small = pygame.font.SysFont('Arial', 14)
 
     def coordinate(self, coordinate):
-        return (map_coordinate(coordinate[0], self.min_x, self.max_x, 0, self.window_size[0]),
-                map_coordinate(coordinate[1], self.min_y, self.max_y, 0, self.window_size[1]))
+        return (
+            self.frame_padding + map_coordinate(coordinate[0], self.min_x, self.max_x, 0, self.map_area_width),
+            self.frame_padding + map_coordinate(coordinate[1], self.min_y, self.max_y, 0, self.map_area_height)
+        )
     
     def draw_background_grid(self, canvas, color=GRAY):
-        # Desenha a grade
-        grid_size_x = self.window_size[0] // self.grid_size
-        grid_size_y = self.window_size[1] // self.grid_size
+        # Use os limites reais do mapa (min_x..max_x, min_y..max_y)
+        for i in range(self.grid_size + 1):
+            # Coordenada lógica → tela
+            x = self.frame_padding + map_coordinate(i, 0, self.grid_size, 0, self.map_area_width)
+            y = self.frame_padding + map_coordinate(i, 0, self.grid_size, 0, self.map_area_height)
 
-        for x in range(0, self.window_size[0], grid_size_x):
-            pygame.draw.line(canvas, color, (x, 0), (x, self.window_size[1]), 1)
-        for y in range(0, self.window_size[1], grid_size_y):
-            pygame.draw.line(canvas, color, (0, y), (self.window_size[0], y), 1)
+            # Linhas verticais e horizontais
+            pygame.draw.line(canvas, color, (x, self.frame_padding), (x, self.frame_padding + self.map_area_height), 1)
+            pygame.draw.line(canvas, color, (self.frame_padding, y), (self.frame_padding + self.map_area_width, y), 1)
+    
+    def draw_frame(self, canvas):
+        # Desenha moldura ao redor da área do mapa
+        frame_rect = pygame.Rect(
+            self.frame_padding - 2,
+            self.frame_padding - 2,
+            self.map_area_width + 4,
+            self.map_area_height + 4
+        )
+        pygame.draw.rect(canvas, DARK_GRAY, frame_rect, 3)
     
     def draw_driver(self, canvas, driver_color, mapped_x, mapped_y):
         # Corpo do carro
@@ -56,7 +83,6 @@ class GridViewPygame(FoodDeliveryView):
         top_width = 8
         top_height = 4.5
         pygame.draw.rect(canvas, BLACK, (mapped_x - top_width // 2, mapped_y - top_height, top_width, top_height))
-
 
     def draw_establishment(self, canvas, mapped_x, mapped_y):
         # Corpo do restaurante
@@ -89,6 +115,76 @@ class GridViewPygame(FoodDeliveryView):
         # Desenhar a bolinha
         pygame.draw.circle(canvas, BLUE, (int(circle_center_x), int(circle_center_y)), circle_radius)
 
+    def draw_info_panel(self, canvas, environment):
+        # Área do painel de informações
+        panel_y = self.frame_padding + self.map_area_height + 20
+        panel_height = self.info_panel_height - 20
+        
+        # Fundo do painel
+        panel_rect = pygame.Rect(self.frame_padding, panel_y, self.map_area_width, panel_height)
+        pygame.draw.rect(canvas, LIGHT_BLUE, panel_rect)
+        pygame.draw.rect(canvas, DARK_GRAY, panel_rect, 2)
+        
+        # Título
+        title_text = self.font_title.render("Simulation Statistics", True, DARK_GRAY)
+        canvas.blit(title_text, (self.frame_padding + 20, panel_y + 10))
+        
+        # Linha horizontal abaixo do título
+        pygame.draw.line(
+            canvas, 
+            DARK_GRAY, 
+            (self.frame_padding + 10, panel_y + 45), 
+            (self.frame_padding + self.map_area_width - 10, panel_y + 45), 
+            1
+        )
+        
+        # Coletar informações
+        current_time = int(environment.now)
+        orders_delivered = environment.state.orders_delivered
+        
+        # Contar pedidos aguardando entrega
+        orders_waiting = sum(1 for customer in environment.state.customers 
+                           if customer.status == CustumerStatus.WAITING_DELIVERY)
+        
+        # Contar motoristas por status
+        drivers_available = sum(1 for driver in environment.state.drivers 
+                               if driver.status == DriverStatus.AVAILABLE)
+        drivers_picking_up = sum(1 for driver in environment.state.drivers 
+                                if driver.status == DriverStatus.PICKING_UP)
+        drivers_delivering = sum(1 for driver in environment.state.drivers 
+                               if driver.status == DriverStatus.DELIVERING)
+        
+        # Total de estabelecimentos
+        total_establishments = len(environment.state.establishments)
+        total_drivers = len(environment.state.drivers)
+        
+        # Primeira coluna de informações
+        col1_x = self.frame_padding + 30
+        info_y = panel_y + 60
+        line_spacing = 25
+        
+        info_texts = [
+            f"Time: {current_time}",
+            f"Orders Delivered: {orders_delivered}",
+            f"Orders Waiting: {orders_waiting}",
+        ]
+        
+        for i, text in enumerate(info_texts):
+            rendered_text = self.font_info.render(text, True, DARK_GRAY)
+            canvas.blit(rendered_text, (col1_x, info_y + i * line_spacing))
+        
+        # Segunda coluna de informações
+        col2_x = self.frame_padding + self.map_area_width // 2 + 30
+        
+        info_texts_col2 = [
+            f"Establishments: {total_establishments}",
+            f"Drivers Available: {drivers_available}/{total_drivers}",
+            f"Picking Up: {drivers_picking_up}  |  Delivering: {drivers_delivering}",
+        ]
+        
+        for i, text in enumerate(info_texts_col2):
+            rendered_text = self.font_info.render(text, True, DARK_GRAY)
+            canvas.blit(rendered_text, (col2_x, info_y + i * line_spacing))
 
     def render(self, environment):
         self.quited = False
@@ -101,9 +197,12 @@ class GridViewPygame(FoodDeliveryView):
             return
 
         canvas = pygame.Surface(self.window_size)
-
         canvas.fill(WHITE)
         
+        # Desenha a moldura
+        self.draw_frame(canvas)
+        
+        # Desenha a grade se habilitado
         if self.draw_grid:
             self.draw_background_grid(canvas)
 
@@ -113,7 +212,7 @@ class GridViewPygame(FoodDeliveryView):
             self.draw_establishment(canvas, mapped_x, mapped_y)
 
             if hasattr(establishment, "operating_radius"):
-                operating_radius_mapped = map_coordinate(establishment.operating_radius, 0, 100, 0, min(self.window_size))
+                operating_radius_mapped = map_coordinate(establishment.operating_radius, 0, 100, 0, min(self.map_area_width, self.map_area_height))
                 pygame.draw.circle(canvas, GREEN, (int(mapped_x), int(mapped_y)), int(operating_radius_mapped), 1)
             
         # Desenhar os clientes
@@ -130,6 +229,9 @@ class GridViewPygame(FoodDeliveryView):
             if driver.status in [DriverStatus.PICKING_UP, DriverStatus.DELIVERING]:
                 target_mapped_x, target_mapped_y = self.coordinate(driver.current_route_segment.coordinate)
                 pygame.draw.line(canvas, RED, (mapped_x, mapped_y), (target_mapped_x, target_mapped_y), 2)
+
+        # Desenhar painel de informações
+        self.draw_info_panel(canvas, environment)
 
         self.screen.blit(canvas, canvas.get_rect())
         pygame.display.update()
