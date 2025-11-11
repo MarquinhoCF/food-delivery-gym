@@ -33,8 +33,6 @@ class Driver(MapActor):
             coordinate: Coordinate,
             available: bool,
             color: Optional[tuple[int, int, int]] = (255, 0, 0), # Cor vermelha
-            desconsider_capacity: bool = False,
-            capacity: Optional[Capacity] = Capacity(Dimensions(100, 100, 100, 100)),
             status: Optional[DriverStatus] = DriverStatus.AVAILABLE,
             movement_rate: Optional[Number] = 5,
             reward_objective: Optional[Number] = 1,
@@ -45,13 +43,6 @@ class Driver(MapActor):
         super().__init__(environment, coordinate, available)
 
         self.color = color
-
-        self.desconsider_capacity = desconsider_capacity
-
-        if desconsider_capacity:
-            self.capacity = Capacity(Dimensions(float('inf'), float('inf'), float('inf'), float('inf')))
-        else:
-            self.capacity = capacity
         
         self.status = status
         self.movement_rate = movement_rate
@@ -86,9 +77,6 @@ class Driver(MapActor):
         self.process(self.process_route_requests())
         self.process(self.move())
 
-    def fits(self, route: Route) -> bool:
-        return self.capacity.fits(route.required_capacity)
-
     def receive_route_requests(self, route: Route) -> None:
         self.route_requests.append(route)
 
@@ -103,10 +91,7 @@ class Driver(MapActor):
             self.estimate_time_to_costumer_receive_order(order)
         )
 
-        # Se estamos desconsiderando a capacidade do motorista
-        # Deverá ser contabilizado incremento nas rotas corretamente atribuídas quando o motorista recebe a requisição de rota
-        if self.desconsider_capacity:
-            self.environment.state.increment_assigned_routes()
+        self.environment.state.increment_assigned_routes()
 
     def process_route_requests(self) -> ProcessGenerator:
         while True:
@@ -123,11 +108,6 @@ class Driver(MapActor):
 
     def accept_route(self, route: Route) -> None:
         self.orders_list.append(route.get_current_order())
-
-        # Se estamos considerando a capacidade do motorista
-        # Deverá ser contabilizado incremento nas rotas corretamente atribuídas quando o motorista aceita a requisição de rota
-        if not self.desconsider_capacity:
-            self.environment.state.increment_assigned_routes()
 
         if self.current_route is None:
             self.current_route = route
@@ -348,10 +328,10 @@ class Driver(MapActor):
         return self.current_route is not None or self.current_route_segment is not None or len(self.route_requests) > 0
 
     def accept_route_condition(self, route: Route) -> bool:
-        return self.fits(route) and self.available
+        return self.available
 
     def check_availability(self, route: Route) -> bool:
-        return self.fits(route) and self.available
+        return self.available
 
     def estimate_time_to_driver_receive_order(self) -> int:
         return self.rng.integers(1, 5)

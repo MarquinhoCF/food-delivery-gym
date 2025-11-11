@@ -1,12 +1,10 @@
-from food_delivery_gym.main.base.dimensions import Dimensions
-from food_delivery_gym.main.driver.capacity import Capacity
-from food_delivery_gym.main.driver.driver import Driver, DriverStatus
+from food_delivery_gym.main.driver.driver import DriverStatus
 from food_delivery_gym.main.driver.dynamic_route_driver import DynamicRouteDriver
 from food_delivery_gym.main.environment.food_delivery_simpy_env import FoodDeliverySimpyEnv
 from food_delivery_gym.main.generator.initial_generator import InitialGenerator
 
 
-class InitialDriverGenerator(InitialGenerator):
+class InitialDynamicRouteDriverGenerator(InitialGenerator):
     def __init__(self, num_drivers, vel_drivers, reward_objective):
         super().__init__()
         self.num_drivers = num_drivers
@@ -15,7 +13,7 @@ class InitialDriverGenerator(InitialGenerator):
 
     def run(self, env: FoodDeliverySimpyEnv):
         drivers = [
-            Driver(
+            DynamicRouteDriver(
                 id=i+1,
                 environment=env,
                 coordinate=env.map.random_point(),

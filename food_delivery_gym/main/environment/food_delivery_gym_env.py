@@ -9,7 +9,7 @@ from gymnasium.spaces import Dict, Box, Discrete
 from food_delivery_gym.main.driver.driver_status import DriverStatus
 from food_delivery_gym.main.environment.env_mode import EnvMode
 from food_delivery_gym.main.environment.food_delivery_simpy_env import FoodDeliverySimpyEnv
-from food_delivery_gym.main.generator.initial_driver_generator import InitialDriverGenerator
+from food_delivery_gym.main.generator.initial_dynamic_route_driver_generator import InitialDynamicRouteDriverGenerator
 from food_delivery_gym.main.generator.initial_establishment_order_rate_generator import InitialEstablishmentOrderRateGenerator
 from food_delivery_gym.main.generator.poisson_order_generator import PoissonOrderGenerator
 from food_delivery_gym.main.generator.non_homogeneous_poisson_order_generator import NonHomogeneousPoissonOrderGenerator
@@ -67,7 +67,6 @@ class FoodDeliveryGymEnv(Env):
         self.num_orders = scenario["num_orders"]
         self.grid_map_size = scenario.get("grid_map_size", 100)
         self.use_estimate = scenario.get("use_estimate", True)
-        self.desconsider_capacity = scenario.get("desconsider_capacity", True)
         self.max_time_step = scenario["max_time_step"]
 
         self.order_generator_config = scenario.get("order_generator", {})
@@ -280,11 +279,10 @@ class FoodDeliveryGymEnv(Env):
                 self.percentage_allocation_driver, 
                 use_estimate=self.use_estimate,
             ),
-            InitialDriverGenerator(
+            InitialDynamicRouteDriverGenerator(
                 self.num_drivers, 
                 self.vel_drivers, 
-                self.reward_objective,
-                desconsider_capacity=self.desconsider_capacity,
+                self.reward_objective
             )
         ]
 
