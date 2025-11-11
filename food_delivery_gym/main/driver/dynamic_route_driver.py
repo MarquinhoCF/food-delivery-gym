@@ -2,37 +2,35 @@ from typing import List
 from food_delivery_gym.main.base.types import Number
 from food_delivery_gym.main.driver.driver import Driver
 from food_delivery_gym.main.order.order import Order
-from food_delivery_gym.main.route.delivery_route_segment import DeliveryRouteSegment
-from food_delivery_gym.main.route.pickup_route_segment import PickupRouteSegment
-from food_delivery_gym.main.route.route_segment import RouteSegment
-
 
 class DynamicRouteDriver(Driver):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.max_delay_percentage = 50  # Limite de piora percentual aceitável
+        self.max_delay_percentage = 80  # Limite de piora percentual aceitável
+        self.max_capacity = 2  # Capacidade máxima de pedidos que o motorista pode carregar
         self.current_load = 0  # Carga atual de pedidos
 
     def picked_up(self, order: Order) -> None:
-        super().picked_up(order)
-
-        if len(self.orders_list) > 1:
+        self.current_load += 1
+        
+        if self.current_load > 0 and len(self.orders_list) > 1:
             current_order = self.orders_list[0]
             next_order = self.orders_list[1]
 
             if self.should_collect_next_before_delivery(current_order, next_order):
-                # O segmento 0 é o de entrega do pedido atual
-                # O segmento 1 é o de coleta do próximo pedido
-                self.current_route.swap_segments(0, 1)
-        
-        self.current_load += 1
+                self.current_route.swap_route_segments_by_id(
+                    current_order.delivery_route_segment_id, 
+                    next_order.pick_up_route_segment_id
+                )
+
+        super().picked_up(order)
     
     def delivered(self, order: Order) -> None:
         super().delivered(order)
         self.current_load -= 1
 
     def should_collect_next_before_delivery(self, current_order: Order, next_order: Order) -> bool:
-        if self.current_load > 2:
+        if self.current_load >= self.max_capacity:
             return False  # Capacidade máxima atingida, não pode coletar mais pedidos
         
         normal_delivery_time = self._calculate_normal_delivery_time(current_order)
