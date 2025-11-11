@@ -21,7 +21,7 @@ def map_coordinate(value, min_val, max_val, min_screen, max_screen):
 
 class GridViewPygame(FoodDeliveryView):
 
-    def __init__(self, grid_size=50, draw_grid=True, window_size=(1800, 1400), fps=30):
+    def __init__(self, grid_size=50, draw_grid=True, window_size=(1200, 1300), fps=30):
         # Adiciona espaço para a área de informações
         self.info_panel_height = 180
         self.frame_padding = 20
@@ -226,7 +226,7 @@ class GridViewPygame(FoodDeliveryView):
             mapped_x, mapped_y = self.coordinate(driver.coordinate)
             self.draw_driver(canvas, driver.color, mapped_x, mapped_y)
 
-            if driver.status in [DriverStatus.PICKING_UP, DriverStatus.DELIVERING]:
+            if driver.status in [DriverStatus.PICKING_UP, DriverStatus.PICKING_UP_WAITING, DriverStatus.DELIVERING, DriverStatus.DELIVERING_WAITING]:
                 target_mapped_x, target_mapped_y = self.coordinate(driver.current_route_segment.coordinate)
                 pygame.draw.line(canvas, RED, (mapped_x, mapped_y), (target_mapped_x, target_mapped_y), 2)
 

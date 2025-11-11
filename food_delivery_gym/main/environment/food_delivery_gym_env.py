@@ -306,18 +306,30 @@ class FoodDeliveryGymEnv(Env):
             self.action_space.seed(seed=seed)
             RandomManager().set_seed(seed=seed)
 
-        if options:
-            self.render_mode = options.get("render_mode", None)
+        # Lê as opções adicionais
+        render_mode = None
+        draw_grid = True
+        window_size = None
+        fps = 30
 
+        if options:
+            render_mode = options.get("render_mode", None)
+            draw_grid = options.get("draw_grid", True)
+            window_size = options.get("window_size", (1200, 1300))
+            fps = options.get("fps", 30)
+
+        self.render_mode = render_mode
+
+        # Cria o ambiente SimPy
         self.simpy_env = FoodDeliverySimpyEnv(
             map=GridMap(self.grid_map_size),
             generators=[
                 InitialEstablishmentOrderRateGenerator(
-                    self.num_establishments, 
-                    self.prepare_time, 
-                    self.operating_radius, 
+                    self.num_establishments,
+                    self.prepare_time,
+                    self.operating_radius,
                     self.production_capacity,
-                    self.percentage_allocation_driver, 
+                    self.percentage_allocation_driver,
                 ),
                 InitialDynamicRouteDriverGenerator(
                     self.num_drivers,
@@ -329,9 +341,15 @@ class FoodDeliveryGymEnv(Env):
                 self._create_order_generator()
             ],
             optimizer=None,
-            view=GridViewPygame(grid_size=self.grid_map_size) if self.render_mode == "human" else None
+            view=GridViewPygame(
+                grid_size=self.grid_map_size,
+                draw_grid=draw_grid,
+                window_size=window_size,
+                fps=fps
+            ) if render_mode == "human" else None
         )
 
+        # Avança até o primeiro evento principal
         core_event, _, _ = self._advance_simulation_until_event()
         self.current_order: Order = core_event.order if core_event else None
 

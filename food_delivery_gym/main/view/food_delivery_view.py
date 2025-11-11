@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 
 class FoodDeliveryView(ABC):
 
-    def __init__(self, grid_size=100, window_size=(800, 600), fps=30):
+    def __init__(self, grid_size=100, window_size=(900, 700), fps=30):
         self.grid_size = grid_size
         self.window_size = window_size
         self.fps = fps
