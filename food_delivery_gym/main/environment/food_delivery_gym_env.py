@@ -34,9 +34,7 @@ from food_delivery_gym.main.view.grid_view_pygame import GridViewPygame
 
 class FoodDeliveryGymEnv(Env):
 
-    metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 4}
-
-    def __init__(self, scenario_json_file_path = str, reward_objective: int = 1, render_mode=None):
+    def __init__(self, scenario_json_file_path = str, reward_objective: int = 1):
 
         path = Path(scenario_json_file_path)
 
@@ -46,46 +44,9 @@ class FoodDeliveryGymEnv(Env):
         with open(path, "r", encoding="utf-8") as f:
             scenario = json.load(f)
 
-        required_keys = [
-            "num_drivers",
-            "num_establishments",
-            "num_orders",
-            "vel_drivers",
-            "prepare_time",
-            "operating_radius",
-            "production_capacity",
-            "percentage_allocation_driver",
-            "max_time_step"
-        ]
-
-        missing_keys = [key for key in required_keys if key not in scenario]
-        if missing_keys:
-            raise ValueError(f"Missing required keys in scenario_json: {missing_keys}")
-
-        self.num_drivers = scenario["num_drivers"]
-        self.num_establishments = scenario["num_establishments"]
-        self.num_orders = scenario["num_orders"]
-        self.grid_map_size = scenario.get("grid_map_size", 100)
-        self.use_estimate = scenario.get("use_estimate", True)
-        self.max_time_step = scenario["max_time_step"]
-
-        self.order_generator_config = scenario.get("order_generator", {})
-
-        self.vel_drivers = scenario["vel_drivers"]
-        self.prepare_time = scenario["prepare_time"]
-        self.operating_radius = scenario["operating_radius"]
-        self.production_capacity = scenario["production_capacity"]
-        self.percentage_allocation_driver = scenario["percentage_allocation_driver"]
+        self.read_scenario_json(scenario)
 
         self.env_mode = EnvMode.TRAINING
-        
-        # Define o modo de renderização
-        self.render_mode = render_mode or scenario.get("render_mode", None)
-
-        # Valida se o modo de renderização é suportado
-        if self.render_mode is not None:
-            assert self.render_mode in self.metadata["render_modes"], \
-                f"Render mode '{self.render_mode}' não suportado. Modos disponíveis: {self.metadata['render_modes']}"
 
         self.simpy_env = None # Ambiente de simulação será criado no reset
         self.last_simpy_env = None # Ambiente de simulação da execução anterior -> para fins de computação de estatísticas
@@ -117,6 +78,95 @@ class FoodDeliveryGymEnv(Env):
 
         # Espaço de Ação
         self.action_space = Discrete(self.num_drivers)  # Escolher qual driver pegará o pedido
+
+    def read_scenario_json(self, scenario: dict):
+        # Estrutura esperada
+        required_sections = ["order_generator", "simpy_env", "grid_map", "drivers", "establishments"]
+        for section in required_sections:
+            if section not in scenario:
+                raise ValueError(f"Seção obrigatória ausente: '{section}'")
+
+        og = scenario["order_generator"]
+        env = scenario["simpy_env"]
+        grid = scenario["grid_map"]
+        drv = scenario["drivers"]
+        est = scenario["establishments"]
+
+        # 1. Order Generator
+        required_og = ["type", "total_orders", "time_window"]
+        for k in required_og:
+            if k not in og:
+                raise ValueError(f"Campo obrigatório ausente em 'order_generator': '{k}'")
+        if og["type"] not in ["poisson", "non_homogeneous_poisson"]:
+            raise ValueError("order_generator.type deve ser 'poisson' ou 'non_homogeneous_poisson'")
+        if not isinstance(og["total_orders"], int) or og["total_orders"] <= 0:
+            raise ValueError("order_generator.total_orders deve ser um inteiro positivo")
+        if not isinstance(og["time_window"], (int, float)) or og["time_window"] <= 0:
+            raise ValueError("order_generator.time_window deve ser positivo")
+        if og["type"] == "non_homogeneous_poisson":
+            if "rate_function" not in og:
+                raise ValueError("rate_function é obrigatório para 'non_homogeneous_poisson'")
+        
+        self.num_orders = og["total_orders"]
+        self.order_generator_config = scenario.get("order_generator", {})
+
+        # 2. simpy_env
+        if "max_time_step" not in env:
+            raise ValueError("Campo obrigatório ausente em 'simpy_env': 'max_time_step'")
+        if not isinstance(env["max_time_step"], (int, float)) or env["max_time_step"] <= 0:
+            raise ValueError("simpy_env.max_time_step deve ser um número positivo")
+        
+        self.max_time_step = env["max_time_step"]
+
+        # 3. grid_map
+        if "size" not in grid:
+            raise ValueError("Campo obrigatório ausente em 'grid_map': 'size'")
+        if not isinstance(grid["size"], int) or grid["size"] <= 0:
+            raise ValueError("grid_map.size deve ser um inteiro positivo")
+        
+        self.grid_map_size = grid["size"]
+
+        # 4. drivers
+        required_drv = ["num", "vel", "max_delay_percentage", "max_capacity"]
+        for k in required_drv:
+            if k not in drv:
+                raise ValueError(f"Campo obrigatório ausente em 'drivers': '{k}'")
+        if not isinstance(drv["num"], int) or drv["num"] <= 0:
+            raise ValueError("drivers.num deve ser um inteiro positivo")
+        if not (isinstance(drv["vel"], list) and len(drv["vel"]) == 2 and all(isinstance(v, (int, float)) for v in drv["vel"])):
+            raise ValueError("drivers.vel deve ser uma lista com dois números [min, max]")
+        if not isinstance(drv["max_delay_percentage"], (int, float)) or drv["max_delay_percentage"] < 0:
+            raise ValueError("drivers.max_delay_percentage deve ser um número não negativo")
+        if not isinstance(drv["max_capacity"], int) or drv["max_capacity"] <= 0:
+            raise ValueError("drivers.max_capacity deve ser um inteiro positivo")
+        
+        self.num_drivers = drv["num"]
+        self.vel_drivers = drv["vel"]
+        self.max_delay_percentage = drv["max_delay_percentage"]
+        self.max_capacity = drv["max_capacity"]
+
+        # 5. establishments
+        required_est = ["num", "prepare_time", "operating_radius", "production_capacity", "percentage_allocation_driver"]
+        for k in required_est:
+            if k not in est:
+                raise ValueError(f"Campo obrigatório ausente em 'establishments': '{k}'")
+        if not isinstance(est["num"], int) or est["num"] <= 0:
+            raise ValueError("establishments.num deve ser um inteiro positivo")
+        for key in ["prepare_time", "operating_radius", "production_capacity"]:
+            value = est[key]
+            if not (isinstance(value, list) and len(value) == 2 and all(isinstance(v, (int, float)) for v in value)):
+                raise ValueError(f"'{key}' deve ser uma lista com dois valores numéricos [min, max]")
+            if value[0] > value[1]:
+                raise ValueError(f"'{key}' deve estar em ordem crescente (min <= max)")
+        pad = est["percentage_allocation_driver"]
+        if not (isinstance(pad, (int, float)) and 0 <= pad <= 1):
+            raise ValueError("establishments.percentage_allocation_driver deve ser um número entre 0 e 1")
+        
+        self.num_establishments = est["num"]
+        self.prepare_time = est["prepare_time"]
+        self.operating_radius = est["operating_radius"]
+        self.production_capacity = est["production_capacity"]
+        self.percentage_allocation_driver = est["percentage_allocation_driver"]
     
     def _create_order_generator(self):
         if not self.order_generator_config:
@@ -134,13 +184,8 @@ class FoodDeliveryGymEnv(Env):
             )
         
         elif generator_type == "non_homogeneous_poisson":
-            # Obtém a função de taxa
             rate_function_code = self.order_generator_config.get("rate_function")
-            if not rate_function_code:
-                raise ValueError("rate_function é obrigatório para non_homogeneous_poisson")
-            
-            # Cria a função de taxa a partir do código
-            rate_function = eval(rate_function_code)
+            rate_function = eval(rate_function_code) # Cria a função de taxa a partir do código
             
             return NonHomogeneousPoissonOrderGenerator(
                 total_orders=total_orders,
@@ -277,11 +322,12 @@ class FoodDeliveryGymEnv(Env):
                 self.operating_radius, 
                 self.production_capacity,
                 self.percentage_allocation_driver, 
-                use_estimate=self.use_estimate,
             ),
             InitialDynamicRouteDriverGenerator(
-                self.num_drivers, 
-                self.vel_drivers, 
+                self.num_drivers,
+                self.vel_drivers,
+                self.max_delay_percentage,
+                self.max_capacity,
                 self.reward_objective
             )
         ]

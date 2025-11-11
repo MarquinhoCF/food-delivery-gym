@@ -34,7 +34,6 @@ class CapacityDriver(Driver):
             coordinate=coordinate,
             available=available,
             color=color,
-            capacity=capacity,
             status=status,
             movement_rate=movement_rate,
             reward_objective=reward_objective,

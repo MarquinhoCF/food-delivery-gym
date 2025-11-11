@@ -1,13 +1,37 @@
-from typing import List
-from food_delivery_gym.main.base.types import Number
+from typing import List, Optional
+from food_delivery_gym.main.base.types import Coordinate, Number
 from food_delivery_gym.main.driver.driver import Driver
+from food_delivery_gym.main.driver.driver_status import DriverStatus
+from food_delivery_gym.main.environment.food_delivery_simpy_env import FoodDeliverySimpyEnv
 from food_delivery_gym.main.order.order import Order
 
 class DynamicRouteDriver(Driver):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.max_delay_percentage = 80  # Limite de piora percentual aceitável
-        self.max_capacity = 2  # Capacidade máxima de pedidos que o motorista pode carregar
+    def __init__(
+        self,
+        id: Number,
+        environment: FoodDeliverySimpyEnv,
+        coordinate: Coordinate,
+        available: bool,
+        max_delay_percentage: Optional[Number] = 50,
+        max_capacity: Optional[int] = 2,
+        color: Optional[tuple[int, int, int]] = (255, 0, 0),
+        status: Optional[DriverStatus] = DriverStatus.AVAILABLE,
+        movement_rate: Optional[Number] = 5,
+        reward_objective: Optional[Number] = 1,
+    ):
+        super().__init__(
+            id=id,
+            environment=environment,
+            coordinate=coordinate,
+            available=available,
+            color=color,
+            status=status,
+            movement_rate=movement_rate,
+            reward_objective=reward_objective,
+        )
+        
+        self.max_delay_percentage = max_delay_percentage  # Limite de piora percentual aceitável
+        self.max_capacity = max_capacity  # Capacidade máxima de pedidos que o motorista pode carregar
         self.current_load = 0  # Carga atual de pedidos
 
     def picked_up(self, order: Order) -> None:
