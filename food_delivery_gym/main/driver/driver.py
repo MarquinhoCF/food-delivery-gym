@@ -156,7 +156,7 @@ class Driver(MapActor):
     def sequential_processor(self) -> ProcessGenerator:
         # Faz o motorista esperar o pedido estar pronto
         if self.current_route_segment is not None and not self.current_route_segment.order.isReady:
-            self.status = DriverStatus.PICKING_UP_WAITING
+            self.status = DriverStatus.PICKING_UP_WAITING # TODO: Verificar se é necessário manter esse trecho de código
             yield self.timeout(1)
             self.process(self.sequential_processor())
         # Processa a rota

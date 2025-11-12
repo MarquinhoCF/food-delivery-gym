@@ -2,7 +2,7 @@
     "order_generator": {
         "type": "poisson",
         "total_orders": 100,
-        "time_window": 960
+        "time_window": 200
     },
     "simpy_env": {
         "max_time_step": 5760
@@ -13,8 +13,8 @@
     "drivers" : {
         "num": 1,
         "vel": [3, 4],
-        "max_delay_percentage": 80,
-        "max_capacity": 2
+        "tolerance_percentage": 80,
+        "max_capacity": 4
     },
     "establishments": {
         "num": 4,

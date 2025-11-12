@@ -13,7 +13,7 @@
     "drivers" : {
         "num": 10,
         "vel": [3, 4],
-        "max_delay_percentage": 50,
+        "tolerance_percentage": 50,
         "max_capacity": 2
     },
     "establishments": {

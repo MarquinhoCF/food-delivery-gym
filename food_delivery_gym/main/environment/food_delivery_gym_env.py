@@ -127,7 +127,7 @@ class FoodDeliveryGymEnv(Env):
         self.grid_map_size = grid["size"]
 
         # 4. drivers
-        required_drv = ["num", "vel", "max_delay_percentage", "max_capacity"]
+        required_drv = ["num", "vel", "tolerance_percentage", "max_capacity"]
         for k in required_drv:
             if k not in drv:
                 raise ValueError(f"Campo obrigatório ausente em 'drivers': '{k}'")
@@ -135,14 +135,14 @@ class FoodDeliveryGymEnv(Env):
             raise ValueError("drivers.num deve ser um inteiro positivo")
         if not (isinstance(drv["vel"], list) and len(drv["vel"]) == 2 and all(isinstance(v, (int, float)) for v in drv["vel"])):
             raise ValueError("drivers.vel deve ser uma lista com dois números [min, max]")
-        if not isinstance(drv["max_delay_percentage"], (int, float)) or drv["max_delay_percentage"] < 0:
-            raise ValueError("drivers.max_delay_percentage deve ser um número não negativo")
+        if not isinstance(drv["tolerance_percentage"], (int, float)) or drv["tolerance_percentage"] < 0:
+            raise ValueError("drivers.tolerance_percentage deve ser um número não negativo")
         if not isinstance(drv["max_capacity"], int) or drv["max_capacity"] <= 0:
             raise ValueError("drivers.max_capacity deve ser um inteiro positivo")
         
         self.num_drivers = drv["num"]
         self.vel_drivers = drv["vel"]
-        self.max_delay_percentage = drv["max_delay_percentage"]
+        self.tolerance_percentage = drv["tolerance_percentage"]
         self.max_capacity = drv["max_capacity"]
 
         # 5. establishments
@@ -334,7 +334,7 @@ class FoodDeliveryGymEnv(Env):
                 InitialDynamicRouteDriverGenerator(
                     self.num_drivers,
                     self.vel_drivers,
-                    self.max_delay_percentage,
+                    self.tolerance_percentage,
                     self.max_capacity,
                     self.reward_objective
                 ),

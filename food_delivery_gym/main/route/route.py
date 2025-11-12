@@ -38,36 +38,17 @@ class Route:
         if self.has_next():
             return self.route_segments[0].order
         return None
+    
+    def insert_segment_before_first_segment_by_id(self, route_segment_id: int):
+        segment = self.find_route_segment_by_id(route_segment_id)
+        self.route_segments.remove(segment)
+        self.route_segments.insert(0, segment)
 
-    def swap_route_segments_by_id(self, route_segment_a: int, route_segment_b: int):
-        index_a, index_b = self._find_segments_by_ids(route_segment_a, route_segment_b)
-        
-        self.route_segments[index_a], self.route_segments[index_b] = (
-            self.route_segments[index_b],
-            self.route_segments[index_a],
-        )
-
-        self.required_capacity = self.calculate_required_capacity()
-        self.distance = self.calculate_total_distance()
-
-    def _find_segments_by_ids(self, route_segment_a, route_segment_b):
-        route_segment_a_idx = route_segment_b_idx = None
-
+    def find_route_segment_by_id(self, route_segment_id: int) -> int:
         for idx, segment in enumerate(self.route_segments):
-            seg_id = segment.route_segment_id
-            if seg_id == route_segment_a:
-                route_segment_a_idx = idx
-                if route_segment_b_idx is not None:
-                    break
-            elif seg_id == route_segment_b:
-                route_segment_b_idx = idx
-                if route_segment_a_idx is not None:
-                    break
-
-        if route_segment_a_idx is None or route_segment_b_idx is None:
-            raise ValueError("Segmentos de rota não encontrados.")
-
-        return route_segment_a_idx, route_segment_b_idx
+            if segment.route_segment_id == route_segment_id:
+                return segment
+        raise ValueError("Segmento de rota não encontrado.")
 
     def calculate_total_distance(self):
         coordinates = [segment.coordinate for segment in self.route_segments]
