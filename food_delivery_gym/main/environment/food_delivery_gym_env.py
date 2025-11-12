@@ -315,7 +315,7 @@ class FoodDeliveryGymEnv(Env):
         if options:
             render_mode = options.get("render_mode", None)
             draw_grid = options.get("draw_grid", True)
-            window_size = options.get("window_size", (1200, 1300))
+            window_size = options.get("window_size", (1600, 1300))
             fps = options.get("fps", 30)
 
         self.render_mode = render_mode

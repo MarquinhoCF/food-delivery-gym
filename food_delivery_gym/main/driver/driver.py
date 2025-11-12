@@ -75,7 +75,6 @@ class Driver(MapActor):
         self.time_waiting_for_order: Number = 0
 
         self.process(self.process_route_requests())
-        self.process(self.move())
 
     def receive_route_requests(self, route: Route) -> None:
         self.route_requests.append(route)
@@ -227,7 +226,9 @@ class Driver(MapActor):
             distance=self.environment.map.distance(self.coordinate, order.establishment.coordinate),
             time=self.now
         ))
-        yield self.timeout(self.time_to_picking_up_order(order))
+
+        yield self.process(self.move_to(order.establishment.coordinate))
+
         self.picked_up(order)
 
     def picked_up(self, order: Order) -> None:
@@ -238,7 +239,6 @@ class Driver(MapActor):
             driver_id=self.driver_id,
             time=self.now
         ))
-        self.coordinate = order.establishment.coordinate
         order.picked_up(self.now)
         self.process(self.sequential_processor())
 
@@ -253,7 +253,9 @@ class Driver(MapActor):
             distance=self.environment.map.distance(self.coordinate, order.customer.coordinate),
             time=self.now
         ))
-        yield self.timeout(self.time_to_deliver_order(order))
+
+        yield self.process(self.move_to(order.customer.coordinate))
+
         self.process(self.wait_customer_pick_up_order(order))
 
     def wait_customer_pick_up_order(self, order: Order) -> ProcessGenerator:
@@ -270,7 +272,6 @@ class Driver(MapActor):
         self.delivered(order)
         
     def delivered(self, order: Order) -> None:
-        self.coordinate = order.customer.coordinate
         self.publish_event(DriverDeliveredOrder(
             order=order,
             customer_id=order.customer.customer_id,
@@ -312,16 +313,15 @@ class Driver(MapActor):
         # TODO: Logs
         print(f"Driver {self.driver_id} entregou o pedido ao cliente no tempo {self.now}")
 
-    def move(self) -> ProcessGenerator:
-        while True:
-            if self.current_route_segment:
-                old_coordinate = self.coordinate
-                self.coordinate = self.environment.map.move(
-                    origin=self.coordinate,
-                    destination=self.current_route_segment.coordinate,
-                    rate=self.movement_rate
-                )
-                self.total_distance += self.environment.map.distance(old_coordinate, self.coordinate)
+    def move_to(self, destination: Coordinate) -> ProcessGenerator:
+        while self.coordinate != destination:
+            old_coordinate = self.coordinate
+            self.coordinate = self.environment.map.move(
+                origin=self.coordinate,
+                destination=destination,
+                rate=self.movement_rate
+            )
+            self.total_distance += self.environment.map.distance(old_coordinate, self.coordinate)
             yield self.timeout(1)
 
     def is_active(self) -> bool:

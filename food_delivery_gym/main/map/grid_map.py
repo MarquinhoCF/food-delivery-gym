@@ -11,6 +11,9 @@ class GridMap(Map):
         self.generated_points = {}
 
     def distance(self, coord1: Coordinate, coord2: Coordinate) -> Number:
+        if coord1 == coord2:
+            return 0
+
         return max(abs(coord1[0] - coord2[0]) + abs(coord1[1] - coord2[1]), 1)
 
     def max_distance(self) -> Number:
