@@ -21,7 +21,7 @@ class DynamicRouteDriver(Driver):
         environment: FoodDeliverySimpyEnv,
         coordinate: Coordinate,
         available: bool,
-        tolerance_percentage: Optional[Number] = 50,
+        tolerance_percentage: Optional[Number] = 0.5,
         max_capacity: Optional[int] = 2,
         color: Optional[tuple[int, int, int]] = (255, 0, 0),
         status: Optional[DriverStatus] = DriverStatus.AVAILABLE,
@@ -76,7 +76,6 @@ class DynamicRouteDriver(Driver):
                
         self.process(self.sequential_processor())
 
-
     def _calculate_and_store_time_window(self, order: Order) -> None:
         normal_delivery_time = (
             order.estimated_time_between_picked_up_and_start_delivery + 
@@ -121,7 +120,28 @@ class DynamicRouteDriver(Driver):
     
     def delivered(self, order: Order) -> None:
         super().delivered(order)
+
+        # Remove a janela de tempo do pedido entregue
+        if order.order_id in self.time_windows:
+            del self.time_windows[order.order_id]
+
         self.current_load -= 1
+
+        # Após entregar, avalia se deve coletar próximo pedido antes de continuar entregas
+        if self.current_load > 0:
+            collected_orders = [order for order in self.orders_list if order.is_already_caught()]
+            next_to_collect_orders = [order for order in self.orders_list if not order.is_already_caught()]
+
+            # Se não há pedidos coletados ou não há pedidos para coletar, não faz nada
+            if not collected_orders or not next_to_collect_orders:
+                return
+            
+            next_order = next_to_collect_orders[0]
+            
+            # Verifica se coletar o próximo respeita as janelas dos pedidos coletados
+            if self._can_collect_next_respecting_windows(next_order, collected_orders):
+                # Insere o segmento de rota do próximo pedido antes do segmento atual
+               self.current_route.insert_segment_before_first_segment_by_id(next_order.pick_up_route_segment_id)
 
     def _estimate_collection_time(self, order: Order) -> Number:
         """Estima o tempo para coletar um pedido"""

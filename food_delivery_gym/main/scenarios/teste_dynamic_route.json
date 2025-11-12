@@ -13,7 +13,7 @@
     "drivers" : {
         "num": 1,
         "vel": [3, 4],
-        "tolerance_percentage": 80,
+        "tolerance_percentage": 0.8,
         "max_capacity": 4
     },
     "establishments": {
