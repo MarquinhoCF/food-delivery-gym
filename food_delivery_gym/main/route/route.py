@@ -1,6 +1,7 @@
 from typing import List
 
 from food_delivery_gym.main.base.dimensions import Dimensions
+from food_delivery_gym.main.base.types import Coordinate, Number
 from food_delivery_gym.main.environment.food_delivery_simpy_env import FoodDeliverySimpyEnv
 from food_delivery_gym.main.route.route_segment import RouteSegment
 
@@ -61,3 +62,45 @@ class Route:
 
     def size(self):
         return len(self.route_segments)
+    
+    def get_time_to_complete_route(self, current_coordinate: Coordinate, movement_rate: Number) -> Number:
+        if not self.route_segments:
+            return 0
+
+        first_segment = self.route_segments[0]
+        total_time = self.environment.map.estimated_time(current_coordinate, first_segment.coordinate, movement_rate)
+
+        if first_segment.is_pickup():
+            pass
+        elif first_segment.is_delivery() and first_segment.order.is_driver_at_delivery_location():
+            total_time += first_segment.order.estimated_time_to_costumer_receive_order
+
+        current_coordinate = first_segment.coordinate
+        
+        for segment in self.route_segments[1:]:
+            total_time += self.environment.map.estimated_time(current_coordinate, segment.coordinate, movement_rate)
+
+            if segment.is_pickup():
+                total_time += segment.order.estimated_time_between_accept_and_start_picking_up
+                # Tempo de viagem para coleta já considerado
+
+            elif segment.is_delivery():
+                total_time += segment.order.estimated_time_between_picked_up_and_start_delivery
+                # Tempo de viagem para entrega já considerado
+                total_time += segment.order.estimated_time_to_costumer_receive_order
+
+            current_coordinate = segment.coordinate
+                
+        return total_time
+    
+    def get_distance_to_complete_route(self, current_coordinate: Coordinate) -> Number:
+        if not self.route_segments:
+            return 0
+
+        total_distance = 0
+
+        for segment in self.route_segments:
+            total_distance += self.environment.map.acc_distance([current_coordinate, segment.coordinate])
+            current_coordinate = segment.coordinate
+
+        return total_distance

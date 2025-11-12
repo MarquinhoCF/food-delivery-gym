@@ -114,6 +114,9 @@ class Order:
             OrderStatus.RECEIVED,
             OrderStatus.DELIVERED,
         )
+    
+    def is_driver_at_delivery_location(self):
+        return self.status == OrderStatus.DRIVER_ARRIVED_DELIVERY_LOCATION
 
     def add_delivery_rejection(self, delivery_rejection: DeliveryRejection):
         self.delivery_rejections.append(delivery_rejection)
