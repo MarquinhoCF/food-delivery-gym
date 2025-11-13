@@ -73,7 +73,6 @@ class CapacityDriver(Driver):
             self.publish_event(DriverAcceptedRoute(
                 driver_id=self.driver_id,
                 route_id=self.current_route.route_id,
-                distance=self.current_route.distance,
                 time=self.now
             ))
             self.accept_route_segments(self.current_route.route_segments)

@@ -14,7 +14,6 @@ class Route:
         self.environment = environment
         self.route_segments = route_segments
         self.required_capacity = self.calculate_required_capacity()
-        self.distance = self.calculate_total_distance()
 
     @classmethod
     def _generate_id(cls):
@@ -32,7 +31,6 @@ class Route:
 
     def next(self):
         self.required_capacity = self.calculate_required_capacity()
-        self.distance = self.calculate_total_distance()
         return self.route_segments.pop(0)
     
     def get_current_order(self):
@@ -51,14 +49,9 @@ class Route:
                 return segment
         raise ValueError("Segmento de rota não encontrado.")
 
-    def calculate_total_distance(self):
-        coordinates = [segment.coordinate for segment in self.route_segments]
-        return self.environment.map.acc_distance(coordinates)
-
     def extend_route(self, other_route):
         self.route_segments += other_route.route_segments
         self.required_capacity = self.calculate_required_capacity()
-        self.distance = self.calculate_total_distance()
 
     def size(self):
         return len(self.route_segments)
@@ -66,18 +59,9 @@ class Route:
     def get_time_to_complete_route(self, current_coordinate: Coordinate, movement_rate: Number) -> Number:
         if not self.route_segments:
             return 0
-
-        first_segment = self.route_segments[0]
-        total_time = self.environment.map.estimated_time(current_coordinate, first_segment.coordinate, movement_rate)
-
-        if first_segment.is_pickup():
-            pass
-        elif first_segment.is_delivery() and first_segment.order.is_driver_at_delivery_location():
-            total_time += first_segment.order.estimated_time_to_costumer_receive_order
-
-        current_coordinate = first_segment.coordinate
         
-        for segment in self.route_segments[1:]:
+        total_time = 0
+        for segment in self.route_segments:
             total_time += self.environment.map.estimated_time(current_coordinate, segment.coordinate, movement_rate)
 
             if segment.is_pickup():
@@ -94,13 +78,6 @@ class Route:
         return total_time
     
     def get_distance_to_complete_route(self, current_coordinate: Coordinate) -> Number:
-        if not self.route_segments:
-            return 0
-
-        total_distance = 0
-
-        for segment in self.route_segments:
-            total_distance += self.environment.map.acc_distance([current_coordinate, segment.coordinate])
-            current_coordinate = segment.coordinate
-
-        return total_distance
+        coordinates = [segment.coordinate for segment in self.route_segments]
+        coordinates.insert(0, current_coordinate)
+        return self.environment.map.acc_distance(coordinates)

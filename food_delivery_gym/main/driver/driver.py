@@ -114,7 +114,6 @@ class Driver(MapActor):
             self.publish_event(DriverAcceptedRoute(
                 driver_id=self.driver_id,
                 route_id=self.current_route.route_id,
-                distance=self.current_route.distance,
                 time=self.now
             ))
             self.accept_route_segments(self.current_route.route_segments)
@@ -132,7 +131,6 @@ class Driver(MapActor):
             order=route_segment.order,
             customer_id=route_segment.order.customer.customer_id,
             establishment_id=route_segment.order.establishment.establishment_id,
-            distance=self.current_route.distance,
             time=self.now
         ))
         if (route_segment.order.status == OrderStatus.PREPARING):
@@ -143,13 +141,11 @@ class Driver(MapActor):
             route_segment.order.update_status(OrderStatus.DRIVER_ACCEPTED)
 
     def accepted_route_extension(self, route: Route) -> None:
-        old_distance = self.current_route.distance
         self.current_route.extend_route(route)
         self.publish_event(DriverAcceptedRouteExtension(
             driver_id=self.driver_id,
             route_id=self.current_route.route_id,
-            old_distance=old_distance,
-            distance=self.current_route.distance,
+            new_route_id=route.route_id,
             time=self.now
         ))
         self.accept_route_segments(route.route_segments)
@@ -175,7 +171,6 @@ class Driver(MapActor):
         self.publish_event(DriverRejectedRoute(
             driver_id=self.driver_id,
             route_id=self.current_route.route_id,
-            distance=self.current_route.distance,
             time=self.now
         ))
         self.reject_route_segments(route.route_segments)
@@ -374,10 +369,61 @@ class Driver(MapActor):
         return order.customer.time_to_receive_order()
 
     def estimate_total_busy_time(self) -> Number:
-        return self.current_route.get_time_to_complete_route(self.coordinate, self.movement_rate) if self.current_route else 0
+        current_coordinate = self.coordinate
+        total_busy_time = 0
+
+        # 1 e 2. Segmento de Rota Atual e Rota Atual
+        if self.current_route:
+            # 1. Segmento de Rota Atual
+            if self.current_route_segment:
+                current_order = self.current_route_segment.order
+
+                # Se o segmento atual é de coleta, considera o tempo para pegar o pedido
+                if self.current_route_segment.is_pickup():
+                    total_busy_time += (
+                        current_order.estimated_ready_time - self.now
+                        if self.status == DriverStatus.PICKING_UP_WAITING
+                        else self.environment.map.estimated_time(current_coordinate, self.current_route_segment.coordinate, self.movement_rate)
+                    )
+                
+                # Se o segmento atual é de entrega, considera o tempo de entrega
+                elif self.current_route_segment.is_delivery():
+                    if self.status == DriverStatus.DELIVERING:
+                        total_busy_time += self.environment.map.estimated_time(current_coordinate, self.current_route_segment.coordinate, self.movement_rate)
+                    total_busy_time += current_order.estimated_time_to_costumer_receive_order
+
+                current_coordinate = self.current_route_segment.coordinate
+
+            # 2. Rota Atual
+            if self.current_route.route_segments:
+                total_busy_time += self.current_route.get_time_to_complete_route(current_coordinate, self.movement_rate)
+                current_coordinate = self.current_route.route_segments[-1].coordinate
+
+        # 3. Rotas Requisitadas mas não aceitas ainda
+        for route in self.route_requests:
+            total_busy_time += route.get_time_to_complete_route(current_coordinate, self.movement_rate)
+            current_coordinate = route.route_segments[-1].coordinate
+
+        return total_busy_time
 
     def calculate_total_distance_to_travel(self) -> Number:
-        return self.current_route.get_distance_to_complete_route(self.coordinate) if self.current_route else 0
+        current_coordinate = self.coordinate
+        total_distance = 0
+        if self.current_route:
+            
+            if self.current_route_segment:
+                total_distance += self.environment.map.distance(current_coordinate, self.current_route_segment.coordinate)
+                current_coordinate = self.current_route_segment.coordinate
+
+            if self.current_route.route_segments:
+                total_distance += self.current_route.get_distance_to_complete_route(current_coordinate)
+                current_coordinate = self.current_route.route_segments[-1].coordinate
+
+        for route in self.route_requests:
+            total_distance += route.get_distance_to_complete_route(current_coordinate)
+            current_coordinate = route.route_segments[-1].coordinate
+
+        return total_distance
     
     def estimate_time_to_complete_next_order(self, nextOrder: Order):
         #   Este método só é chamado pelo ambiente gymnasium no momento em que o ambiente simpy já avançou a ponto de ter um 
