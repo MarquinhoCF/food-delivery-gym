@@ -20,7 +20,10 @@ from food_delivery_gym.main.route.pickup_route_segment import PickupRouteSegment
 from food_delivery_gym.main.route.route import Route
 from food_delivery_gym.main.statistic.driver_idle_time_metric import DriverIdleTimeMetric
 from food_delivery_gym.main.statistic.driver_time_waiting_for_order_metric import DriverTimeWaitingForOrderMetric
+from food_delivery_gym.main.statistic.order_flow_metric import OrderFlowMetric
+from food_delivery_gym.main.statistic.order_pipeline_metric import OrderPipelineStatusMetric
 from food_delivery_gym.main.statistic.poisson_order_generation_metric import PoissonOrderGenerationMetric
+from food_delivery_gym.main.statistic.route_reordering_metric import RouteReorderingMetric
 from food_delivery_gym.main.statistic.summarized_data_board import SummarizedDataBoard
 from food_delivery_gym.main.statistic.driver_orders_delivered_metric import DriverOrdersDeliveredMetric
 from food_delivery_gym.main.statistic.driver_total_distance_metric import DriverTotalDistanceMetric
@@ -29,6 +32,7 @@ from food_delivery_gym.main.statistic.driver_time_spent_on_delivery import Drive
 from food_delivery_gym.main.statistic.establishment_max_orders_in_queue_metric import EstablishmentMaxOrdersInQueueMetric
 from food_delivery_gym.main.statistic.establishment_orders_fulfilled_metric import EstablishmentOrdersFulfilledMetric
 from food_delivery_gym.main.statistic.order_curve_metric import OrderCurveMetric
+from food_delivery_gym.main.statistic.summarized_total_mean_data_board import SummarizedTotalMeanDataBoard
 from food_delivery_gym.main.utils.random_manager import RandomManager
 from food_delivery_gym.main.view.grid_view_pygame import GridViewPygame
 
@@ -263,6 +267,8 @@ class FoodDeliveryGymEnv(Env):
     
     def set_mode(self, mode: EnvMode):
         self.env_mode = mode
+        if self.simpy_env is not None:
+            self.simpy_env.set_env_mode(mode)
     
     # Avança na simulação até que um evento principal ocorra ou que a simulação termine/trunque.
     def _advance_simulation_until_event(self):
@@ -272,7 +278,7 @@ class FoodDeliveryGymEnv(Env):
         
         while (not terminated) and (not truncated) and (core_event is None):
             if self.simpy_env.state.orders_delivered < self.num_orders:
-                self.simpy_env.step(self.env_mode, self.render_mode)
+                self.simpy_env.step(self.render_mode)
                 
                 # TODO: Logs
                 # # Verifica se um pedido foi entregue
@@ -348,6 +354,8 @@ class FoodDeliveryGymEnv(Env):
                 fps=fps
             ) if render_mode == "human" else None
         )
+
+        self.simpy_env.set_env_mode(self.env_mode)
 
         # Avança até o primeiro evento principal
         core_event, _, _ = self._advance_simulation_until_event()
@@ -506,22 +514,24 @@ class FoodDeliveryGymEnv(Env):
             save_figs = True
         
         custom_board = SummarizedDataBoard(metrics=[
-            PoissonOrderGenerationMetric(simpy_env),
-            EstablishmentOrdersFulfilledMetric(simpy_env),
-            EstablishmentMaxOrdersInQueueMetric(simpy_env),
-            EstablishmentActiveTimeMetric(simpy_env),
-            DriverTimeSpentOnDelivery(simpy_env),
-            DriverOrdersDeliveredMetric(simpy_env),
-            DriverTotalDistanceMetric(simpy_env),
-            DriverIdleTimeMetric(simpy_env),
-            DriverTimeWaitingForOrderMetric(simpy_env)
+            # PoissonOrderGenerationMetric(simpy_env),
+            # OrderFlowMetric(simpy_env),
+            # OrderPipelineStatusMetric(simpy_env),
+            RouteReorderingMetric(simpy_env),
+            # EstablishmentOrdersFulfilledMetric(simpy_env),
+            # EstablishmentMaxOrdersInQueueMetric(simpy_env),
+            # EstablishmentActiveTimeMetric(simpy_env),
+            # DriverTimeSpentOnDelivery(simpy_env),
+            # DriverOrdersDeliveredMetric(simpy_env),
+            # DriverTotalDistanceMetric(simpy_env),
+            # DriverIdleTimeMetric(simpy_env),
+            # DriverTimeWaitingForOrderMetric(simpy_env)
         ],
             num_drivers=self.num_drivers,
             num_establishments=self.num_establishments,
             sum_reward=sum_reward,
             save_figs=save_figs,
             dir_path=dir_path,
-            use_total_mean=False,
             use_tkinter=False
         )
         custom_board.view()
@@ -534,7 +544,7 @@ class FoodDeliveryGymEnv(Env):
         
         statistics = self.get_statistics()
 
-        custom_board = SummarizedDataBoard(metrics=[
+        custom_board = SummarizedTotalMeanDataBoard(metrics=[
             EstablishmentOrdersFulfilledMetric(self.simpy_env, establishments_statistics=statistics["establishments"]),
             EstablishmentMaxOrdersInQueueMetric(self.simpy_env, establishments_statistics=statistics["establishments"]),
             EstablishmentActiveTimeMetric(self.simpy_env, establishments_statistics=statistics["establishments"]),
@@ -549,7 +559,6 @@ class FoodDeliveryGymEnv(Env):
             sum_reward=sum_rewards_mean,
             save_figs=save_figs,
             dir_path=dir_path,
-            use_total_mean=True,
             use_tkinter=False
         )
         custom_board.view()

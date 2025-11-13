@@ -153,6 +153,8 @@ def main():
             optimizer.show_statistics_board()
         except Exception as e:
             print(f"Erro ao mostrar estatísticas: {e}")
+            import traceback
+            traceback.print_exc()
 
     except Exception as e:
         print(f"Erro durante execução: {e}")

@@ -26,11 +26,15 @@ class FoodDeliverySimpyEnv(Environment):
         self.generators = generators
         self.optimizer = optimizer
         self.view = view
+        self.env_mode = EnvMode.TRAINING
         self.last_time_step = 0
         self._state = DeliveryEnvState()
         self.init()
 
         self.core_events: List[Event] = []
+
+    def set_env_mode(self, mode: EnvMode):
+        self.env_mode = mode
 
     def add_core_event(self, event):
         self.core_events.append(event)
@@ -119,14 +123,14 @@ class FoodDeliverySimpyEnv(Environment):
         if self.view is not None and self.view.quited:
             self.view.quit()
 
-    def step(self, mode: EnvMode, render_mode=None):
+    def step(self, render_mode=None):
         super().step()
         if render_mode == "human" and self.view is not None:
             self.view.render(self)
             if self.view.quited:
                 self.view.quit()
         
-        if mode != EnvMode.TRAINING and self.last_time_step < self.now:
+        if self.env_mode != EnvMode.TRAINING and self.last_time_step < self.now:
             self.update_statistics_variables()
             self.last_time_step = self.now
 

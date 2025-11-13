@@ -11,7 +11,7 @@ from food_delivery_gym.main.statistic.board import Board
 from food_delivery_gym.main.statistic.metric import Metric
 
 
-class SummarizedDataBoard(Board):
+class SummarizedTotalMeanDataBoard(Board):
     image_counter = 0  # Variável estática para controlar o nome das imagens
 
     def __init__(
@@ -21,7 +21,7 @@ class SummarizedDataBoard(Board):
             num_establishments: int, 
             sum_reward: int, 
             save_figs: bool = False, 
-            dir_path: str = "./", 
+            dir_path: str = "./",
             use_tkinter: bool = False
         ):
         super().__init__(metrics)
@@ -39,12 +39,11 @@ class SummarizedDataBoard(Board):
 
     def get_next_image_name(self) -> str:
         """Gera um nome de arquivo único para evitar sobrescrições."""
-        SummarizedDataBoard.image_counter += 1
-        return f"run_{self.image_counter}_results_{self.sum_reward}_fig.png"
-        
+        return f"mean_results_{self.sum_reward}_fig.png"
+
     @staticmethod
     def reset_image_counter() -> None:
-        SummarizedDataBoard.image_counter = 0
+        SummarizedTotalMeanDataBoard.image_counter = 0
 
     def view(self) -> None:
         if self.use_tkinter:
@@ -94,16 +93,8 @@ class SummarizedDataBoard(Board):
         ax1 = fig.add_subplot(gs[0, :])
         self.metrics[0].view(ax1)
 
-        # Primeiro gráfico destacado
-        ax2 = fig.add_subplot(gs[1, :])
-        self.metrics[1].view(ax2)
-
-        # Primeiro gráfico destacado
-        ax3 = fig.add_subplot(gs[2, :])
-        self.metrics[2].view(ax3)
-
         # Gráficos restantes
-        for i, metric in enumerate(self.metrics[3:], start=3):
+        for i, metric in enumerate(self.metrics[1:], start=1):
             row = (i + 1) // 2
             col = (i - 1) % 2
 
@@ -122,37 +113,27 @@ class SummarizedDataBoard(Board):
         if self.save_figs:
             matplotlib.use("Agg")
 
-        num_metrics = len(self.metrics)
-        if num_metrics == 0:
-            return
-
         # Criar a figura Matplotlib
         fig_height = self._calculate_fig_height()
         fig = plt.figure(figsize=(12, fig_height))
+        gs = fig.add_gridspec(ceil((len(self.metrics) - 1) / 2) + 1, 2, hspace=0.9)
 
-        # Cálculo do número de linhas: 
-        # 3 primeiras métricas em linhas separadas + restante em grid 2xN
-        num_remaining = max(0, num_metrics - 3)
-        rows_remaining = ceil(num_remaining / 2)
-        total_rows = 3 + rows_remaining
+        # Distribuir todos os gráficos uniformemente
+        num_metrics = len(self.metrics)
+        rows = (num_metrics + 1) // 2  # Calcula quantas linhas são necessárias
 
-        gs = fig.add_gridspec(total_rows, 2, hspace=0.9)
+        for i, metric in enumerate(self.metrics):
+            row = i // 2
+            col = i % 2
 
-        # --- Primeiras métricas (destaque em linha completa) ---
-        for i in range(min(3, num_metrics)):
-            ax = fig.add_subplot(gs[i, :])
-            self.metrics[i].view(ax)
-
-        # --- Métricas restantes ---
-        for j, metric in enumerate(self.metrics[3:], start=0):
-            row = 3 + j // 2
-            col = j % 2
             ax = fig.add_subplot(gs[row, col])
             metric.view(ax)
-
-        # --- Salvamento ou exibição ---
+        
         if self.save_figs:
+            # Gerar nome de arquivo único e salvar imagem
             image_name = self.get_next_image_name()
             fig.savefig(self.dir_path + image_name, dpi=300, bbox_inches='tight')
         else:
+            # Mostrar gráficos
             plt.show()
+        
