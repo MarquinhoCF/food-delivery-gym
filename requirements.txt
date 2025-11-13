@@ -11,3 +11,4 @@ tensorflow
 tensorboard
 snakeviz
 openpyxl
+python-dotenv

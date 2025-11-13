@@ -2,6 +2,42 @@
   "version": "0.2.0",
   "configurations": [
     {
+        "name": "RandomDriver interactive Render",
+        "type": "python",
+        "request": "launch",
+        "module": "scripts.test_runner",
+        "args": ["--mode", "interactive", "--scenario", "medium.json", "--optimizer", "random", "--render"],
+        "console": "integratedTerminal",
+        "justMyCode": true
+    },
+    {
+        "name": "FirstDriver interactive Render",
+        "type": "python",
+        "request": "launch",
+        "module": "scripts.test_runner",
+        "args": ["--mode", "interactive", "--scenario", "medium.json", "--optimizer", "first", "--render"],
+        "console": "integratedTerminal",
+        "justMyCode": true
+    },
+    {
+        "name": "NearestDriver interactive Render",
+        "type": "python",
+        "request": "launch",
+        "module": "scripts.test_runner",
+        "args": ["--mode", "interactive", "--scenario", "medium.json", "--optimizer", "nearest", "--render"],
+        "console": "integratedTerminal",
+        "justMyCode": true
+    },
+    {
+        "name": "LowestCostDriver interactive Render",
+        "type": "python",
+        "request": "launch",
+        "module": "scripts.test_runner",
+        "args": ["--mode", "interactive", "--scenario", "medium.json", "--optimizer", "lowest", "--render"],
+        "console": "integratedTerminal",
+        "justMyCode": true
+    },
+    {
         "name": "Debug FoodDeliveryGymEnv (interactive)",
         "type": "python",
         "request": "launch",

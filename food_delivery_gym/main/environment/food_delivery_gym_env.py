@@ -258,7 +258,7 @@ class FoodDeliveryGymEnv(Env):
 
         return obs
        
-    def _get_info(self):
+    def get_info(self):
         return {'info': self.simpy_env.now}
     
     def set_mode(self, mode: EnvMode):
@@ -354,7 +354,7 @@ class FoodDeliveryGymEnv(Env):
         self.current_order: Order = core_event.order if core_event else None
 
         observation = self.get_observation()
-        info = self._get_info()
+        info = self.get_info()
 
         return observation, info
     
@@ -463,7 +463,7 @@ class FoodDeliveryGymEnv(Env):
 
             # assert self.observation_space.contains(observation), "A observação gerada não está contida no espaço de observação."
             
-            info = self._get_info()
+            info = self.get_info()
 
             reward = self._calculate_reward(terminated, truncated)
             # print(f"reward: {reward}")
