@@ -514,18 +514,18 @@ class FoodDeliveryGymEnv(Env):
             save_figs = True
         
         custom_board = SummarizedDataBoard(metrics=[
-            # PoissonOrderGenerationMetric(simpy_env),
-            # OrderFlowMetric(simpy_env),
-            # OrderPipelineStatusMetric(simpy_env),
+            PoissonOrderGenerationMetric(simpy_env),
+            OrderFlowMetric(simpy_env),
+            OrderPipelineStatusMetric(simpy_env),
             RouteReorderingMetric(simpy_env),
-            # EstablishmentOrdersFulfilledMetric(simpy_env),
-            # EstablishmentMaxOrdersInQueueMetric(simpy_env),
-            # EstablishmentActiveTimeMetric(simpy_env),
-            # DriverTimeSpentOnDelivery(simpy_env),
-            # DriverOrdersDeliveredMetric(simpy_env),
-            # DriverTotalDistanceMetric(simpy_env),
-            # DriverIdleTimeMetric(simpy_env),
-            # DriverTimeWaitingForOrderMetric(simpy_env)
+            EstablishmentOrdersFulfilledMetric(simpy_env),
+            EstablishmentMaxOrdersInQueueMetric(simpy_env),
+            EstablishmentActiveTimeMetric(simpy_env),
+            DriverTimeSpentOnDelivery(simpy_env),
+            DriverOrdersDeliveredMetric(simpy_env),
+            DriverTotalDistanceMetric(simpy_env),
+            DriverIdleTimeMetric(simpy_env),
+            DriverTimeWaitingForOrderMetric(simpy_env)
         ],
             num_drivers=self.num_drivers,
             num_establishments=self.num_establishments,

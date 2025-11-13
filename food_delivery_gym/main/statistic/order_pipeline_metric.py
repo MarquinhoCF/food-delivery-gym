@@ -134,7 +134,7 @@ class OrderPipelineStatusMetric(Metric):
         self.ax.set_xlabel('Time (minutes)', fontsize=11, fontweight='bold')
         self.ax.set_ylabel('Number of Orders', fontsize=11, fontweight='bold')
         self.ax.set_title(
-            'Order Status Distribution Over Time (Click legend to toggle)',
+            'Order Status Distribution Over Time',
             fontsize=12,
             fontweight='bold',
             pad=15
