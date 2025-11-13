@@ -12,6 +12,7 @@ from food_delivery_gym.main.events.driver_accepted_delivery import DriverAccepte
 from food_delivery_gym.main.events.driver_accepted_route import DriverAcceptedRoute
 from food_delivery_gym.main.events.driver_accepted_route_extension import DriverAcceptedRouteExtension
 from food_delivery_gym.main.events.driver_arrived_delivery_location import DriverArrivedDeliveryLocation
+from food_delivery_gym.main.events.driver_arrived_pick_up_location import DriverArrivedPickUpLocation
 from food_delivery_gym.main.events.driver_delivered_order import DriverDeliveredOrder
 from food_delivery_gym.main.events.driver_delivering_order import DriverDeliveringOrder
 from food_delivery_gym.main.events.driver_picked_up_order import DriverPickedUpOrder
@@ -154,23 +155,18 @@ class Driver(MapActor):
         self.accept_route_segments(route.route_segments)
 
     def sequential_processor(self) -> ProcessGenerator:
-        # Faz o motorista esperar o pedido estar pronto
-        if self.current_route_segment is not None and not self.current_route_segment.order.isReady:
-            self.status = DriverStatus.PICKING_UP_WAITING # TODO: Verificar se é necessário manter esse trecho de código
-            yield self.timeout(1)
-            self.process(self.sequential_processor())
-        # Processa a rota
-        elif self.current_route.has_next():
+        if self.current_route.has_next():
             route_segment = self.current_route.next()
             self.current_route_segment = route_segment
+
             if route_segment.is_pickup():
                 yield self.timeout(self.time_between_accept_and_start_picking_up())
                 self.process(self.picking_up(route_segment.order))
+
             if route_segment.is_delivery():
-                # TODO: Logs
-                # print(f"Driver {self.driver_id} retirou o pedido no estabelecimento {self.current_route.order.establishment.establishment_id} no tempo {self.now}")
                 yield self.timeout(self.time_between_picked_up_and_start_delivery())
                 self.process(self.delivering(route_segment.order))
+
         else:
             self.current_route = None
             self.current_route_segment = None
@@ -229,6 +225,18 @@ class Driver(MapActor):
 
         yield self.process(self.move_to(order.establishment.coordinate))
 
+        self.publish_event(DriverArrivedPickUpLocation(
+            order=order,
+            customer_id=order.customer.customer_id,
+            establishment_id=order.establishment.establishment_id,
+            driver_id=self.driver_id,
+            time=self.now
+        ))
+
+        while not order.isReady:
+            self.status = DriverStatus.PICKING_UP_WAITING
+            yield self.timeout(1)
+
         self.picked_up(order)
 
     def picked_up(self, order: Order) -> None:
@@ -240,6 +248,10 @@ class Driver(MapActor):
             time=self.now
         ))
         order.picked_up(self.now)
+
+        # TODO: Logs
+        print(f"Driver {self.driver_id} coletou o pedido no estabelecimento no tempo {self.now}")
+
         self.process(self.sequential_processor())
 
     def delivering(self, order: Order) -> ProcessGenerator:
