@@ -1,7 +1,7 @@
 {
     "order_generator": {
       "type": "non_homogeneous_poisson",
-      "total_orders": 576,
+      "estimated_num_orders": 576,
       "time_window": 960,
       "rate_function": "lambda t: 0.3115 + 0.9345 * (np.exp(-((t - 330)**2) / 7000) + np.exp(-((t - 630)**2) / 7000))"
     },

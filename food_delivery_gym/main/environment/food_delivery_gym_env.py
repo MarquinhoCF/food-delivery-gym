@@ -54,6 +54,7 @@ class FoodDeliveryGymEnv(Env):
 
         self.simpy_env = None # Ambiente de simulação será criado no reset
         self.last_simpy_env = None # Ambiente de simulação da execução anterior -> para fins de computação de estatísticas
+        self.orders_generated = None # Número de pedidos que o gerador de pedidos vai gerar
 
         # Definindo o objetivo da recompensa
         if reward_objective not in range(1, 11):
@@ -67,7 +68,7 @@ class FoodDeliveryGymEnv(Env):
             'drivers_coord': Box(low=0, high=self.grid_map_size - 1, shape=(self.num_drivers*2,), dtype=self.dtype_observation),
             'drivers_estimated_remaining_time': Box(low=0, high=self.max_time_step, shape=(self.num_drivers,), dtype=self.dtype_observation),
             'driver_status': Box(low=1, high=len(DriverStatus), shape=(self.num_drivers,), dtype=self.dtype_observation),
-            'drivers_queue_size': Box(low=0, high=self.num_orders, shape=(self.num_drivers,), dtype=self.dtype_observation),
+            'drivers_queue_size': Box(low=0, high=self.estimated_num_orders * 1.2, shape=(self.num_drivers,), dtype=self.dtype_observation),
             'drivers_velocity': Box(low=min(self.vel_drivers), high=max(self.vel_drivers), shape=(self.num_drivers,), dtype=self.dtype_observation),
 
             # --- Pedido Atual ---  
@@ -97,21 +98,21 @@ class FoodDeliveryGymEnv(Env):
         est = scenario["establishments"]
 
         # 1. Order Generator
-        required_og = ["type", "total_orders", "time_window"]
+        required_og = ["type", "estimated_num_orders", "time_window"]
         for k in required_og:
             if k not in og:
                 raise ValueError(f"Campo obrigatório ausente em 'order_generator': '{k}'")
         if og["type"] not in ["poisson", "non_homogeneous_poisson"]:
             raise ValueError("order_generator.type deve ser 'poisson' ou 'non_homogeneous_poisson'")
-        if not isinstance(og["total_orders"], int) or og["total_orders"] <= 0:
-            raise ValueError("order_generator.total_orders deve ser um inteiro positivo")
+        if not isinstance(og["estimated_num_orders"], int) or og["estimated_num_orders"] <= 0:
+            raise ValueError("order_generator.estimated_num_orders deve ser um inteiro positivo")
         if not isinstance(og["time_window"], (int, float)) or og["time_window"] <= 0:
             raise ValueError("order_generator.time_window deve ser positivo")
         if og["type"] == "non_homogeneous_poisson":
             if "rate_function" not in og:
                 raise ValueError("rate_function é obrigatório para 'non_homogeneous_poisson'")
         
-        self.num_orders = og["total_orders"]
+        self.estimated_num_orders = og["estimated_num_orders"]
         self.order_generator_config = scenario.get("order_generator", {})
 
         # 2. simpy_env
@@ -174,12 +175,12 @@ class FoodDeliveryGymEnv(Env):
     
     def _create_order_generator(self) -> PoissonOrderGenerator | NonHomogeneousPoissonOrderGenerator:
         generator_type = self.order_generator_config["type"]
-        total_orders = self.order_generator_config["total_orders"]
+        estimated_num_orders = self.order_generator_config["estimated_num_orders"]
         time_window = self.order_generator_config["time_window"]
         
         if generator_type == "poisson":
             return PoissonOrderGenerator(
-                total_orders=total_orders,
+                estimated_num_orders=estimated_num_orders,
                 time_window=time_window,
                 lambda_rate=self.order_generator_config.get("lambda_rate", None)
             )
@@ -189,7 +190,7 @@ class FoodDeliveryGymEnv(Env):
             rate_function = eval(rate_function_code) # Cria a função de taxa a partir do código
             
             return NonHomogeneousPoissonOrderGenerator(
-                total_orders=total_orders,
+                estimated_num_orders=estimated_num_orders,
                 time_window=time_window,
                 rate_function=rate_function,
                 max_rate=self.order_generator_config.get("max_rate", None)
@@ -277,7 +278,7 @@ class FoodDeliveryGymEnv(Env):
         core_event = None
         
         while (not terminated) and (not truncated) and (core_event is None):
-            if self.simpy_env.state.orders_delivered < self.num_orders:
+            if self.simpy_env.state.orders_delivered < self.orders_generated:
                 self.simpy_env.step(self.render_mode)
                 
                 # TODO: Logs
@@ -326,6 +327,9 @@ class FoodDeliveryGymEnv(Env):
 
         self.render_mode = render_mode
 
+        poisson_order_generator = self._create_order_generator()
+        self.orders_generated = poisson_order_generator.get_number_of_orders_generated()
+
         # Cria o ambiente SimPy
         self.simpy_env = FoodDeliverySimpyEnv(
             map=GridMap(self.grid_map_size),
@@ -344,7 +348,7 @@ class FoodDeliveryGymEnv(Env):
                     self.max_capacity,
                     self.reward_objective
                 ),
-                self._create_order_generator()
+                poisson_order_generator
             ],
             optimizer=None,
             view=GridViewPygame(
@@ -391,7 +395,7 @@ class FoodDeliveryGymEnv(Env):
             # Soma do tempo efetivo gasto por cada motorista
             reward = -sum(driver.get_penality_for_time_spent_for_delivery() for driver in self.simpy_env.state.drivers)
 
-            if truncated and self.simpy_env.state.orders_delivered < self.num_orders:
+            if truncated and self.simpy_env.state.orders_delivered < self.orders_generated:
                 # Se a simulação foi truncada e não foram entregues todos os pedidos, penaliza a recompensa
                 reward -= sum(driver.get_penality_for_late_orders() for driver in self.simpy_env.state.drivers)
         
@@ -400,9 +404,9 @@ class FoodDeliveryGymEnv(Env):
             # Distância percorrida desde a última recompensa para o motorista selecionado
             reward = -sum(driver.get_and_update_distance_traveled() for driver in self.simpy_env.state.drivers)
 
-            if truncated and self.simpy_env.state.orders_delivered < self.num_orders:
+            if truncated and self.simpy_env.state.orders_delivered < self.orders_generated:
                 # Se a simulação foi truncada e não foram entregues todos os pedidos, penaliza a recompensa
-                reward -= (self.num_orders - self.simpy_env.state.orders_delivered) * self.simpy_env.map.max_distance() * 2
+                reward -= (self.orders_generated - self.simpy_env.state.orders_delivered) * self.simpy_env.map.max_distance() * 2
 
         # Objetivo 5: Minimizar o tempo de entrega a partir da expectativa de tempo gasto com a entrega -> Recompensa negativa ao final do episódio
         elif self.reward_objective == 5:
@@ -430,7 +434,7 @@ class FoodDeliveryGymEnv(Env):
             # Soma do tempo efetivo gasto por cada motorista
             reward = -sum(driver.get_penality_for_time_spent_for_delivery() for driver in self.simpy_env.state.drivers)
 
-            if truncated and self.simpy_env.state.orders_delivered < self.num_orders:
+            if truncated and self.simpy_env.state.orders_delivered < self.orders_generated:
                 # Se a simulação foi truncada e não foram entregues todos os pedidos, penaliza a recompensa
                 reward -= sum(driver.get_penality_for_late_orders() for driver in self.simpy_env.state.drivers)
 
@@ -439,13 +443,13 @@ class FoodDeliveryGymEnv(Env):
             # Distância total percorrida por cada motorista
             reward = -sum(driver.get_and_update_distance_traveled() for driver in self.simpy_env.state.drivers)
 
-            if truncated and self.simpy_env.state.orders_delivered < self.num_orders:
+            if truncated and self.simpy_env.state.orders_delivered < self.orders_generated:
                 # Se a simulação foi truncada e não foram entregues todos os pedidos, penaliza a recompensa
-                reward -= (self.num_orders - self.simpy_env.state.orders_delivered) * self.simpy_env.map.max_distance() * 2
+                reward -= (self.orders_generated - self.simpy_env.state.orders_delivered) * self.simpy_env.map.max_distance() * 2
 
-        if (terminated or truncated) and (self.simpy_env.state.orders_delivered < self.num_orders):
+        if (terminated or truncated) and (self.simpy_env.state.orders_delivered < self.orders_generated):
             # Penaliza a recompensa se o episódio terminou ou foi truncado e não foram entregues todos os pedidos
-            reward -= (self.num_orders - self.simpy_env.state.orders_delivered) * 10000
+            reward -= (self.orders_generated - self.simpy_env.state.orders_delivered) * 10000
         
         return reward
         
@@ -575,6 +579,9 @@ class FoodDeliveryGymEnv(Env):
     def get_drivers(self):
         return self.simpy_env.get_drivers()
     
+    def get_num_orders_generated(self):
+        return self.orders_generated
+    
     def register_statistic_data(self):
         self.simpy_env.register_statistic_data()
 
@@ -638,13 +645,13 @@ class FoodDeliveryGymEnv(Env):
         # Parâmetros de geração de pedidos
         if self.order_generator_config["type"] == "poisson":
             descricao.append("- Geração de pedidos: Processo de Poisson Homogêneo")
-            descricao.append(f"  • {self.order_generator_config['total_orders']} pedidos por {self.order_generator_config['time_window']} minutos")
+            descricao.append(f"  • {self.order_generator_config['estimated_num_orders']} pedidos estimados em {self.order_generator_config['time_window']} minutos")
             if self.order_generator_config.get('lambda_rate', None) is not None:
                 descricao.append(f"  • Taxa λ: {self.order_generator_config['lambda_rate']} pedidos por minuto")
 
         elif self.order_generator_config["type"] == "non_homogeneous_poisson":
             descricao.append("- Geração de pedidos: Poisson Não Homogêneo")
-            descricao.append(f"  • {self.order_generator_config['total_orders']} pedidos por {self.order_generator_config['time_window']} minutos")
+            descricao.append(f"  • {self.order_generator_config['estimated_num_orders']} pedidos por {self.order_generator_config['time_window']} minutos")
             descricao.append(f"  • Função de taxa: {self.order_generator_config['rate_function']}")
             if self.order_generator_config.get("max_rate", None) is not None:
                 descricao.append(f"  • Taxa máxima: {self.order_generator_config['max_rate']} pedidos por minuto")
@@ -661,6 +668,5 @@ class FoodDeliveryGymEnv(Env):
         descricao.append(f"  • Tempo de preparo dos pedidos: entre {self.prepare_time[0]} e "f"{self.prepare_time[1]} minutos")
         descricao.append(f"  • Capacidade de produção: entre {self.production_capacity[0]} e "f"{self.production_capacity[1]} pedidos simultâneos")
         descricao.append(f"  • Porcentagem de conclusão do pedido para alocação do motorista: {self.percentage_allocation_driver}%")
-        
 
         return "\n".join(descricao)

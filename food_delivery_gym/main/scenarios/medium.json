@@ -1,7 +1,7 @@
 {
     "order_generator": {
       "type": "poisson",
-      "total_orders": 480,
+      "estimated_num_orders": 480,
       "time_window": 960
     },
     "simpy_env": {

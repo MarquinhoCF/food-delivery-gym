@@ -12,42 +12,46 @@ class PoissonOrderGenerator(Generator):
 
     Parameters
     ----------
-    total_orders : int
+    estimated_num_orders : int
         Número total de pedidos a serem gerados.
     time_window : float
         Janela de tempo total para geração dos pedidos (em minutos).
     lambda_rate : float, optional
         Taxa média de chegada (pedidos por unidade de tempo).
-        Se None, será calculada como total_orders / time_window.
+        Se None, será calculada como estimated_num_orders / time_window.
     """
 
-    def __init__(self, total_orders: int, time_window: float, lambda_rate: float = None):
+    def __init__(self, estimated_num_orders: int, time_window: float, lambda_rate: float = None):
         super().__init__()
 
-        if total_orders <= 0:
-            raise ValueError("total_orders deve ser maior que 0")
+        if estimated_num_orders <= 0:
+            raise ValueError("estimated_num_orders deve ser maior que 0")
         if time_window <= 0:
             raise ValueError("time_window deve ser maior que 0")
 
-        self.total_orders = total_orders
+        self.estimated_num_orders = estimated_num_orders
         self.time_window = time_window
-        self.lambda_rate = lambda_rate or (total_orders / time_window)
+        self.lambda_rate = lambda_rate or (estimated_num_orders / time_window)
 
         self.current_order_id = 1
-        self.orders_generated = 0
+
+        self.arrival_times = self.generate_arrival_times()
+
+    def get_number_of_orders_generated(self) -> int:
+        return len(self.arrival_times)
 
     # Geração de chegadas (Poisson homogêneo)
     def generate_arrival_times(self) -> list:
         arrival_times = []
         current_time = 0
 
-        while len(arrival_times) < self.total_orders and current_time < self.time_window:
+        while current_time < self.time_window:
             interarrival = self.rng.exponential(1.0 / self.lambda_rate)
             current_time += interarrival
             if current_time <= self.time_window:
                 arrival_times.append(current_time)
 
-        return arrival_times[:self.total_orders]
+        return arrival_times
 
     # Lógica de criação dos pedidos
     def process_establishment(self, env: FoodDeliverySimpyEnv, establishment):
@@ -75,31 +79,17 @@ class PoissonOrderGenerator(Generator):
         )
 
         self.current_order_id += 1
-        self.orders_generated += 1
 
         env.state.add_customers([customer])
         env.state.add_orders([order])
         customer.place_order(order, establishment)
 
     def generate(self, env: FoodDeliverySimpyEnv):
-        arrival_times = self.generate_arrival_times()
-
-        num_orders = 0
-        for arrival_time in arrival_times:
+        for arrival_time in self.arrival_times:
             wait_time = arrival_time - env.now
             if wait_time > 0:
                 yield env.timeout(wait_time)
 
-            if self.orders_generated >= self.total_orders:
-                break
-
             establishment = self.rng.choice(env.state.establishments, size=None)
             self.process_establishment(env, establishment)
-            num_orders += 1
-        
-        if num_orders < self.total_orders:
-            print(
-                f"Aviso: Apenas {num_orders} pedidos foram gerados em "
-                f"{self.time_window} minutos, menor que o total esperado de "
-                f"{self.total_orders} pedidos."
-            )
+            

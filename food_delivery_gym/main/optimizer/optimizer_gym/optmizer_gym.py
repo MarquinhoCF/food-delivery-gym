@@ -232,6 +232,7 @@ class OptimizerGym(Optimizer, ABC):
 
         total_rewards = []
         truncated_runs = []
+        num_orders_generated = []
         with open(file_path, "w", encoding="utf-8") as results_file:
             self.get_description(results_file, num_runs, seed)
             results_file.write("---> Registro de execuções:\n")
@@ -252,6 +253,7 @@ class OptimizerGym(Optimizer, ABC):
                         print(f"Aviso: Não foi possível mostrar o board de estatísticas: {e}")
                     
                     total_rewards.append(sum_reward)
+                    num_orders_generated.append(self._call_env_method('get_num_orders_generated'))
                     truncated_runs.append(was_truncated)
                     results_file.write(f"Execução {i + 1}: Soma das Recompensas = {sum_reward} (Passos: {resultado.get('steps', 'N/A')})\n")
 
@@ -336,6 +338,12 @@ class OptimizerGym(Optimizer, ABC):
                         total_distance_traveled_statistics = None
                         results_file.write("\n---> Estatísticas da Distância Percorrida:\n")
                         results_file.write("* NULO - Todas as execuções foram truncadas\n")
+
+                    results_file.write("\n---> Estatísticas do Número de Pedidos Gerados:\n")
+                    results_file.write(f"* Média: {stt.mean(num_orders_generated):.2f}\n")
+                    results_file.write(f"* Desvio Padrão: {stt.stdev(num_orders_generated):.2f}\n")
+                    results_file.write(f"* Mediana: {stt.median(num_orders_generated):.2f}\n")
+                    results_file.write(f"* Moda: {stt.mode(num_orders_generated):.2f}\n")
 
                     geral_statistics = self._call_env_method('get_statistics')
                     results_file.write(f"\n---> Estatísticas Finais:\n")
