@@ -1,4 +1,4 @@
-from collections import defaultdict
+from collections import Counter, defaultdict
 from statistics import mode
 from typing import List, Optional, Union
 
@@ -8,7 +8,6 @@ from simpy.core import SimTime
 
 from food_delivery_gym.main.environment.env_mode import EnvMode
 from food_delivery_gym.main.environment.delivery_env_state import DeliveryEnvState
-from food_delivery_gym.main.events.event_type import EventType
 from food_delivery_gym.main.map.map import Map
 from food_delivery_gym.main.order.delivery_rejection import DeliveryRejection
 from food_delivery_gym.main.view.food_delivery_view import FoodDeliveryView
@@ -159,63 +158,84 @@ class FoodDeliverySimpyEnv(Environment):
 
     def register_statistic_data(self):
         for establishment in self._state.establishments:
-            id = establishment.establishment_id
-            FoodDeliverySimpyEnv.establishment_metrics[id]["orders_fulfilled"].append(establishment.orders_fulfilled)
-            FoodDeliverySimpyEnv.establishment_metrics[id]["idle_time"].append(establishment.idle_time)
-            FoodDeliverySimpyEnv.establishment_metrics[id]["active_time"].append(establishment.active_time)
-            FoodDeliverySimpyEnv.establishment_metrics[id]["max_orders_in_queue"].append(establishment.max_orders_in_queue)
+            establishment.register_statistic_data()
 
         for driver in self._state.drivers:
-            id = driver.driver_id
-            FoodDeliverySimpyEnv.driver_metrics[id]["orders_delivered"].append(driver.orders_delivered)
-            FoodDeliverySimpyEnv.driver_metrics[id]["time_spent_on_delivery"].append(driver.get_time_spent_on_delivery())
-            FoodDeliverySimpyEnv.driver_metrics[id]["idle_time"].append(driver.idle_time)
-            FoodDeliverySimpyEnv.driver_metrics[id]["time_waiting_for_order"].append(driver.time_waiting_for_order)
-            FoodDeliverySimpyEnv.driver_metrics[id]["total_distance"].append(driver.total_distance)
+            driver.register_statistic_data()
 
     def get_statistics_data(self):
         return FoodDeliverySimpyEnv.establishment_metrics, FoodDeliverySimpyEnv.driver_metrics
 
     def reset_statistics(self):
         for establishment in self._state.establishments:
-            id = establishment.establishment_id
-            FoodDeliverySimpyEnv.establishment_metrics[id]["orders_fulfilled"].clear()
-            FoodDeliverySimpyEnv.establishment_metrics[id]["idle_time"].clear()
-            FoodDeliverySimpyEnv.establishment_metrics[id]["active_time"].clear()
-            FoodDeliverySimpyEnv.establishment_metrics[id]["max_orders_in_queue"].clear()
+            establishment.reset_statistics()
 
         for driver in self._state.drivers:
-            id = driver.driver_id
-            FoodDeliverySimpyEnv.driver_metrics[id]["orders_delivered"].clear()
-            FoodDeliverySimpyEnv.driver_metrics[id]["time_spent_on_delivery"].clear()
-            FoodDeliverySimpyEnv.driver_metrics[id]["idle_time"].clear()
-            FoodDeliverySimpyEnv.driver_metrics[id]["time_waiting_for_order"].clear()
-            FoodDeliverySimpyEnv.driver_metrics[id]["total_distance"].clear()
+            driver.reset_statistics()
 
 
     def compute_statistics(self):
-        """Calcula média, desvio padrão, mediana e moda para os dados coletados."""
+        statistics = {"establishments": {}, "drivers": {}}
 
-        def calculate_stats(values):
-            return {
-                "mean": np.mean(values) if values else 0,
-                "std_dev": np.std(values) if len(values) > 1 else 0,
-                "median": np.median(values) if values else 0,
-                "mode": mode(values) if values else 0
+        # Establishments
+        for id, metrics in FoodDeliverySimpyEnv.establishment_metrics.items():
+            statistics["establishments"][id] = {
+                key: self.calculate_stats_generic(values)
+                for key, values in metrics.items()
             }
 
-        statistics = {
-            "establishments": {},
-            "drivers": {}
-        }
-
-        for id, metrics in FoodDeliverySimpyEnv.establishment_metrics.items():
-            statistics["establishments"][id] = {key: calculate_stats(values) for key, values in metrics.items()}
-
+        # Drivers
         for id, metrics in FoodDeliverySimpyEnv.driver_metrics.items():
-            statistics["drivers"][id] = {key: calculate_stats(values) for key, values in metrics.items()}
+            statistics["drivers"][id] = {
+                key: self.calculate_stats_generic(values)
+                for key, values in metrics.items()
+            }
 
         return statistics
+    
+    def calculate_stats_generic(self, values):
+        """
+        Calcula estatísticas de forma genérica:
+        - Lista de números → calcula diretamente
+        - Lista de dicts → calcula por campo interno
+        - Qualquer outra coisa → ignora e retorna {}
+        """
+
+        if not values:
+            return {}
+
+        # Caso 1: lista de números (int/float)
+        if all(isinstance(v, (int, float, np.number)) for v in values):
+
+            def compute_mode(vs):
+                if len(vs) == 1:
+                    return vs[0]
+                counter = Counter(vs)
+                return counter.most_common(1)[0][0]
+
+            return {
+                "mean": float(np.mean(values)),
+                "std_dev": float(np.std(values)) if len(values) > 1 else 0.0,
+                "median": float(np.median(values)),
+                "mode": compute_mode(values),
+            }
+
+        # Caso 2: lista de dicts → achatar por chave
+        if all(isinstance(v, dict) for v in values):
+            grouped = {}
+
+            for item in values:
+                for key, val in item.items():
+                    if isinstance(val, (int, float, np.number)):
+                        grouped.setdefault(key, []).append(val)
+
+            if not grouped:
+                return {}
+
+            return {k: self.calculate_stats_generic(vs) for k, vs in grouped.items()}
+
+        # Caso 3: tipos misturados → ignora
+        return {}
     
     def save_metrics_to_file(self, filename="metrics_data.npz"):
         np.savez_compressed(

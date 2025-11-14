@@ -353,6 +353,8 @@ class OptimizerGym(Optimizer, ABC):
                 except Exception as e:
                     print(f"Aviso: Erro ao processar estatísticas finais: {e}")
                     results_file.write(f"\n---> Erro ao processar estatísticas finais: {e}\n")
+                    import traceback
+                    traceback.print_exc()
         
         print(f"Resultados salvos em " + file_path)
 

@@ -516,7 +516,7 @@ class FoodDeliveryGymEnv(Env):
         custom_board = SummarizedDataBoard(metrics=[
             PoissonOrderGenerationMetric(simpy_env),
             OrderFlowMetric(simpy_env),
-            OrderPipelineStatusMetric(simpy_env),
+            #OrderPipelineStatusMetric(simpy_env),
             RouteReorderingMetric(simpy_env),
             EstablishmentOrdersFulfilledMetric(simpy_env),
             EstablishmentMaxOrdersInQueueMetric(simpy_env),
@@ -531,8 +531,7 @@ class FoodDeliveryGymEnv(Env):
             num_establishments=self.num_establishments,
             sum_reward=sum_reward,
             save_figs=save_figs,
-            dir_path=dir_path,
-            use_tkinter=False
+            dir_path=dir_path
         )
         custom_board.view()
     
@@ -545,6 +544,7 @@ class FoodDeliveryGymEnv(Env):
         statistics = self.get_statistics()
 
         custom_board = SummarizedTotalMeanDataBoard(metrics=[
+            RouteReorderingMetric(self.simpy_env, drivers_statistics=statistics["drivers"]),
             EstablishmentOrdersFulfilledMetric(self.simpy_env, establishments_statistics=statistics["establishments"]),
             EstablishmentMaxOrdersInQueueMetric(self.simpy_env, establishments_statistics=statistics["establishments"]),
             EstablishmentActiveTimeMetric(self.simpy_env, establishments_statistics=statistics["establishments"]),
@@ -558,8 +558,7 @@ class FoodDeliveryGymEnv(Env):
             num_establishments=self.num_establishments,
             sum_reward=sum_rewards_mean,
             save_figs=save_figs,
-            dir_path=dir_path,
-            use_tkinter=False
+            dir_path=dir_path
         )
         custom_board.view()
 
@@ -624,21 +623,44 @@ class FoodDeliveryGymEnv(Env):
     
     def get_description(self):
         descricao = []
-        
-        descricao.append(f"Número de motoristas: {self.num_drivers}")
-        descricao.append(f"Número de estabelecimentos: {self.num_establishments}")
-        descricao.append(f"Número de pedidos: {self.num_orders}")
-        descricao.append(f"Número de clientes: {self.num_orders}")
-        descricao.append(f"Tamanho do grid do mapa: {self.grid_map_size}")
-        descricao.append(f"Objetivo da recompensa: {self.reward_objective}")
-        descricao.append(f"Max Time Step: {self.max_time_step}")
 
-        descricao.append(f"Geração de clientes e pedidos: {self.lambda_code} de {self.time_shift} em {self.time_shift} minutos")
-        descricao.append(f"Porcentagem de alocação de motoristas: {self.percentage_allocation_driver}")
+        descricao.append("=== Configuração do Ambiente de Entrega ===")
 
-        descricao.append(f"Velocidade dos motorista entre: {self.vel_drivers[0]} e {self.vel_drivers[1]}")
-        descricao.append(f"Tempo de preparo dos pedidos entre: {self.prepare_time[0]} e {self.prepare_time[1]} minutos")
-        descricao.append(f"Raio de operação dos estabelecimentos: {self.operating_radius[0]} e {self.operating_radius[1]}")
-        descricao.append(f"Capacidade de produção dos estabelecimentos: {self.production_capacity[0]} e {self.production_capacity[1]}")
+        # Dimensões fundamentais
+        descricao.append(f"- Número de motoristas: {self.num_drivers}")
+        descricao.append(f"- Número de estabelecimentos: {self.num_establishments}")
+        descricao.append(f"- Tamanho do grid do mapa: {self.grid_map_size}x{self.grid_map_size}")
+
+        # Parâmetros operacionais
+        descricao.append(f"- Objetivo da função de recompensa: {self.reward_objective}")
+        descricao.append(f"- Tempo máximo de simulação (max_time_step): {self.max_time_step} minutos")
+
+        # Parâmetros de geração de pedidos
+        if self.order_generator_config["type"] == "poisson":
+            descricao.append("- Geração de pedidos: Processo de Poisson Homogêneo")
+            descricao.append(f"  • {self.order_generator_config['total_orders']} pedidos por {self.order_generator_config['time_window']} minutos")
+            if self.order_generator_config.get('lambda_rate', None) is not None:
+                descricao.append(f"  • Taxa λ: {self.order_generator_config['lambda_rate']} pedidos por minuto")
+
+        elif self.order_generator_config["type"] == "non_homogeneous_poisson":
+            descricao.append("- Geração de pedidos: Poisson Não Homogêneo")
+            descricao.append(f"  • {self.order_generator_config['total_orders']} pedidos por {self.order_generator_config['time_window']} minutos")
+            descricao.append(f"  • Função de taxa: {self.order_generator_config['rate_function']}")
+            if self.order_generator_config.get("max_rate", None) is not None:
+                descricao.append(f"  • Taxa máxima: {self.order_generator_config['max_rate']} pedidos por minuto")
+            
+        # Parâmetros dos motoristas
+        descricao.append("- Motoristas:")
+        descricao.append(f"  • Velocidade dos motoristas: entre {self.vel_drivers[0]} e {self.vel_drivers[1]} unidades/min")
+        descricao.append(f"  • Tolerância de piora de tempo de entrega (%): {self.tolerance_percentage}%")
+        descricao.append(f"  • Capacidade máxima: {self.max_capacity}")
+
+        # Parâmetros dos estabelecimentos
+        descricao.append("- Estabelecimentos:")
+        descricao.append(f"  • Raio de operação: entre {self.operating_radius[0]} e {self.operating_radius[1]} unidades")
+        descricao.append(f"  • Tempo de preparo dos pedidos: entre {self.prepare_time[0]} e "f"{self.prepare_time[1]} minutos")
+        descricao.append(f"  • Capacidade de produção: entre {self.production_capacity[0]} e "f"{self.production_capacity[1]} pedidos simultâneos")
+        descricao.append(f"  • Porcentagem de conclusão do pedido para alocação do motorista: {self.percentage_allocation_driver}%")
         
+
         return "\n".join(descricao)

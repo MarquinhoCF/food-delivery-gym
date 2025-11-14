@@ -245,7 +245,7 @@ class Driver(MapActor):
         order.picked_up(self.now)
 
         # TODO: Logs
-        print(f"Driver {self.driver_id} coletou o pedido no estabelecimento no tempo {self.now}")
+        # print(f"Driver {self.driver_id} coletou o pedido no estabelecimento no tempo {self.now}")
 
         self.process(self.sequential_processor())
 
@@ -318,7 +318,7 @@ class Driver(MapActor):
                 break
 
         # TODO: Logs
-        print(f"Driver {self.driver_id} entregou o pedido ao cliente no tempo {self.now}")
+        # print(f"Driver {self.driver_id} entregou o pedido ao cliente no tempo {self.now}")
 
     def move_to(self, destination: Coordinate) -> ProcessGenerator:
         while self.coordinate != destination:
@@ -527,3 +527,19 @@ class Driver(MapActor):
     def get_time_spent_on_delivery(self) -> Number:
         self.get_penality_for_time_spent_for_delivery()
         return self.total_penalty_for_time_spent
+    
+    def register_statistic_data(self):
+        id = self.driver_id
+        FoodDeliverySimpyEnv.driver_metrics[id]["orders_delivered"].append(self.orders_delivered)
+        FoodDeliverySimpyEnv.driver_metrics[id]["time_spent_on_delivery"].append(self.get_time_spent_on_delivery())
+        FoodDeliverySimpyEnv.driver_metrics[id]["idle_time"].append(self.idle_time)
+        FoodDeliverySimpyEnv.driver_metrics[id]["time_waiting_for_order"].append(self.time_waiting_for_order)
+        FoodDeliverySimpyEnv.driver_metrics[id]["total_distance"].append(self.total_distance)
+
+    def reset_statistics(self):
+        id = self.driver_id
+        FoodDeliverySimpyEnv.driver_metrics[id]["orders_delivered"].clear()
+        FoodDeliverySimpyEnv.driver_metrics[id]["time_spent_on_delivery"].clear()
+        FoodDeliverySimpyEnv.driver_metrics[id]["idle_time"].clear()
+        FoodDeliverySimpyEnv.driver_metrics[id]["time_waiting_for_order"].clear()
+        FoodDeliverySimpyEnv.driver_metrics[id]["total_distance"].clear()

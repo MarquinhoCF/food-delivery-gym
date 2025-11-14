@@ -90,6 +90,14 @@
       "args": ["--help"],
       "console": "integratedTerminal",
       "justMyCode": true
+    },
+    {
+        "name": "Run Optimizer",
+        "type": "python",
+        "request": "launch",
+        "module": "scripts.run_optimizer",
+        "console": "integratedTerminal",
+        "justMyCode": true
     }
   ]
 }

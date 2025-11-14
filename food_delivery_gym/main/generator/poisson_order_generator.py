@@ -84,6 +84,7 @@ class PoissonOrderGenerator(Generator):
     def generate(self, env: FoodDeliverySimpyEnv):
         arrival_times = self.generate_arrival_times()
 
+        num_orders = 0
         for arrival_time in arrival_times:
             wait_time = arrival_time - env.now
             if wait_time > 0:
@@ -94,3 +95,11 @@ class PoissonOrderGenerator(Generator):
 
             establishment = self.rng.choice(env.state.establishments, size=None)
             self.process_establishment(env, establishment)
+            num_orders += 1
+        
+        if num_orders < self.total_orders:
+            print(
+                f"Aviso: Apenas {num_orders} pedidos foram gerados em "
+                f"{self.time_window} minutos, menor que o total esperado de "
+                f"{self.total_orders} pedidos."
+            )

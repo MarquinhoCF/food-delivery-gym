@@ -16,77 +16,73 @@ class RouteReorderingMetric(Metric):
             self._view_current_simulation(ax)
     
     def _view_with_statistics(self, ax):
-        raise NotImplementedError("Visualização com estatísticas agregadas ainda não implementada.")
 
-        # TODO: Implementar salvamento das informações de reordenação posteriormente...
-
-        # """Visualiza estatísticas agregadas de múltiplas simulações"""
-        # driver_ids = list(self.drivers_statistics.keys())
+        driver_ids = list(self.drivers_statistics.keys())
         
-        # # Extrai dados estatísticos
-        # total_reorderings_mean = [
-        #     self.drivers_statistics[d]['reordering']['total_reorderings']['mean'] 
-        #     for d in driver_ids
-        # ]
-        # net_impact_mean = [
-        #     self.drivers_statistics[d]['reordering']['net_time_impact']['mean'] 
-        #     for d in driver_ids
-        # ]
-        # net_distance_mean = [
-        #     self.drivers_statistics[d]['reordering']['net_distance_impact']['mean'] 
-        #     for d in driver_ids
-        # ]
-        # success_rate_mean = [
-        #     self.drivers_statistics[d]['reordering']['success_rate']['mean'] 
-        #     for d in driver_ids
-        # ]
+        # Extrai dados estatísticos
+        total_reorderings_mean = [
+            self.drivers_statistics[d]['reordering']['total_reorderings']['mean'] 
+            for d in driver_ids
+        ]
+        net_impact_mean = [
+            self.drivers_statistics[d]['reordering']['net_time_impact']['mean'] 
+            for d in driver_ids
+        ]
+        net_distance_mean = [
+            self.drivers_statistics[d]['reordering']['net_distance_impact']['mean'] 
+            for d in driver_ids
+        ]
+        success_rate_mean = [
+            self.drivers_statistics[d]['reordering']['success_rate']['mean'] 
+            for d in driver_ids
+        ]
         
-        # # Cria subplots em grid 2x2
-        # fig = ax.get_figure()
-        # ax.clear()
-        # gs = fig.add_gridspec(2, 2, hspace=0.35, wspace=0.35)
+        # Cria subplots em grid 2x2
+        fig = ax.get_figure()
+        ax.clear()
+        gs = fig.add_gridspec(2, 2, hspace=1.2, wspace=1.2)
         
-        # ax1 = fig.add_subplot(gs[0, 0])
-        # ax2 = fig.add_subplot(gs[0, 1])
-        # ax3 = fig.add_subplot(gs[1, 0])
-        # ax4 = fig.add_subplot(gs[1, 1])
+        ax1 = fig.add_subplot(gs[0, 0])
+        ax2 = fig.add_subplot(gs[0, 1])
+        ax3 = fig.add_subplot(gs[1, 0])
+        ax4 = fig.add_subplot(gs[1, 1])
         
-        # # Gráfico 1: Total de reordenações
-        # colors = ['green' if impact > 0 else 'red' for impact in net_impact_mean]
-        # ax1.bar(driver_ids, total_reorderings_mean, color=colors, alpha=0.7, edgecolor='black')
-        # ax1.set_xlabel('Motoristas', fontsize=10, fontweight='bold')
-        # ax1.set_ylabel('Número de Reordenações', fontsize=10, fontweight='bold')
-        # ax1.set_title('Total de Reordenações por Motorista', fontsize=11, fontweight='bold')
-        # ax1.grid(True, alpha=0.3)
+        # Gráfico 1: Total de reordenações
+        colors = ['green' if impact > 0 else 'red' for impact in net_impact_mean]
+        ax1.bar(driver_ids, total_reorderings_mean, color=colors, alpha=0.7, edgecolor='black')
+        ax1.set_xlabel('Motoristas', fontsize=10, fontweight='bold')
+        ax1.set_ylabel('Número de Reordenações', fontsize=10, fontweight='bold')
+        ax1.set_title('Total de Reordenações por Motorista', fontsize=11, fontweight='bold')
+        ax1.grid(True, alpha=0.3)
         
-        # # Gráfico 2: Impacto líquido em tempo
-        # colors_impact = ['green' if x > 0 else 'red' for x in net_impact_mean]
-        # ax2.barh(driver_ids, net_impact_mean, color=colors_impact, alpha=0.7, edgecolor='black')
-        # ax2.axvline(x=0, color='black', linestyle='--', linewidth=1)
-        # ax2.set_ylabel('Motoristas', fontsize=10, fontweight='bold')
-        # ax2.set_xlabel('Tempo Economizado (+) / Perdido (-)', fontsize=9, fontweight='bold')
-        # ax2.set_title('Impacto em Tempo', fontsize=11, fontweight='bold')
-        # ax2.grid(True, alpha=0.3)
+        # Gráfico 2: Impacto líquido em tempo
+        colors_impact = ['green' if x > 0 else 'red' for x in net_impact_mean]
+        ax2.barh(driver_ids, net_impact_mean, color=colors_impact, alpha=0.7, edgecolor='black')
+        ax2.axvline(x=0, color='black', linestyle='--', linewidth=1)
+        ax2.set_ylabel('Motoristas', fontsize=10, fontweight='bold')
+        ax2.set_xlabel('Tempo Economizado (+) / Perdido (-)', fontsize=9, fontweight='bold')
+        ax2.set_title('Impacto em Tempo', fontsize=11, fontweight='bold')
+        ax2.grid(True, alpha=0.3)
         
-        # # Gráfico 3: Impacto líquido em distância
-        # colors_distance = ['blue' if x > 0 else 'orange' for x in net_distance_mean]
-        # ax3.barh(driver_ids, net_distance_mean, color=colors_distance, alpha=0.7, edgecolor='black')
-        # ax3.axvline(x=0, color='black', linestyle='--', linewidth=1)
-        # ax3.set_ylabel('Motoristas', fontsize=10, fontweight='bold')
-        # ax3.set_xlabel('Distância Economizada (+) / Aumentada (-)', fontsize=9, fontweight='bold')
-        # ax3.set_title('Impacto em Distância', fontsize=11, fontweight='bold')
-        # ax3.grid(True, alpha=0.3)
+        # Gráfico 3: Impacto líquido em distância
+        colors_distance = ['blue' if x > 0 else 'orange' for x in net_distance_mean]
+        ax3.barh(driver_ids, net_distance_mean, color=colors_distance, alpha=0.7, edgecolor='black')
+        ax3.axvline(x=0, color='black', linestyle='--', linewidth=1)
+        ax3.set_ylabel('Motoristas', fontsize=10, fontweight='bold')
+        ax3.set_xlabel('Distância Economizada (+) / Aumentada (-)', fontsize=9, fontweight='bold')
+        ax3.set_title('Impacto em Distância', fontsize=11, fontweight='bold')
+        ax3.grid(True, alpha=0.3)
         
-        # # Gráfico 4: Taxa de sucesso
-        # ax4.bar(driver_ids, success_rate_mean, color='skyblue', alpha=0.7, edgecolor='black')
-        # ax4.set_xlabel('Motoristas', fontsize=10, fontweight='bold')
-        # ax4.set_ylabel('Taxa de Sucesso (%)', fontsize=10, fontweight='bold')
-        # ax4.set_title('Taxa de Sucesso das Reordenações', fontsize=11, fontweight='bold')
-        # ax4.set_ylim(0, 100)
-        # ax4.grid(True, alpha=0.3)
+        # Gráfico 4: Taxa de sucesso
+        ax4.bar(driver_ids, success_rate_mean, color='skyblue', alpha=0.7, edgecolor='black')
+        ax4.set_xlabel('Motoristas', fontsize=10, fontweight='bold')
+        ax4.set_ylabel('Taxa de Sucesso (%)', fontsize=10, fontweight='bold')
+        ax4.set_title('Taxa de Sucesso das Reordenações', fontsize=11, fontweight='bold')
+        ax4.set_ylim(0, 100)
+        ax4.grid(True, alpha=0.3)
         
-        # # Remove o eixo original
-        # ax.axis('off')
+        # Remove o eixo original
+        ax.axis('off')
     
     def _view_current_simulation(self, ax):
         """Visualiza dados da simulação atual"""
@@ -118,7 +114,7 @@ class RouteReorderingMetric(Metric):
         # Cria visualização com múltiplos gráficos (2x2)
         fig = ax.get_figure()
         ax.clear()
-        gs = fig.add_gridspec(2, 2, hspace=0.4, wspace=0.4)
+        gs = fig.add_gridspec(2, 2, hspace=1.2, wspace=1.2)
         
         ax1 = fig.add_subplot(gs[0, 0])
         ax2 = fig.add_subplot(gs[0, 1])
@@ -195,20 +191,20 @@ class RouteReorderingMetric(Metric):
         # Remove o eixo original
         ax.axis('off')
         
-        # Imprime resumo no console
-        print("\n" + "="*70)
-        print("ESTATÍSTICAS DE REORDENAÇÃO DE ROTAS")
-        print("="*70)
-        for d_id, stat in zip(driver_ids, stats):
-            print(f"\nMotorista {int(d_id)}:")
-            print(f"  Total de reordenações: {stat['total_reorderings']}")
-            print(f"  Bem-sucedidas: {stat['successful_reorderings']}")
-            print(f"  Falhas: {stat['failed_reorderings']}")
-            print(f"  Taxa de sucesso: {stat['success_rate']:.1f}%")
-            print(f"  Tempo total economizado: {stat['total_time_saved']:.2f}")
-            print(f"  Tempo total perdido: {stat['total_time_lost']:.2f}")
-            print(f"  Impacto líquido em tempo: {stat['net_time_impact']:.2f}")
-            print(f"  Distância total economizada: {stat['total_distance_saved']:.2f}")
-            print(f"  Distância total aumentada: {stat['total_distance_increased']:.2f}")
-            print(f"  Impacto líquido em distância: {stat['net_distance_impact']:.2f}")
-        print("="*70 + "\n")
+        # # Imprime resumo no console
+        # print("\n" + "="*70)
+        # print("ESTATÍSTICAS DE REORDENAÇÃO DE ROTAS")
+        # print("="*70)
+        # for d_id, stat in zip(driver_ids, stats):
+        #     print(f"\nMotorista {int(d_id)}:")
+        #     print(f"  Total de reordenações: {stat['total_reorderings']}")
+        #     print(f"  Bem-sucedidas: {stat['successful_reorderings']}")
+        #     print(f"  Falhas: {stat['failed_reorderings']}")
+        #     print(f"  Taxa de sucesso: {stat['success_rate']:.1f}%")
+        #     print(f"  Tempo total economizado: {stat['total_time_saved']:.2f}")
+        #     print(f"  Tempo total perdido: {stat['total_time_lost']:.2f}")
+        #     print(f"  Impacto líquido em tempo: {stat['net_time_impact']:.2f}")
+        #     print(f"  Distância total economizada: {stat['total_distance_saved']:.2f}")
+        #     print(f"  Distância total aumentada: {stat['total_distance_increased']:.2f}")
+        #     print(f"  Impacto líquido em distância: {stat['net_distance_impact']:.2f}")
+        # print("="*70 + "\n")
