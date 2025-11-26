@@ -38,7 +38,7 @@ class Route:
             return self.route_segments[0].order
         return None
     
-    def insert_segment_before_first_segment_by_id(self, route_segment_id: int):
+    def move_segment_to_front_by_id(self, route_segment_id: int):
         segment = self.find_route_segment_by_id(route_segment_id)
         self.route_segments.remove(segment)
         self.route_segments.insert(0, segment)

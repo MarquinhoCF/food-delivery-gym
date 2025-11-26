@@ -7,6 +7,7 @@ from food_delivery_gym.main.environment.env_mode import EnvMode
 from food_delivery_gym.main.environment.food_delivery_simpy_env import FoodDeliverySimpyEnv
 from food_delivery_gym.main.events.driver_picked_up_order import DriverPickedUpOrder
 from food_delivery_gym.main.order.order import Order
+from food_delivery_gym.main.route.route_segment_type import RouteSegmentType
 
 @dataclass
 class TimeWindow:
@@ -22,8 +23,8 @@ class ReorderingEvent:
     order_id: Number
     estimated_time_saved: Number  # Positivo = tempo economizado, Negativo = tempo perdido
     estimated_distance_saved: Number  # Positivo = distância economizada, Negativo = distância aumentada
-    location: str  # 'pickup' ou 'delivery'
-
+    route_segment_type: RouteSegmentType
+    
 class DynamicRouteDriver(Driver):
     def __init__(
         self,
@@ -93,11 +94,11 @@ class DynamicRouteDriver(Driver):
             if self._can_collect_next_respecting_windows(next_order, collected_orders):
                 # Calcula o impacto estimado da reordenação
                 if self.environment.env_mode != EnvMode.TRAINING:
-                    time_impact, distance_impact = self._calculate_reordering_impact(next_order, collected_orders, 'pickup')
-                    self._record_reordering_event(next_order.order_id, time_impact, distance_impact, 'pickup')
+                    time_impact, distance_impact = self._calculate_reordering_impact(next_order, collected_orders, RouteSegmentType.PICKUP)
+                    self._record_reordering_event(next_order.order_id, time_impact, distance_impact, RouteSegmentType.PICKUP)
 
                 # Insere o segmento de rota do próximo pedido antes do segmento atual
-                self.current_route.insert_segment_before_first_segment_by_id(next_order.pick_up_route_segment_id)
+                self.current_route.move_segment_to_front_by_id(next_order.pick_up_route_segment_id)
                
         self.process(self.sequential_processor())
 
@@ -142,7 +143,7 @@ class DynamicRouteDriver(Driver):
         
         return True
     
-    def _calculate_reordering_impact(self, next_order: Order, collected_orders: List[Order], location: str) -> tuple[Number, Number]:
+    def _calculate_reordering_impact(self, next_order: Order, collected_orders: List[Order], route_segment_type: RouteSegmentType) -> tuple[Number, Number]:
         time_without_reordering = 0
         distance_without_reordering = 0
         position = self.coordinate
@@ -173,13 +174,13 @@ class DynamicRouteDriver(Driver):
         
         return time_saved, distance_saved
     
-    def _record_reordering_event(self, order_id: Number, time_impact: Number, distance_impact: Number, location: str) -> None:
+    def _record_reordering_event(self, order_id: Number, time_impact: Number, distance_impact: Number, route_segment_type: RouteSegmentType) -> None:
         event = ReorderingEvent(
             time=self.now,
             order_id=order_id,
             estimated_time_saved=time_impact,
             estimated_distance_saved=distance_impact,
-            location=location
+            route_segment_type=route_segment_type
         )
         
         self.reordering_events.append(event)
@@ -207,6 +208,11 @@ class DynamicRouteDriver(Driver):
         self.current_load -= 1
 
         # Após entregar, avalia se deve coletar próximo pedido antes de continuar entregas
+        # Essa verificação é necessária por conta do seguinte cenário:
+        #       Pense num motorista que terminou de entregar um pedido e tem mais alguns em sua lista
+        #   Se ele não está carregando nenhum pedido é claro que ele deve coletar o próximo pedido da lista. Dessa 
+        #   forma, o processamento da heurística de reordenação é desnecessário, melhor simplesmente deixar o 
+        #   simulador seguir o seu fluxo normalmente e coletar o próximo pedido.
         if self.current_load > 0:
             collected_orders = [order for order in self.orders_list if order.is_already_caught()]
             next_to_collect_orders = [order for order in self.orders_list if not order.is_already_caught()]
@@ -221,11 +227,11 @@ class DynamicRouteDriver(Driver):
             if self._can_collect_next_respecting_windows(next_order, collected_orders):
                 # Calcula o impacto estimado da reordenação
                 if self.environment.env_mode != EnvMode.TRAINING:
-                    time_impact, distance_impact = self._calculate_reordering_impact(next_order, collected_orders, 'pickup')
-                    self._record_reordering_event(next_order.order_id, time_impact, distance_impact, 'pickup')
+                    time_impact, distance_impact = self._calculate_reordering_impact(next_order, collected_orders, RouteSegmentType.PICKUP)
+                    self._record_reordering_event(next_order.order_id, time_impact, distance_impact, RouteSegmentType.PICKUP)
 
                 # Insere o segmento de rota do próximo pedido antes do segmento atual
-                self.current_route.insert_segment_before_first_segment_by_id(next_order.pick_up_route_segment_id)
+                self.current_route.move_segment_to_front_by_id(next_order.pick_up_route_segment_id)
 
     def _estimate_collection_time(self, order: Order) -> Number:
         """Estima o tempo para coletar um pedido"""
