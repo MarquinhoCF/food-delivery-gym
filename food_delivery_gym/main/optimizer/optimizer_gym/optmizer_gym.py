@@ -339,6 +339,12 @@ class OptimizerGym(Optimizer, ABC):
                         results_file.write("\n---> Estatísticas da Distância Percorrida:\n")
                         results_file.write("* NULO - Todas as execuções foram truncadas\n")
 
+                    total_orders_generated_statistics = {}
+                    total_orders_generated_statistics["avg"] = stt.mean(num_orders_generated)
+                    total_orders_generated_statistics["std_dev"] = stt.stdev(num_orders_generated)
+                    total_orders_generated_statistics["median"] = stt.median(num_orders_generated)
+                    total_orders_generated_statistics["mode"] = stt.mode(num_orders_generated)
+
                     results_file.write("\n---> Estatísticas do Número de Pedidos Gerados:\n")
                     results_file.write(f"* Média: {stt.mean(num_orders_generated):.2f}\n")
                     results_file.write(f"* Desvio Padrão: {stt.stdev(num_orders_generated):.2f}\n")
@@ -356,6 +362,7 @@ class OptimizerGym(Optimizer, ABC):
                     self.save_metrics_to_file(total_rewards, total_rewards_statistics, 
                                             time_spent_on_delivery_list, time_spent_on_delivery_statistics, 
                                             total_distance_traveled_list, total_distance_traveled_statistics,
+                                            num_orders_generated, total_orders_generated_statistics,
                                             establishment_metrics, driver_metrics, 
                                             geral_statistics, dir_path)
                 except Exception as e:
@@ -374,6 +381,8 @@ class OptimizerGym(Optimizer, ABC):
         time_spent_on_delivery_statistics: dict[str, float],
         total_distance_traveled_list: list[float],
         total_distance_traveled_statistics: dict[str, float],
+        total_orders_generated_list: list[float],
+        total_orders_generated_statistics: dict[str, float],
         establishment_metrics: defaultdict[str, defaultdict[str, list[float]]], 
         driver_metrics: defaultdict[str, defaultdict[str, list[float]]], 
         geral_statistics: dict[str, dict[str, dict[str, float]]],
@@ -394,6 +403,8 @@ class OptimizerGym(Optimizer, ABC):
                                 time_spent_on_delivery_statistics=time_spent_on_delivery_statistics,
                                 total_distance_traveled_list=np.array(total_distance_traveled_list),
                                 total_distance_traveled_statistics=total_distance_traveled_statistics,
+                                total_orders_generated_list=np.array(total_orders_generated_list),
+                                total_orders_generated_statistics=total_orders_generated_statistics,
                                 establishment_metrics=establishment_metrics, 
                                 driver_metrics=driver_metrics,
                                 geral_statistics=geral_statistics)
