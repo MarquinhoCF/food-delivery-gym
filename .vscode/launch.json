@@ -20,6 +20,15 @@
         "justMyCode": true
     },
     {
+        "name": "NearestDriver interactive",
+        "type": "python",
+        "request": "launch",
+        "module": "scripts.test_runner",
+        "args": ["--mode", "interactive", "--scenario", "medium.json", "--optimizer", "nearest"],
+        "console": "integratedTerminal",
+        "justMyCode": true
+    },
+    {
         "name": "NearestDriver interactive Render",
         "type": "python",
         "request": "launch",

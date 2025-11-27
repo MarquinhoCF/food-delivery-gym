@@ -42,6 +42,11 @@ python -m pip install -r requirements.txt
 sudo apt-get install python3-tk
 ```
 
+### 4️⃣ Criar uma copia do exemplo de arquivo de ambiente
+```shell
+cp .env.example .env
+```
+
 ## 🚀 Uso do Simulador
 
 ### 🔹 Sempre que for usar o script Python, ative o ambiente virtual:
