@@ -139,8 +139,8 @@ Atualmente, o ambiente suporta dois tipos de geradores:
 
 | Tipo                        | Classe Interna                                                                                   | Descrição                                                                     |
 | --------------------------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
-| `"poisson"`                 | [`PoissonOrderGenerator`](../generator/poisson_order_generator.py)                               | Gera pedidos de forma homogênea com taxa constante λ.                         |
-| `"non_homogeneous_poisson"` | [`NonHomogeneousPoissonOrderGenerator`](../generator/non_homogeneous_poisson_order_generator.py) | Gera pedidos de forma não homogênea com taxa variável no tempo (função λ(t)). |
+| `"poisson"`                 | `PoissonOrderGenerator` | Gera pedidos de forma homogênea com taxa constante λ.                         |
+| `"non_homogeneous_poisson"` | `NonHomogeneousPoissonOrderGenerator` | Gera pedidos de forma não homogênea com taxa variável no tempo (função λ(t)). |
 
 #### 🔹 Parâmetros Disponíveis
 
@@ -157,6 +157,7 @@ Atualmente, o ambiente suporta dois tipos de geradores:
 ```json
 "order_generator": {
   "type": "poisson",
+  "estimated_num_orders": 288,
   "time_window": 1440,
   "lambda_rate": 0.2
 }
@@ -169,9 +170,10 @@ Nesse exemplo, pedidos são gerados de acordo com um **processo de Poisson homog
 ```json
 "order_generator": {
     "type": "non_homogeneous_poisson",
+    "estimated_num_orders": 576,
     "time_window": 960,
     "rate_function": "lambda t: 0.3115 + 0.9345 * (np.exp(-((t - 330)**2) / 7000) + np.exp(-((t - 630)**2) / 7000))"
-},
+}
 ```
 
 Neste caso, a taxa de geração de pedidos **varia ao longo do tempo** de forma senoidal, simulando períodos de alta e baixa demanda (por exemplo, picos no horário de almoço e jantar).
@@ -211,20 +213,30 @@ O cenário é configurado por um arquivo JSON dentro de
 
 ```json
 {
-    "num_drivers": 10,
-    "num_establishments": 10,
-    "num_orders": 288,
-    "grid_map_size": 50,
-    "max_time_step": 2880,
     "order_generator": {
       "type": "poisson",
+      "estimated_num_orders": 288,
       "time_window": 1440
     },
-    "vel_drivers": [3,5],
-    "prepare_time": [20,60],
-    "operating_radius": [5,30],
-    "production_capacity": [4,4],
-    "percentage_allocation_driver": 0.7
+    "simpy_env": {
+        "max_time_step": 2880
+    },
+    "grid_map": {
+        "size": 50
+    },
+    "drivers" : {
+        "num": 10,
+        "vel": [3, 5],
+        "tolerance_percentage": 50,
+        "max_capacity": 2
+    },
+    "establishments": {
+        "num": 10,
+        "prepare_time": [20, 60],
+        "operating_radius": [5, 30],
+        "production_capacity": [4, 4],
+        "percentage_allocation_driver": 0.7
+    }
 }
 ```
 
