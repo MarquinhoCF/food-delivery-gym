@@ -53,12 +53,12 @@ class Driver(MapActor):
         self.current_route_segment: Optional[RouteSegment] = None
         self.route_requests: List[Route] = []
 
-        # Variável para retornar a recompensa do objetivo 2: 
+        # Variável para retornar a recompensa do objetivo 5: 
         # Minimizar o tempo de entrega a partir da expectativa de tempo gasto com a entrega ao final do episódio 
         self.sum_expected_delivery_time_reward: Number = 0
 
-        # Variável para retornar a recompensa do objetivo 10: 
-        # Minimizar o tempo de entrega a partir da expectativa de tempo gasto com a entrega ao final do episódio 
+        # Variável para retornar a recompensa do objetivo 6: 
+        # Minimizar o custo de operação a partir da expectativa da distância a ser percorrida ao final do episódio 
         self.sum_distance_to_be_traveled_reward: Number = 0
 
         # Variáveis para controle do tempo gasto para entrega dos pedidos
@@ -109,6 +109,8 @@ class Driver(MapActor):
     def accept_route(self, route: Route) -> None:
         self.orders_list.append(route.get_current_order())
 
+        route.get_current_order().driver_accepted()
+
         if self.current_route is None:
             self.current_route = route
             self.publish_event(DriverAcceptedRoute(
@@ -133,13 +135,7 @@ class Driver(MapActor):
             establishment_id=route_segment.order.establishment.establishment_id,
             time=self.now
         ))
-        if (route_segment.order.status == OrderStatus.PREPARING):
-            route_segment.order.update_status(OrderStatus.PREPARING_AND_DRIVER_ACCEPTED)
-        elif (route_segment.order.status == OrderStatus.READY):
-            route_segment.order.update_status(OrderStatus.READY_AND_DRIVER_ACCEPTED)
-        else:
-            route_segment.order.update_status(OrderStatus.DRIVER_ACCEPTED)
-
+        
     def accepted_route_extension(self, route: Route) -> None:
         self.current_route.extend_route(route)
         self.publish_event(DriverAcceptedRouteExtension(
@@ -168,6 +164,7 @@ class Driver(MapActor):
             self.current_route_segment = None
 
     def reject_route(self, route: Route) -> None:
+        route.get_current_order().driver_rejected()
         self.publish_event(DriverRejectedRoute(
             driver_id=self.driver_id,
             route_id=self.current_route.route_id,
@@ -188,13 +185,6 @@ class Driver(MapActor):
             time=self.now
         )
         self.publish_event(event)
-
-        if (route_segment.order.status == OrderStatus.PREPARING):
-            route_segment.order.update_status(OrderStatus.PREPARING_AND_DRIVER_REJECTED)
-        elif (route_segment.order.status == OrderStatus.READY):
-            route_segment.order.update_status(OrderStatus.READY_AND_DRIVER_REJECTED)
-        else:
-            route_segment.order.update_status(OrderStatus.DRIVER_REJECTED)
             
         rejection = DriverDeliveryRejection(self, self.now)
         self.environment.add_rejected_delivery(route_segment.order, rejection, event)
@@ -202,12 +192,7 @@ class Driver(MapActor):
     def picking_up(self, order: Order) -> ProcessGenerator:
         self.status = DriverStatus.PICKING_UP
 
-        if order.status == OrderStatus.PREPARING:
-            order.update_status(OrderStatus.PREPARING_AND_PICKING_UP)
-        elif order.status == OrderStatus.READY:
-            order.update_status(OrderStatus.READY_AND_PICKING_UP)
-        else:
-            order.update_status(OrderStatus.PICKING_UP)
+        order.driver_picking_up()
 
         self.publish_event(DriverPickingUpOrder(
             order=order,
@@ -251,7 +236,7 @@ class Driver(MapActor):
 
     def delivering(self, order: Order) -> ProcessGenerator:
         self.status = DriverStatus.DELIVERING
-        order.update_status(OrderStatus.DELIVERING)
+        order.driver_delivering()
         self.publish_event(DriverDeliveringOrder(
             order=order,
             customer_id=order.customer.customer_id,
@@ -267,7 +252,7 @@ class Driver(MapActor):
 
     def wait_customer_pick_up_order(self, order: Order) -> ProcessGenerator:
         self.status = DriverStatus.DELIVERING_WAITING
-        order.update_status(OrderStatus.DRIVER_ARRIVED_DELIVERY_LOCATION)
+        order.driver_arrived()
         self.publish_event(DriverArrivedDeliveryLocation(
             order=order,
             customer_id=order.customer.customer_id,
@@ -287,8 +272,7 @@ class Driver(MapActor):
             time=self.now
         ))
         self.status = DriverStatus.AVAILABLE
-        order.update_status(OrderStatus.DELIVERED)
-        self.process(self.sequential_processor())
+        order.delivered()
         self.orders_delivered += 1
         self.environment.state.increment_orders_delivered()
         
@@ -319,6 +303,8 @@ class Driver(MapActor):
 
         # TODO: Logs
         # print(f"Driver {self.driver_id} entregou o pedido ao cliente no tempo {self.now}")
+        
+        self.process(self.sequential_processor())
 
     def move_to(self, destination: Coordinate) -> ProcessGenerator:
         while self.coordinate != destination:

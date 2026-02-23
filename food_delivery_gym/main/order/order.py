@@ -96,15 +96,48 @@ class Order:
         self.estimated_time_between_picked_up_and_start_delivery = estimated_time_between_picked_up_and_start_delivery
         self.estimated_delivery_travel_time = estimated_delivery_travel_time
         self.estimated_time_to_costumer_receive_order = estimated_time_to_costumer_receive_order
+
+    def driver_accepted(self):
+        if (self.status == OrderStatus.PREPARING):
+            self.status = OrderStatus.PREPARING_AND_DRIVER_ACCEPTED
+        elif (self.status == OrderStatus.READY):
+            self.status = OrderStatus.READY_AND_DRIVER_ACCEPTED
+        else:
+            self.status = OrderStatus.DRIVER_ACCEPTED
+    
+    def driver_rejected(self):
+        if (self.status == OrderStatus.PREPARING):
+            self.status = OrderStatus.PREPARING_AND_DRIVER_REJECTED
+        elif (self.status == OrderStatus.READY):
+            self.status = OrderStatus.READY_AND_DRIVER_REJECTED
+        else:
+            self.status = OrderStatus.DRIVER_REJECTED
     
     def ready(self, now):
         self.status = OrderStatus.READY
         self.isReady = True
         self.time_order_became_ready = now
 
+    def driver_picking_up(self):
+        if self.status == OrderStatus.PREPARING:
+            self.status = OrderStatus.PREPARING_AND_PICKING_UP
+        elif self.status == OrderStatus.READY:
+            self.status = OrderStatus.READY_AND_PICKING_UP
+        else:
+            self.status = OrderStatus.PICKING_UP
+
     def picked_up(self, now):
         self.status = OrderStatus.PICKED_UP
         self.time_it_was_picked_up = now
+
+    def driver_delivering(self):
+        self.status = OrderStatus.DELIVERING
+
+    def driver_arrived(self):
+        self.status = OrderStatus.DRIVER_ARRIVED_DELIVERY_LOCATION
+
+    def delivered(self):
+        self.status = OrderStatus.DELIVERED
 
     def is_already_caught(self):
         return self.status in (

@@ -81,13 +81,15 @@ class DynamicRouteDriver(Driver):
         
         self._calculate_and_store_time_window(order)
         
+        #   Se a capacidade atual for menor que a capacidade máxima e ainda houver pedidos para coletar, avalia coletar o próximo pedido 
+        # antes de seguir para as entregas
         if self.current_load < self.max_capacity and len(self.orders_list) > self.current_load:
 
             collected_orders = [order for order in self.orders_list if order.is_already_caught()]
             next_to_collect_orders = [order for order in self.orders_list if not order.is_already_caught()]
             
             if not next_to_collect_orders:
-                return  # Não há pedidos para coletar
+                raise Exception("Não há pedidos para coletar, mas deveria ter!")
             
             next_order = next_to_collect_orders[0]
             
