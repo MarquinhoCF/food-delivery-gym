@@ -1,9 +1,8 @@
 {
     "order_generator": {
-      "type": "non_homogeneous_poisson",
-      "estimated_num_orders": 576,
-      "time_window": 960,
-      "rate_function": "lambda t: 0.3115 + 0.9345 * (np.exp(-((t - 330)**2) / 7000) + np.exp(-((t - 630)**2) / 7000))"
+        "type": "poisson",
+        "estimated_num_orders": 100,
+        "time_window": 200
     },
     "simpy_env": {
         "max_time_step": 5760
@@ -12,13 +11,13 @@
         "size": 50
     },
     "drivers" : {
-        "num": 10,
+        "num": 1,
         "vel": [3, 4],
-        "tolerance_percentage": 0.5,
-        "max_capacity": 2
+        "tolerance_percentage": 0.8,
+        "max_capacity": 4
     },
     "establishments": {
-        "num": 10,
+        "num": 4,
         "prepare_time": [20, 60],
         "operating_radius": [5, 30],
         "production_capacity": [3, 3],

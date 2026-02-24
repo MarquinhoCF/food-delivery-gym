@@ -8,7 +8,7 @@ class NonHomogeneousPoissonOrderGenerator(PoissonOrderGenerator):
 
     Parameters
     ----------
-    total_orders : int
+    estimated_num_orders : int
         Número total de pedidos a serem gerados.
     time_window : float
         Janela de tempo total para geração dos pedidos (em minutos).
@@ -18,10 +18,8 @@ class NonHomogeneousPoissonOrderGenerator(PoissonOrderGenerator):
         Taxa máxima do processo. Se None, é estimada automaticamente.
     """
 
-    def __init__(self, total_orders: int, time_window: float,
+    def __init__(self, estimated_num_orders: int, time_window: float,
                  rate_function: callable, max_rate: float = None):
-        super().__init__(total_orders, time_window, lambda_rate=None)
-
         self.rate_function = rate_function
         if max_rate is None:
             time_samples = np.linspace(0, time_window, 1000)
@@ -30,6 +28,8 @@ class NonHomogeneousPoissonOrderGenerator(PoissonOrderGenerator):
         else:
             self.max_rate = max_rate
 
+        super().__init__(estimated_num_orders, time_window, lambda_rate=None)
+
     def get_rate_function(self):
         return self.rate_function
 
@@ -37,7 +37,7 @@ class NonHomogeneousPoissonOrderGenerator(PoissonOrderGenerator):
         arrival_times = []
         current_time = 0
 
-        while len(arrival_times) < self.total_orders and current_time < self.time_window:
+        while current_time < self.time_window:
             interarrival = self.rng.exponential(1.0 / self.max_rate)
             current_time += interarrival
             if current_time > self.time_window:
@@ -47,4 +47,4 @@ class NonHomogeneousPoissonOrderGenerator(PoissonOrderGenerator):
             if self.rng.random() < acceptance_prob:
                 arrival_times.append(current_time)
 
-        return arrival_times[:self.total_orders]
+        return arrival_times

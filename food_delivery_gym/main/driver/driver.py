@@ -12,6 +12,7 @@ from food_delivery_gym.main.events.driver_accepted_delivery import DriverAccepte
 from food_delivery_gym.main.events.driver_accepted_route import DriverAcceptedRoute
 from food_delivery_gym.main.events.driver_accepted_route_extension import DriverAcceptedRouteExtension
 from food_delivery_gym.main.events.driver_arrived_delivery_location import DriverArrivedDeliveryLocation
+from food_delivery_gym.main.events.driver_arrived_pick_up_location import DriverArrivedPickUpLocation
 from food_delivery_gym.main.events.driver_delivered_order import DriverDeliveredOrder
 from food_delivery_gym.main.events.driver_delivering_order import DriverDeliveringOrder
 from food_delivery_gym.main.events.driver_picked_up_order import DriverPickedUpOrder
@@ -33,8 +34,6 @@ class Driver(MapActor):
             coordinate: Coordinate,
             available: bool,
             color: Optional[tuple[int, int, int]] = (255, 0, 0), # Cor vermelha
-            desconsider_capacity: bool = False,
-            capacity: Optional[Capacity] = Capacity(Dimensions(100, 100, 100, 100)),
             status: Optional[DriverStatus] = DriverStatus.AVAILABLE,
             movement_rate: Optional[Number] = 5,
             reward_objective: Optional[Number] = 1,
@@ -45,13 +44,6 @@ class Driver(MapActor):
         super().__init__(environment, coordinate, available)
 
         self.color = color
-
-        self.desconsider_capacity = desconsider_capacity
-
-        if desconsider_capacity:
-            self.capacity = Capacity(Dimensions(float('inf'), float('inf'), float('inf'), float('inf')))
-        else:
-            self.capacity = capacity
         
         self.status = status
         self.movement_rate = movement_rate
@@ -61,12 +53,12 @@ class Driver(MapActor):
         self.current_route_segment: Optional[RouteSegment] = None
         self.route_requests: List[Route] = []
 
-        # Variável para retornar a recompensa do objetivo 2: 
+        # Variável para retornar a recompensa do objetivo 5: 
         # Minimizar o tempo de entrega a partir da expectativa de tempo gasto com a entrega ao final do episódio 
         self.sum_expected_delivery_time_reward: Number = 0
 
-        # Variável para retornar a recompensa do objetivo 10: 
-        # Minimizar o tempo de entrega a partir da expectativa de tempo gasto com a entrega ao final do episódio 
+        # Variável para retornar a recompensa do objetivo 6: 
+        # Minimizar o custo de operação a partir da expectativa da distância a ser percorrida ao final do episódio 
         self.sum_distance_to_be_traveled_reward: Number = 0
 
         # Variáveis para controle do tempo gasto para entrega dos pedidos
@@ -84,15 +76,12 @@ class Driver(MapActor):
         self.time_waiting_for_order: Number = 0
 
         self.process(self.process_route_requests())
-        self.process(self.move())
-
-    def fits(self, route: Route) -> bool:
-        return self.capacity.fits(route.required_capacity)
 
     def receive_route_requests(self, route: Route) -> None:
         self.route_requests.append(route)
 
-        order = route.order
+        order = route.get_current_order()
+
         order.driver_allocated(
             self.now,
             self.time_between_accept_and_start_picking_up(),
@@ -102,10 +91,7 @@ class Driver(MapActor):
             self.estimate_time_to_costumer_receive_order(order)
         )
 
-        # Se estamos desconsiderando a capacidade do motorista
-        # Deverá ser contabilizado incremento nas rotas corretamente atribuídas quando o motorista recebe a requisição de rota
-        if self.desconsider_capacity:
-            self.environment.state.increment_assigned_routes()
+        self.environment.state.increment_assigned_routes()
 
     def process_route_requests(self) -> ProcessGenerator:
         while True:
@@ -121,19 +107,15 @@ class Driver(MapActor):
         self.accept_route(route) if accept else self.reject_route(route)
 
     def accept_route(self, route: Route) -> None:
-        self.orders_list.append(route.order)
+        self.orders_list.append(route.get_current_order())
 
-        # Se estamos considerando a capacidade do motorista
-        # Deverá ser contabilizado incremento nas rotas corretamente atribuídas quando o motorista aceita a requisição de rota
-        if not self.desconsider_capacity:
-            self.environment.state.increment_assigned_routes()
+        route.get_current_order().driver_accepted()
 
         if self.current_route is None:
             self.current_route = route
             self.publish_event(DriverAcceptedRoute(
                 driver_id=self.driver_id,
                 route_id=self.current_route.route_id,
-                distance=self.current_route.distance,
                 time=self.now
             ))
             self.accept_route_segments(self.current_route.route_segments)
@@ -151,55 +133,41 @@ class Driver(MapActor):
             order=route_segment.order,
             customer_id=route_segment.order.customer.customer_id,
             establishment_id=route_segment.order.establishment.establishment_id,
-            distance=self.current_route.distance,
             time=self.now
         ))
-        if (route_segment.order.status == OrderStatus.PREPARING):
-            route_segment.order.update_status(OrderStatus.PREPARING_AND_DRIVER_ACCEPTED)
-        elif (route_segment.order.status == OrderStatus.READY):
-            route_segment.order.update_status(OrderStatus.READY_AND_DRIVER_ACCEPTED)
-        else:
-            route_segment.order.update_status(OrderStatus.DRIVER_ACCEPTED)
-
+        
     def accepted_route_extension(self, route: Route) -> None:
-        old_distance = self.current_route.distance
         self.current_route.extend_route(route)
         self.publish_event(DriverAcceptedRouteExtension(
             driver_id=self.driver_id,
             route_id=self.current_route.route_id,
-            old_distance=old_distance,
-            distance=self.current_route.distance,
+            new_route_id=route.route_id,
             time=self.now
         ))
         self.accept_route_segments(route.route_segments)
 
     def sequential_processor(self) -> ProcessGenerator:
-        # Faz o motorista esperar o pedido estar pronto
-        if self.current_route_segment is not None and not self.current_route_segment.order.isReady:
-            self.status = DriverStatus.PICKING_UP_WAITING
-            yield self.timeout(1)
-            self.process(self.sequential_processor())
-        # Processa a rota
-        elif self.current_route.has_next():
+        if self.current_route.has_next():
             route_segment = self.current_route.next()
             self.current_route_segment = route_segment
+
             if route_segment.is_pickup():
                 yield self.timeout(self.time_between_accept_and_start_picking_up())
                 self.process(self.picking_up(route_segment.order))
+
             if route_segment.is_delivery():
-                # TODO: Logs
-                # print(f"Driver {self.driver_id} retirou o pedido no estabelecimento {self.current_route.order.establishment.establishment_id} no tempo {self.now}")
                 yield self.timeout(self.time_between_picked_up_and_start_delivery())
                 self.process(self.delivering(route_segment.order))
+
         else:
             self.current_route = None
             self.current_route_segment = None
 
     def reject_route(self, route: Route) -> None:
+        route.get_current_order().driver_rejected()
         self.publish_event(DriverRejectedRoute(
             driver_id=self.driver_id,
             route_id=self.current_route.route_id,
-            distance=self.current_route.distance,
             time=self.now
         ))
         self.reject_route_segments(route.route_segments)
@@ -217,13 +185,6 @@ class Driver(MapActor):
             time=self.now
         )
         self.publish_event(event)
-
-        if (route_segment.order.status == OrderStatus.PREPARING):
-            route_segment.order.update_status(OrderStatus.PREPARING_AND_DRIVER_REJECTED)
-        elif (route_segment.order.status == OrderStatus.READY):
-            route_segment.order.update_status(OrderStatus.READY_AND_DRIVER_REJECTED)
-        else:
-            route_segment.order.update_status(OrderStatus.DRIVER_REJECTED)
             
         rejection = DriverDeliveryRejection(self, self.now)
         self.environment.add_rejected_delivery(route_segment.order, rejection, event)
@@ -231,12 +192,7 @@ class Driver(MapActor):
     def picking_up(self, order: Order) -> ProcessGenerator:
         self.status = DriverStatus.PICKING_UP
 
-        if order.status == OrderStatus.PREPARING:
-            order.update_status(OrderStatus.PREPARING_AND_PICKING_UP)
-        elif order.status == OrderStatus.READY:
-            order.update_status(OrderStatus.READY_AND_PICKING_UP)
-        else:
-            order.update_status(OrderStatus.PICKING_UP)
+        order.driver_picking_up()
 
         self.publish_event(DriverPickingUpOrder(
             order=order,
@@ -246,7 +202,21 @@ class Driver(MapActor):
             distance=self.environment.map.distance(self.coordinate, order.establishment.coordinate),
             time=self.now
         ))
-        yield self.timeout(self.time_to_picking_up_order(order))
+
+        yield self.process(self.move_to(order.establishment.coordinate))
+
+        self.publish_event(DriverArrivedPickUpLocation(
+            order=order,
+            customer_id=order.customer.customer_id,
+            establishment_id=order.establishment.establishment_id,
+            driver_id=self.driver_id,
+            time=self.now
+        ))
+
+        while not order.isReady:
+            self.status = DriverStatus.PICKING_UP_WAITING
+            yield self.timeout(1)
+
         self.picked_up(order)
 
     def picked_up(self, order: Order) -> None:
@@ -257,13 +227,16 @@ class Driver(MapActor):
             driver_id=self.driver_id,
             time=self.now
         ))
-        self.coordinate = order.establishment.coordinate
         order.picked_up(self.now)
+
+        # TODO: Logs
+        # print(f"Driver {self.driver_id} coletou o pedido no estabelecimento no tempo {self.now}")
+
         self.process(self.sequential_processor())
 
     def delivering(self, order: Order) -> ProcessGenerator:
         self.status = DriverStatus.DELIVERING
-        order.update_status(OrderStatus.DELIVERING)
+        order.driver_delivering()
         self.publish_event(DriverDeliveringOrder(
             order=order,
             customer_id=order.customer.customer_id,
@@ -272,12 +245,14 @@ class Driver(MapActor):
             distance=self.environment.map.distance(self.coordinate, order.customer.coordinate),
             time=self.now
         ))
-        yield self.timeout(self.time_to_deliver_order(order))
+
+        yield self.process(self.move_to(order.customer.coordinate))
+
         self.process(self.wait_customer_pick_up_order(order))
 
     def wait_customer_pick_up_order(self, order: Order) -> ProcessGenerator:
         self.status = DriverStatus.DELIVERING_WAITING
-        order.update_status(OrderStatus.DRIVER_ARRIVED_DELIVERY_LOCATION)
+        order.driver_arrived()
         self.publish_event(DriverArrivedDeliveryLocation(
             order=order,
             customer_id=order.customer.customer_id,
@@ -289,7 +264,6 @@ class Driver(MapActor):
         self.delivered(order)
         
     def delivered(self, order: Order) -> None:
-        self.coordinate = order.customer.coordinate
         self.publish_event(DriverDeliveredOrder(
             order=order,
             customer_id=order.customer.customer_id,
@@ -298,8 +272,7 @@ class Driver(MapActor):
             time=self.now
         ))
         self.status = DriverStatus.AVAILABLE
-        order.update_status(OrderStatus.DELIVERED)
-        self.process(self.sequential_processor())
+        order.delivered()
         self.orders_delivered += 1
         self.environment.state.increment_orders_delivered()
         
@@ -330,27 +303,28 @@ class Driver(MapActor):
 
         # TODO: Logs
         # print(f"Driver {self.driver_id} entregou o pedido ao cliente no tempo {self.now}")
+        
+        self.process(self.sequential_processor())
 
-    def move(self) -> ProcessGenerator:
-        while True:
-            if self.current_route_segment:
-                old_coordinate = self.coordinate
-                self.coordinate = self.environment.map.move(
-                    origin=self.coordinate,
-                    destination=self.current_route_segment.coordinate,
-                    rate=self.movement_rate
-                )
-                self.total_distance += self.environment.map.distance(old_coordinate, self.coordinate)
+    def move_to(self, destination: Coordinate) -> ProcessGenerator:
+        while self.coordinate != destination:
+            old_coordinate = self.coordinate
+            self.coordinate = self.environment.map.move(
+                origin=self.coordinate,
+                destination=destination,
+                rate=self.movement_rate
+            )
+            self.total_distance += self.environment.map.distance(old_coordinate, self.coordinate)
             yield self.timeout(1)
 
     def is_active(self) -> bool:
         return self.current_route is not None or self.current_route_segment is not None or len(self.route_requests) > 0
 
     def accept_route_condition(self, route: Route) -> bool:
-        return self.fits(route) and self.available
+        return self.available
 
     def check_availability(self, route: Route) -> bool:
-        return self.fits(route) and self.available
+        return self.available
 
     def estimate_time_to_driver_receive_order(self) -> int:
         return self.rng.integers(1, 5)
@@ -381,87 +355,59 @@ class Driver(MapActor):
         return order.customer.time_to_receive_order()
 
     def estimate_total_busy_time(self) -> Number:
+        current_coordinate = self.coordinate
         total_busy_time = 0
 
-        def add_travel_time(from_coord, to_coord):
-            return self.environment.map.estimated_time(from_coord, to_coord, self.movement_rate)
-
-        current_order = None
-
-        # Se o motorista já está em uma rota, inclui o tempo restante dessa rota
+        # 1 e 2. Segmento de Rota Atual e Rota Atual
         if self.current_route:
-            current_order = self.current_route_segment.order if self.current_route_segment else None
-            
-            if current_order:
+            # 1. Segmento de Rota Atual
+            if self.current_route_segment:
+                current_order = self.current_route_segment.order
+
                 # Se o segmento atual é de coleta, considera o tempo para pegar o pedido
                 if self.current_route_segment.is_pickup():
                     total_busy_time += (
                         current_order.estimated_ready_time - self.now
                         if self.status == DriverStatus.PICKING_UP_WAITING
-                        else add_travel_time(self.coordinate, current_order.establishment.coordinate)
+                        else self.environment.map.estimated_time(current_coordinate, self.current_route_segment.coordinate, self.movement_rate)
                     )
-                    total_busy_time += current_order.estimated_time_between_picked_up_and_start_delivery
-                    total_busy_time += add_travel_time(current_order.establishment.coordinate, current_order.customer.coordinate)
                 
                 # Se o segmento atual é de entrega, considera o tempo de entrega
                 elif self.current_route_segment.is_delivery():
                     if self.status == DriverStatus.DELIVERING:
-                        total_busy_time += add_travel_time(self.coordinate, current_order.customer.coordinate)
-
-                # Se o motorista está entregando, considera o tempo para o cliente receber o pedido
-                if not self.status in [DriverStatus.AVAILABLE]:
+                        total_busy_time += self.environment.map.estimated_time(current_coordinate, self.current_route_segment.coordinate, self.movement_rate)
                     total_busy_time += current_order.estimated_time_to_costumer_receive_order
-        
-        # Considera o tempo para processar todas as rotas na fila de pedidos
-        for order in self.orders_list:
-            if current_order and order.order_id == current_order.order_id:
-                continue
 
-            total_busy_time += self.time_to_accept_or_reject_route(average_time=True)
-            total_busy_time += order.estimated_time_between_accept_and_start_picking_up
-            total_busy_time += order.estimated_pickup_travel_time
-            total_busy_time += order.estimated_time_between_picked_up_and_start_delivery
-            total_busy_time += order.estimated_delivery_travel_time
-            total_busy_time += order.estimated_time_to_costumer_receive_order
+                current_coordinate = self.current_route_segment.coordinate
+
+            # 2. Rota Atual
+            if self.current_route.route_segments:
+                total_busy_time += self.current_route.get_time_to_complete_route(current_coordinate, self.movement_rate)
+                current_coordinate = self.current_route.route_segments[-1].coordinate
+
+        # 3. Rotas Requisitadas mas não aceitas ainda
+        for route in self.route_requests:
+            total_busy_time += route.get_time_to_complete_route(current_coordinate, self.movement_rate)
+            current_coordinate = route.route_segments[-1].coordinate
 
         return total_busy_time
 
-    
     def calculate_total_distance_to_travel(self) -> Number:
+        current_coordinate = self.coordinate
         total_distance = 0
-        valid_coordinate = self.coordinate  # Posição atual do motorista
+        if self.current_route:
+            
+            if self.current_route_segment:
+                total_distance += self.environment.map.distance(current_coordinate, self.current_route_segment.coordinate)
+                current_coordinate = self.current_route_segment.coordinate
 
-        def add_travel_distance(from_coord, to_coord):
-            return self.environment.map.distance(from_coord, to_coord)
+            if self.current_route.route_segments:
+                total_distance += self.current_route.get_distance_to_complete_route(current_coordinate)
+                current_coordinate = self.current_route.route_segments[-1].coordinate
 
-        current_order = None
-
-        # Se o motorista já está em uma rota, inclui o tempo restante dessa rota
-        if self.current_route is not None:
-            current_order = self.current_route_segment.order if self.current_route_segment else None
-
-            if current_order:
-                # Se o segmento atual é de coleta, considera o tempo para pegar o pedido
-                if self.current_route_segment.is_pickup():
-                    total_distance += add_travel_distance(self.coordinate, current_order.establishment.coordinate)
-                    total_distance += add_travel_distance(current_order.establishment.coordinate, current_order.customer.coordinate)
-
-                # Se o segmento atual é de entrega, considera o tempo de entrega
-                if self.current_route_segment.is_delivery():
-                    if self.status == DriverStatus.DELIVERING:
-                        total_distance += self.environment.map.distance(self.coordinate, current_order.customer.coordinate)
-
-            # Atualiza a posição do motorista para o local da entrega
-            valid_coordinate = self.current_route_segment.order.customer.coordinate
-        
-        # Considera o tempo para processar todas as rotas na fila de pedidos
-        for order in self.orders_list:
-            if current_order and order.order_id == current_order.order_id:
-                continue
-
-            total_distance += add_travel_distance(valid_coordinate, order.establishment.coordinate)
-            total_distance += add_travel_distance(order.establishment.coordinate, order.customer.coordinate)
-            valid_coordinate = order.customer.coordinate # Atualiza a posição após cada entrega
+        for route in self.route_requests:
+            total_distance += route.get_distance_to_complete_route(current_coordinate)
+            current_coordinate = route.route_segments[-1].coordinate
 
         return total_distance
     
@@ -529,7 +475,7 @@ class Driver(MapActor):
         return self.coordinate
     
     def get_number_of_orders_in_list(self) -> int:
-        return len(self.orders_list)
+        return len(self.orders_list) + len(self.route_requests)
     
     def get_status(self) -> DriverStatus:
         return self.status
@@ -567,3 +513,19 @@ class Driver(MapActor):
     def get_time_spent_on_delivery(self) -> Number:
         self.get_penality_for_time_spent_for_delivery()
         return self.total_penalty_for_time_spent
+    
+    def register_statistic_data(self):
+        id = self.driver_id
+        FoodDeliverySimpyEnv.driver_metrics[id]["orders_delivered"].append(self.orders_delivered)
+        FoodDeliverySimpyEnv.driver_metrics[id]["time_spent_on_delivery"].append(self.get_time_spent_on_delivery())
+        FoodDeliverySimpyEnv.driver_metrics[id]["idle_time"].append(self.idle_time)
+        FoodDeliverySimpyEnv.driver_metrics[id]["time_waiting_for_order"].append(self.time_waiting_for_order)
+        FoodDeliverySimpyEnv.driver_metrics[id]["total_distance"].append(self.total_distance)
+
+    def reset_statistics(self):
+        id = self.driver_id
+        FoodDeliverySimpyEnv.driver_metrics[id]["orders_delivered"].clear()
+        FoodDeliverySimpyEnv.driver_metrics[id]["time_spent_on_delivery"].clear()
+        FoodDeliverySimpyEnv.driver_metrics[id]["idle_time"].clear()
+        FoodDeliverySimpyEnv.driver_metrics[id]["time_waiting_for_order"].clear()
+        FoodDeliverySimpyEnv.driver_metrics[id]["total_distance"].clear()

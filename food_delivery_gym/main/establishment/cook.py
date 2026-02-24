@@ -1,6 +1,5 @@
 from simpy.core import SimTime
 
-from food_delivery_gym.main.actors.map_actor import MapActor
 from food_delivery_gym.main.environment.food_delivery_simpy_env import FoodDeliverySimpyEnv
 from food_delivery_gym.main.order.order import Order
 

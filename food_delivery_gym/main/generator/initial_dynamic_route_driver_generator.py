@@ -1,25 +1,27 @@
-from food_delivery_gym.main.base.dimensions import Dimensions
-from food_delivery_gym.main.driver.capacity import Capacity
-from food_delivery_gym.main.driver.driver import Driver, DriverStatus
+from food_delivery_gym.main.driver.driver import DriverStatus
 from food_delivery_gym.main.driver.dynamic_route_driver import DynamicRouteDriver
 from food_delivery_gym.main.environment.food_delivery_simpy_env import FoodDeliverySimpyEnv
 from food_delivery_gym.main.generator.initial_generator import InitialGenerator
 
 
-class InitialDriverGenerator(InitialGenerator):
-    def __init__(self, num_drivers, vel_drivers, reward_objective):
+class InitialDynamicRouteDriverGenerator(InitialGenerator):
+    def __init__(self, num_drivers, vel_drivers, tolerance_percentage, max_capacity, reward_objective):
         super().__init__()
         self.num_drivers = num_drivers
         self.vel_drivers = vel_drivers
+        self.tolerance_percentage = tolerance_percentage
+        self.max_capacity = max_capacity
         self.reward_objective = reward_objective
 
     def run(self, env: FoodDeliverySimpyEnv):
         drivers = [
-            Driver(
+            DynamicRouteDriver(
                 id=i+1,
                 environment=env,
                 coordinate=env.map.random_point(),
                 available=True,
+                tolerance_percentage=self.tolerance_percentage,
+                max_capacity=self.max_capacity,
                 status=DriverStatus.AVAILABLE,
                 movement_rate=self.rng.integers(self.vel_drivers[0], self.vel_drivers[1]+1),
                 # Gerar uma cor aleatória RGB para cada motorista

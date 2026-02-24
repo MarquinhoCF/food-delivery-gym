@@ -22,7 +22,7 @@ SCENARIOS = ["initial", "medium", "complex"]
 TIMESTEPS_OPTIONS = ["18M_steps", "50M_steps", "100M_steps"]
 MODEL_BASE_DIR = "./data/ppo_training/otimizacao_1M_steps_200_trials/treinamento"
 
-BASE_RESULTS_DIR = "./data/runs/execucoes/obj_{}/{}_scenario/"
+BASE_RESULTS_DIR = "./data/teste/runs/execucoes/obj_{}/{}_scenario/"
 
 def setup_logging(results_dir: str):
     os.makedirs(results_dir, exist_ok=True)

@@ -42,6 +42,11 @@ python -m pip install -r requirements.txt
 sudo apt-get install python3-tk
 ```
 
+### 4️⃣ Criar uma copia do exemplo de arquivo de ambiente
+```shell
+cp .env.example .env
+```
+
 ## 🚀 Uso do Simulador
 
 ### 🔹 Sempre que for usar o script Python, ative o ambiente virtual:
@@ -61,14 +66,14 @@ source venv/bin/activate
 
 #### 1. **Modo Automático**
 ```shell
-python -m scripts.test_runner --mode auto --scenario medium_obj1.json --render
+python -m scripts.test_runner --mode auto --scenario medium.json --render
 ```
 - Executa automaticamente com ações aleatórias
 - Útil para testes rápidos
 
 #### 2. **Modo Interativo** (Recomendado para desenvolvimento)
 ```shell
-python -m scripts.test_runner --mode interactive --scenario medium_obj1.json --render
+python -m scripts.test_runner --mode interactive --scenario medium.json --render
 ```
 - Executa passo-a-passo esperando sua entrada
 - **Comandos disponíveis**:
@@ -79,7 +84,7 @@ python -m scripts.test_runner --mode interactive --scenario medium_obj1.json --r
 
 #### 3. **Modo com Agente PPO** (Requer modelo treinado)
 ```shell
-python -m scripts.test_runner --mode agent --scenario medium_obj1.json --model-path models/ppo_food_delivery --render
+python -m scripts.test_runner --mode agent --scenario medium.json --model-path models/ppo_food_delivery --render
 ```
 
 ### ⚙️ Opções de Configuração
@@ -87,7 +92,7 @@ python -m scripts.test_runner --mode agent --scenario medium_obj1.json --model-p
 | Opção | Descrição | Exemplo |
 |-------|-----------|---------|
 | `--mode` | Modo de execução: `interactive`, `auto`, `agent` | `--mode interactive` |
-| `--scenario` | Arquivo de cenário JSON | `--scenario medium_obj1.json` |
+| `--scenario` | Arquivo de cenário JSON | `--scenario medium.json` |
 | `--render` | Ativa visualização gráfica | `--render` |
 | `--seed` | Seed para reproducibilidade | `--seed 42` |
 | `--max-steps` | Limite máximo de passos | `--max-steps 1000` |
@@ -134,8 +139,8 @@ Atualmente, o ambiente suporta dois tipos de geradores:
 
 | Tipo                        | Classe Interna                                                                                   | Descrição                                                                     |
 | --------------------------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
-| `"poisson"`                 | [`PoissonOrderGenerator`](../generator/poisson_order_generator.py)                               | Gera pedidos de forma homogênea com taxa constante λ.                         |
-| `"non_homogeneous_poisson"` | [`NonHomogeneousPoissonOrderGenerator`](../generator/non_homogeneous_poisson_order_generator.py) | Gera pedidos de forma não homogênea com taxa variável no tempo (função λ(t)). |
+| `"poisson"`                 | `PoissonOrderGenerator` | Gera pedidos de forma homogênea com taxa constante λ.                         |
+| `"non_homogeneous_poisson"` | `NonHomogeneousPoissonOrderGenerator` | Gera pedidos de forma não homogênea com taxa variável no tempo (função λ(t)). |
 
 #### 🔹 Parâmetros Disponíveis
 
@@ -152,6 +157,7 @@ Atualmente, o ambiente suporta dois tipos de geradores:
 ```json
 "order_generator": {
   "type": "poisson",
+  "estimated_num_orders": 288,
   "time_window": 1440,
   "lambda_rate": 0.2
 }
@@ -164,9 +170,10 @@ Nesse exemplo, pedidos são gerados de acordo com um **processo de Poisson homog
 ```json
 "order_generator": {
     "type": "non_homogeneous_poisson",
+    "estimated_num_orders": 576,
     "time_window": 960,
     "rate_function": "lambda t: 0.3115 + 0.9345 * (np.exp(-((t - 330)**2) / 7000) + np.exp(-((t - 630)**2) / 7000))"
-},
+}
 ```
 
 Neste caso, a taxa de geração de pedidos **varia ao longo do tempo** de forma senoidal, simulando períodos de alta e baixa demanda (por exemplo, picos no horário de almoço e jantar).
@@ -206,20 +213,30 @@ O cenário é configurado por um arquivo JSON dentro de
 
 ```json
 {
-    "num_drivers": 10,
-    "num_establishments": 10,
-    "num_orders": 288,
-    "grid_map_size": 50,
-    "max_time_step": 2880,
     "order_generator": {
       "type": "poisson",
+      "estimated_num_orders": 288,
       "time_window": 1440
     },
-    "vel_drivers": [3,5],
-    "prepare_time": [20,60],
-    "operating_radius": [5,30],
-    "production_capacity": [4,4],
-    "percentage_allocation_driver": 0.7
+    "simpy_env": {
+        "max_time_step": 2880
+    },
+    "grid_map": {
+        "size": 50
+    },
+    "drivers" : {
+        "num": 10,
+        "vel": [3, 5],
+        "tolerance_percentage": 50,
+        "max_capacity": 2
+    },
+    "establishments": {
+        "num": 10,
+        "prepare_time": [20, 60],
+        "operating_radius": [5, 30],
+        "production_capacity": [4, 4],
+        "percentage_allocation_driver": 0.7
+    }
 }
 ```
 
@@ -312,7 +329,7 @@ O ajuste de hiperparâmetros pode melhorar significativamente o desempenho do ag
 ```bash
 python train.py --algo ppo --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
 --n-timesteps 1000000 --optimize-hyperparameters --max-total-trials 200 --n-jobs 2 \
---optimization-log-path logs/hyperparam_opt_ppo_food_delivery_medium_obj3/
+--optimization-log-path logs/hyperparam_opt_ppo_food_delivery_medium_obj1/
 ```
 
 ### 3️⃣ Treinamento do Modelo

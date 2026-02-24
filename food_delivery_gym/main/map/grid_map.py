@@ -1,3 +1,4 @@
+import math
 from typing import List
 
 from food_delivery_gym.main.base.types import Coordinate, Number
@@ -10,6 +11,9 @@ class GridMap(Map):
         self.generated_points = {}
 
     def distance(self, coord1: Coordinate, coord2: Coordinate) -> Number:
+        if coord1 == coord2:
+            return 0
+
         return max(abs(coord1[0] - coord2[0]) + abs(coord1[1] - coord2[1]), 1)
 
     def max_distance(self) -> Number:
@@ -29,7 +33,11 @@ class GridMap(Map):
         return distance
 
     def estimated_time(self, coord1: Coordinate, coord2: Coordinate, rate: Number) -> Number:
-        return round(self.distance(coord1, coord2) / rate)
+        dx = abs(coord2[0] - coord1[0])
+        dy = abs(coord2[1] - coord1[1])
+        if dx == 0 and dy == 0:
+            return 0
+        return max(1, math.ceil((dx + dy) / rate))
 
     def random_point(self, not_repeated=False) -> Coordinate:
         point = self.rng.integers(self.size), self.rng.integers(self.size)
