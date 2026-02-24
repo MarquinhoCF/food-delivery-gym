@@ -66,14 +66,14 @@ source venv/bin/activate
 
 #### 1. **Modo Automático**
 ```shell
-python -m scripts.test_runner --mode auto --scenario medium_obj1.json --render
+python -m scripts.test_runner --mode auto --scenario medium.json --render
 ```
 - Executa automaticamente com ações aleatórias
 - Útil para testes rápidos
 
 #### 2. **Modo Interativo** (Recomendado para desenvolvimento)
 ```shell
-python -m scripts.test_runner --mode interactive --scenario medium_obj1.json --render
+python -m scripts.test_runner --mode interactive --scenario medium.json --render
 ```
 - Executa passo-a-passo esperando sua entrada
 - **Comandos disponíveis**:
@@ -84,7 +84,7 @@ python -m scripts.test_runner --mode interactive --scenario medium_obj1.json --r
 
 #### 3. **Modo com Agente PPO** (Requer modelo treinado)
 ```shell
-python -m scripts.test_runner --mode agent --scenario medium_obj1.json --model-path models/ppo_food_delivery --render
+python -m scripts.test_runner --mode agent --scenario medium.json --model-path models/ppo_food_delivery --render
 ```
 
 ### ⚙️ Opções de Configuração
@@ -92,7 +92,7 @@ python -m scripts.test_runner --mode agent --scenario medium_obj1.json --model-p
 | Opção | Descrição | Exemplo |
 |-------|-----------|---------|
 | `--mode` | Modo de execução: `interactive`, `auto`, `agent` | `--mode interactive` |
-| `--scenario` | Arquivo de cenário JSON | `--scenario medium_obj1.json` |
+| `--scenario` | Arquivo de cenário JSON | `--scenario medium.json` |
 | `--render` | Ativa visualização gráfica | `--render` |
 | `--seed` | Seed para reproducibilidade | `--seed 42` |
 | `--max-steps` | Limite máximo de passos | `--max-steps 1000` |
@@ -329,7 +329,7 @@ O ajuste de hiperparâmetros pode melhorar significativamente o desempenho do ag
 ```bash
 python train.py --algo ppo --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
 --n-timesteps 1000000 --optimize-hyperparameters --max-total-trials 200 --n-jobs 2 \
---optimization-log-path logs/hyperparam_opt_ppo_food_delivery_medium_obj3/
+--optimization-log-path logs/hyperparam_opt_ppo_food_delivery_medium_obj1/
 ```
 
 ### 3️⃣ Treinamento do Modelo
