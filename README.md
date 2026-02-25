@@ -93,26 +93,90 @@ python -m scripts.test_runner --mode agent --scenario medium.json --model-path m
 |-------|-----------|---------|
 | `--mode` | Modo de execução: `interactive`, `auto`, `agent` | `--mode interactive` |
 | `--scenario` | Arquivo de cenário JSON | `--scenario medium.json` |
+| `--optimizer` | Otimizador: `random`, `first`, `nearest`, `lowest`, `rl` | `--optimizer lowest` |
+| `--objective` | Objetivo de recompensa do ambiente (1-10) | `--objective 1` |
+| `--cost-function` | Função de custo usada pelo `lowest`: `route`, `marginal_route` | `--cost-function route` |
 | `--render` | Ativa visualização gráfica | `--render` |
 | `--seed` | Seed para reproducibilidade | `--seed 42` |
 | `--max-steps` | Limite máximo de passos | `--max-steps 1000` |
 | `--save-log` | Salva output em arquivo log.txt | `--save-log` |
 | `--model-path` | Caminho para modelo PPO (modo agent) | `--model-path models/ppo_model` |
 
+> A opção `--cost-function` é utilizada apenas quando `--optimizer lowest` está selecionado.
+
 #### Exemplos:
 
+##### Gerais:
+
 ```shell
-# Teste rápido com cenário padrão
+# Execução automática simples (padrão: optimizer=random)
 python -m scripts.test_runner --mode auto --max-steps 100
 
-# Debug interativo com renderização
-python -m scripts.test_runner --mode interactive --render --seed 123
+# Execução interativa com renderização
+python -m scripts.test_runner --mode interactive --render
 
-# Teste de performance com log
-python -m scripts.test_runner --mode auto --max-steps 5000 --save-log
+# Execução com seed fixa (reprodutibilidade)
+python -m scripts.test_runner --mode auto --seed 123
 
-# Testar cenário específico
-python -m scripts.test_runner --scenario meu_cenario.json --mode interactive --render
+# Executar com cenário específico
+python -m scripts.test_runner --scenario medium.json --mode auto --render
+
+# Executar salvando logs
+python -m scripts.test_runner --mode auto --save-log
+
+# Execução longa sem render
+python -m scripts.test_runner --mode auto --max-steps 10000
+```
+
+##### Otimizadores:
+
+```shell
+# Otimizador aleatório
+python -m scripts.test_runner --optimizer random --render
+
+# Primeiro motorista disponível
+python -m scripts.test_runner --optimizer first --render
+
+# Motorista mais próximo
+python -m scripts.test_runner --optimizer nearest --render
+
+# Lowest cost com custo baseado na rota
+python -m scripts.test_runner --optimizer lowest --cost-function route --render
+
+# Lowest cost com custo marginal de rota
+python -m scripts.test_runner --optimizer lowest --cost-function marginal_route --render
+```
+
+##### Objetivos de Recompensa:
+
+```shell
+# Objetivo baseado em tempo
+python -m scripts.test_runner --optimizer lowest --objective 1 --render
+
+# Objetivo baseado em distância
+python -m scripts.test_runner --optimizer lowest --objective 2 --render
+```
+
+##### Combinações completas:
+
+```shell
+# Execução completa com todos parâmetros
+python -m scripts.test_runner \
+    --scenario medium.json \
+    --mode auto \
+    --optimizer lowest \
+    --cost-function marginal_route \
+    --objective 2 \
+    --seed 42 \
+    --max-steps 5000 \
+    --save-log
+
+# Debug interativo com lowest cost
+python -m scripts.test_runner \
+    --mode interactive \
+    --optimizer lowest \
+    --cost-function route \
+    --render
 ```
 
 ## 🎯 Configuração dos Cenários Experimentais
