@@ -297,7 +297,7 @@ source venv/bin/activate  # No Windows, use: venv\Scripts\activate
 
 ```bash
 python -m pip install -r requirements.txt
-python -m pip install huggingface_hub huggingface_sb3 sb3-contrib optuna
+python -m pip install huggingface_hub huggingface_sb3 sb3-contrib optuna rl_zoo3 seaborn scipy
 ```
 
 **5º Passo**: Navegue até o diretório do projeto `food-delivery-gym`:

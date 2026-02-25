@@ -6,7 +6,8 @@ import textwrap
 
 from dotenv import load_dotenv
 from stable_baselines3 import PPO
-from food_delivery_gym.main.cost.objective_based_cost_function import ObjectiveBasedCostFunction
+from food_delivery_gym.main.cost.marginal_route_cost_function import MarginalRouteCostFunction
+from food_delivery_gym.main.cost.route_cost_function import RouteCostFunction
 from food_delivery_gym.main.environment.env_mode import EnvMode
 from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
 
@@ -76,6 +77,8 @@ def main():
                        help="Modo de execução")
     parser.add_argument("--optimizer", choices=("random", "first", "nearest", "lowest", "rl"), default="random",
                        help="Tipo de otimizador a usar")
+    parser.add_argument("--cost-function", choices=("route", "marginal_route"), default="route",
+        help="Função de custo usada pelo LowestCostDriverOptimizerGym (apenas quando --optimizer lowest)")
     parser.add_argument("--model-path", default=None, 
                        help="Caminho para um modelo PPO (necessário para --optimizer rl)")
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
@@ -88,6 +91,9 @@ def main():
                        help="Redirecionar stdout/stderr para log.txt")
 
     args = parser.parse_args()
+
+    if args.cost_function and args.optimizer != "lowest":
+        parser.error("--cost-function só pode ser usado com --optimizer lowest")
 
     if args.save_log:
         log_file = open("log.txt", "w", encoding="utf-8")
@@ -109,14 +115,20 @@ def main():
             optimizer = NearestDriverOptimizerGym(env)
         elif args.optimizer == "lowest":
             if args.objective in [1, 3, 5, 7, 9, 10]:
-                # Seleciona a função de custo baseada em tempo de entrega
                 objective_for_cost_function = 1
             elif args.objective in [2, 4, 6, 8]:
-                # Seleciona a função de custo baseada em custo de operação (distância)
                 objective_for_cost_function = 2
             else:
                 raise ValueError(f"Objetivo {args.objective} não reconhecido.")
-            optimizer = LowestCostDriverOptimizerGym(env, cost_function=ObjectiveBasedCostFunction(objective=objective_for_cost_function))
+
+            if args.cost_function == "route":
+                cost_function = RouteCostFunction(objective=objective_for_cost_function)
+            elif args.cost_function == "marginal_route":
+                cost_function = MarginalRouteCostFunction(objective=objective_for_cost_function)
+            else:
+                raise ValueError(f"Cost function '{args.cost_function}' inválida")
+
+            optimizer = LowestCostDriverOptimizerGym(env, cost_function=cost_function)
         elif args.optimizer == "rl":
             # TODO: Testar pra ver se isso vai funcionar mesmo
             # if not args.model_path:

@@ -13,7 +13,7 @@ class LowestCostDriverOptimizerGym(OptimizerGym):
         super().__init__(environment)
         self.cost_function = cost_function
 
-    def compare_distance(self, driver: Driver, route: Route):
+    def get_cost_for_driver(self, driver: Driver, route: Route):
         map = self.gym_env.simpy_env.map
         return self.cost_function.cost(map, driver, route.route_segments[0])
     
@@ -23,5 +23,5 @@ class LowestCostDriverOptimizerGym(OptimizerGym):
     def select_driver(self, obs: dict, drivers: List[Driver], route: Route):
         # drivers = list(filter(lambda driver: driver.current_route is None or
         # driver.current_route.size() <= 1, drivers))
-        nearest_driver = min(drivers, key=lambda driver: self.compare_distance(driver, route))
-        return drivers.index(nearest_driver)
+        selected_driver = min(drivers, key=lambda driver: self.get_cost_for_driver(driver, route))
+        return drivers.index(selected_driver)

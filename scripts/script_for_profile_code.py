@@ -2,7 +2,7 @@ import sys
 
 from stable_baselines3 import PPO
 from food_delivery_gym.main.utils.load_scenarios import load_scenario
-from food_delivery_gym.main.cost.objective_based_cost_function import ObjectiveBasedCostFunction
+from food_delivery_gym.main.cost.route_cost_function import RouteCostFunction
 from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
 from food_delivery_gym.main.environment.env_mode import EnvMode
 from food_delivery_gym.main.optimizer.optimizer_gym.first_driver_optimizer_gym import FirstDriverOptimizerGym

@@ -7,7 +7,8 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv
 from stable_baselines3.common.vec_env import VecNormalize
 from food_delivery_gym.main.environment.env_mode import EnvMode
-from food_delivery_gym.main.cost.objective_based_cost_function import ObjectiveBasedCostFunction
+from food_delivery_gym.main.cost.route_cost_function import RouteCostFunction
+from food_delivery_gym.main.cost.marginal_route_cost_function import MarginalRouteCostFunction
 from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
 from food_delivery_gym.main.optimizer.optimizer_gym.first_driver_optimizer_gym import FirstDriverOptimizerGym
 from food_delivery_gym.main.optimizer.optimizer_gym.lowest_cost_driver_optimizer_gym import LowestCostDriverOptimizerGym
@@ -22,7 +23,7 @@ SCENARIOS = ["initial", "medium", "complex"]
 TIMESTEPS_OPTIONS = ["18M_steps", "50M_steps", "100M_steps"]
 MODEL_BASE_DIR = "./data/ppo_training/otimizacao_1M_steps_200_trials/treinamento"
 
-BASE_RESULTS_DIR = "./data/teste/runs/execucoes/obj_{}/{}_scenario/"
+BASE_RESULTS_DIR = "./data/runs/execucoes/obj_{}/{}_scenario/"
 
 def setup_logging(results_dir: str):
     os.makedirs(results_dir, exist_ok=True)
@@ -98,9 +99,13 @@ def main():
             else:
                 raise ValueError(f"Objetivo {i} não reconhecido.")
 
-            print(f"\n=== Executando simulações com o Agente do Motorista de Menor Custo no cenário '{scenario}' ===")
-            LowestCostDriverOptimizerGym(base_env, cost_function=ObjectiveBasedCostFunction(objective=objective_for_cost_function))\
-                .run_simulations(num_runs, results_dir + "lowest_cost_driver_heuristic/", seed=seed)
+            print(f"\n=== Executando simulações com o Agente do Motorista de Menor Custo de Rota no cenário '{scenario}' ===")
+            LowestCostDriverOptimizerGym(base_env, cost_function=RouteCostFunction(objective=objective_for_cost_function))\
+                .run_simulations(num_runs, results_dir + "lowest_route_cost_driver_heuristic/", seed=seed)
+            
+            print(f"\n=== Executando simulações com o Agente do Motorista de Menor Custo de Rota Marginal no cenário '{scenario}' ===")
+            LowestCostDriverOptimizerGym(base_env, cost_function=MarginalRouteCostFunction(objective=objective_for_cost_function))\
+                .run_simulations(num_runs, results_dir + "lowest_marginal_route_cost_driver_heuristic/", seed=seed)
 
             # RL - tenta os 3 time steps possíveis
             print("\n=== Tentando executar modelos de Aprendizado por Reforço ===")
