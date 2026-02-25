@@ -8,7 +8,7 @@ O **Food Delivery Simulator** é um simulador de entrega de comida desenvolvido 
 
 ## 📋 Requisitos
 
-- Python 3.6 ou superior
+- Python 3.10 ou superior
 - Gymnasium
 - SimPy
 - Stable-Baselines3
