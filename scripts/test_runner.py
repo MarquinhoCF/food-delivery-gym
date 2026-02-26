@@ -77,7 +77,7 @@ def main():
                        help="Modo de execução")
     parser.add_argument("--optimizer", choices=("random", "first", "nearest", "lowest", "rl"), default="random",
                        help="Tipo de otimizador a usar")
-    parser.add_argument("--cost-function", choices=("route", "marginal_route"), default="route",
+    parser.add_argument("--cost-function", choices=("route", "marginal_route"), default=None,
         help="Função de custo usada pelo LowestCostDriverOptimizerGym (apenas quando --optimizer lowest)")
     parser.add_argument("--model-path", default=None, 
                        help="Caminho para um modelo PPO (necessário para --optimizer rl)")
@@ -93,7 +93,10 @@ def main():
     args = parser.parse_args()
 
     if args.cost_function and args.optimizer != "lowest":
-        parser.error("--cost-function só pode ser usado com --optimizer lowest")
+        parser.error("Erro: --cost-function só pode ser usado com --optimizer lowest")
+    
+    if not args.cost_function and args.optimizer == "lowest":
+        parser.error("Erro: --optimizer lowest requer --cost-function")
 
     if args.save_log:
         log_file = open("log.txt", "w", encoding="utf-8")

@@ -1,6 +1,8 @@
 from typing import List
 
 from food_delivery_gym.main.cost.cost_function import CostFunction
+from food_delivery_gym.main.cost.route_cost_function import RouteCostFunction
+from food_delivery_gym.main.cost.marginal_route_cost_function import MarginalRouteCostFunction
 from food_delivery_gym.main.driver.driver import Driver
 from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
 from food_delivery_gym.main.optimizer.optimizer_gym.optmizer_gym import OptimizerGym
@@ -18,6 +20,10 @@ class LowestCostDriverOptimizerGym(OptimizerGym):
         return self.cost_function.cost(map, driver, route.route_segments[0])
     
     def get_title(self):
+        if isinstance(self.cost_function, RouteCostFunction):
+            return "Otimizador do Motorista com Menor Custo de Rota"
+        elif isinstance(self.cost_function, MarginalRouteCostFunction):
+            return "Otimizador do Motorista com Menor Custo Marginal de Rota"
         return "Otimizador do Motorista com Menor Custo"
 
     def select_driver(self, obs: dict, drivers: List[Driver], route: Route):

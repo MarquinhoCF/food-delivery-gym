@@ -38,11 +38,20 @@
         "justMyCode": true
     },
     {
-        "name": "LowestCostDriver interactive Render",
+        "name": "LowestRouteCostDriver interactive Render",
         "type": "python",
         "request": "launch",
         "module": "scripts.test_runner",
-        "args": ["--mode", "interactive", "--scenario", "medium.json", "--optimizer", "lowest", "--render"],
+        "args": ["--mode", "interactive", "--scenario", "medium.json", "--optimizer", "lowest", "--cost-function", "route", "--render"],
+        "console": "integratedTerminal",
+        "justMyCode": true
+    },
+    {
+        "name": "LowestMarginalRouteCostDriver interactive Render",
+        "type": "python",
+        "request": "launch",
+        "module": "scripts.test_runner",
+        "args": ["--mode", "interactive", "--scenario", "medium.json", "--optimizer", "lowest", "--cost-function", "marginal_route", "--render"],
         "console": "integratedTerminal",
         "justMyCode": true
     },
