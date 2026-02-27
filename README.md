@@ -334,6 +334,8 @@ Antes de iniciar o treinamento de agentes de Aprendizado por Reforço (AR), é n
 
 O processo de ajuste de hiperparâmetros e o treinamento será realizado utilizando a biblioteca [RL Baselines3 Zoo](https://github.com/DLR-RM/rl-baselines3-zoo), que fornece uma interface robusta para experimentação com algoritmos como PPO, DQN, A2C, entre outros.
 
+---
+
 ### 1️⃣ Configuração do RL Baselines3 Zoo
 
 Siga os passos abaixo para preparar o ambiente de treinamento:
@@ -382,31 +384,131 @@ python -m pip install .
 cd ../rl-baselines3-zoo/
 ```
 
+---
+
 ### 2️⃣ Ajuste de Hiperparâmetros (Opcional, mas Recomendado)
 
-O ajuste de hiperparâmetros pode melhorar significativamente o desempenho do agente. Para realizar essa etapa:
+O ajuste de hiperparâmetros usa o [Optuna](https://optuna.org/) para encontrar automaticamente a melhor configuração para o seu agente. Os resultados podem ser **salvos em um banco de dados SQLite**, permitindo que você **retome o estudo de onde parou** caso a execução seja interrompida.
 
-**1º Passo**: Defina o número de passos de simulação e o número total de tentativas no processo de tuning.
-
-**2º Passo**: Execute o seguinte comando, substituindo os valores dos parâmetros conforme necessário. No caso do exemplo abaixo estamos fazendo o ajuste de hiperparâmetros do Cenário Médio com objetivo de recompensa 1 em 1M de passos e 200 tentativas:
+#### 🔹 Comando básico com SQLite (recomendado)
 
 ```bash
-python train.py --algo ppo --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
---n-timesteps 1000000 --optimize-hyperparameters --max-total-trials 200 --n-jobs 2 \
---optimization-log-path logs/hyperparam_opt_ppo_food_delivery_medium_obj1/
+python train.py \
+  --algo ppo \
+  --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
+  --n-timesteps 1000000 \
+  --optimize-hyperparameters \
+  --max-total-trials 200 \
+  --n-jobs 2 \
+  --optimization-log-path logs/hyperparam_opt_ppo_food_delivery_medium_obj1/ \
+  --storage sqlite:///optuna_studies.db \
+  --study-name ppo_medium_obj1
 ```
+
+#### 🔹 Retomando um estudo existente
+
+Caso o processo seja interrompido, basta rodar o **mesmo comando novamente** com o mesmo `--storage` e `--study-name`. O Optuna detectará automaticamente o estudo salvo e continuará de onde parou, sem repetir trials já concluídos:
+
+```bash
+python train.py \
+  --algo ppo \
+  --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
+  --n-timesteps 1000000 \
+  --optimize-hyperparameters \
+  --max-total-trials 200 \
+  --n-jobs 2 \
+  --optimization-log-path logs/hyperparam_opt_ppo_food_delivery_medium_obj1/ \
+  --storage sqlite:///optuna_studies.db \
+  --study-name ppo_medium_obj1
+```
+
+> ✅ **Dica:** Salve cada cenário/objetivo com um `--study-name` diferente no mesmo banco de dados. Por exemplo: `ppo_medium_obj1`, `ppo_medium_obj2`, `ppo_complex_obj1`, etc.
+
+#### 📋 Parâmetros explicados
+
+| Parâmetro | Descrição |
+|-----------|-----------|
+| `--algo ppo` | Algoritmo de AR a ser usado. Outros suportados: `a2c`, `dqn`, `sac`, `td3`. |
+| `--env` | ID do ambiente Gymnasium registrado no pacote `food_delivery_gym`. |
+| `--n-timesteps` | Número de passos de simulação por trial durante a otimização. Valores maiores são mais precisos, porém mais lentos. |
+| `--optimize-hyperparameters` | Ativa o modo de busca automática de hiperparâmetros via Optuna. |
+| `--max-total-trials` | Número máximo de tentativas (trials) que o Optuna vai explorar. Mais trials = melhor resultado, porém mais tempo. |
+| `--n-jobs` | Número de trials executados em paralelo. Depende dos núcleos disponíveis na sua máquina. |
+| `--optimization-log-path` | Diretório onde serão salvos os logs e checkpoints dos modelos avaliados durante a otimização. |
+| `--storage` | URI do banco de dados onde o estudo Optuna será persistido. Use `sqlite:///nome_do_arquivo.db` para SQLite local. |
+| `--study-name` | Nome único do estudo no banco de dados. Permite múltiplos estudos no mesmo arquivo `.db` e retomada após interrupção. |
+
+#### 🔹 Exemplos adicionais
+
+```bash
+# Otimização rápida para testes (poucos trials, poucos steps)
+python train.py \
+  --algo ppo \
+  --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
+  --n-timesteps 100000 \
+  --optimize-hyperparameters \
+  --max-total-trials 20 \
+  --n-jobs 1 \
+  --storage sqlite:///optuna_studies.db \
+  --study-name ppo_medium_obj1_quick
+
+# Otimização de cenário complexo com objetivo 2
+python train.py \
+  --algo ppo \
+  --env food_delivery_gym/FoodDelivery-complex-obj2-v0 \
+  --n-timesteps 1000000 \
+  --optimize-hyperparameters \
+  --max-total-trials 200 \
+  --n-jobs 4 \
+  --optimization-log-path logs/hyperparam_opt_ppo_food_delivery_complex_obj2/ \
+  --storage sqlite:///optuna_studies.db \
+  --study-name ppo_complex_obj2
+```
+
+#### 🔍 Inspecionando o banco de dados do Optuna
+
+Você pode visualizar e consultar os estudos salvos diretamente pelo Python:
+
+```python
+import optuna
+
+# Listar todos os estudos no banco
+studies = optuna.get_all_study_names("sqlite:///optuna_studies.db")
+print(studies)
+
+# Carregar e inspecionar um estudo específico
+study = optuna.load_study(
+    study_name="ppo_medium_obj1",
+    storage="sqlite:///optuna_studies.db"
+)
+
+print(f"Número de trials concluídos: {len(study.trials)}")
+print(f"Melhor valor: {study.best_value}")
+print(f"Melhores parâmetros:\n{study.best_params}")
+```
+
+Alternativamente, use o **dashboard do Optuna** para visualização interativa:
+
+```bash
+pip install optuna-dashboard
+optuna-dashboard sqlite:///optuna_studies.db
+```
+
+Acesse no navegador: `http://localhost:8080`
+
+---
 
 ### 3️⃣ Treinamento do Modelo
 
-Com os hiperparâmetros definidos (via ajuste ou valores padrão), prossiga com o treinamento:
+Com os hiperparâmetros definidos (via ajuste ou valores padrão), prossiga com o treinamento.
 
-**1º Passo**: Utilize o arquivo YAML `/rl-baselines3-zoo/hyperparams/best_params_for_food_delivery_gym/ppo.yml` para definir os hiperparâmetros otimizados obtidos no passo anterior. Caso não tenha realizado o tuning, você pode usar os parâmetros padrão do `ppo`, disponíveis na [documentação oficial do Stable-Baselines3 Zoo](https://stable-baselines3.readthedocs.io/en/master/).
+**1º Passo**: Defina os hiperparâmetros no arquivo YAML `hyperparams/best_params_for_food_delivery_gym/ppo.yml`. Se realizou o tuning, use os melhores parâmetros encontrados. Caso contrário, os parâmetros padrão do PPO estão disponíveis na [documentação oficial do Stable-Baselines3 Zoo](https://stable-baselines3.readthedocs.io/en/master/).
 
 ```yml
 food_delivery_gym/FoodDelivery-medium-obj1-v0:
   n_timesteps: 18000000
   policy: 'MultiInputPolicy'
-  n_envs: 4 
+  n_envs: 4
   learning_rate: 0.0009742009357947689
   ent_coef: 9.53697192932737e-07
   clip_range: 0.3
@@ -420,18 +522,103 @@ food_delivery_gym/FoodDelivery-medium-obj1-v0:
   normalize: true
 ```
 
-**2º Passo**: Defina o número total de passos de treinamento. Vamos definir 18M de passos como exemplo. Execute o treinamento:
+**2º Passo**: Execute o treinamento. O comando abaixo **salva checkpoints e permite retomada** via `--storage` e `--study-name`:
 
 ```bash
-python train.py --algo ppo --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
---conf hyperparams/best_params_for_food_delivery_gym/ppo.yml --n-timesteps 18000000
+python train.py \
+  --algo ppo \
+  --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
+  --conf hyperparams/best_params_for_food_delivery_gym/ppo.yml \
+  --n-timesteps 18000000 \
+  --storage sqlite:///optuna_studies.db \
+  --study-name training_ppo_medium_obj1 \
+  --log-folder logs/training/
 ```
 
-**3º Passo**: Visualize a curva de aprendizado:
+#### 🔁 Retomando um treinamento interrompido
+
+Se o treinamento for interrompido (queda de energia, erro, etc.), localize o último checkpoint salvo na pasta de logs e use `--load-best-trial` ou especifique o modelo diretamente:
 
 ```bash
-python scripts/plot_train.py -a ppo -e FoodDelivery-medium-obj1-v0 -f logs/
+# Retomar a partir do checkpoint mais recente salvo em logs/
+python train.py \
+  --algo ppo \
+  --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
+  --conf hyperparams/best_params_for_food_delivery_gym/ppo.yml \
+  --n-timesteps 18000000 \
+  --log-folder logs/training/ \
+  --trained-agent logs/training/ppo/FoodDelivery-medium-obj1-v0_1/best_model.zip
 ```
+
+#### 📋 Parâmetros de treinamento explicados
+
+| Parâmetro | Descrição |
+|-----------|-----------|
+| `--algo ppo` | Algoritmo utilizado para o treinamento. |
+| `--env` | ID do ambiente registrado. |
+| `--conf` | Caminho para o arquivo YAML com os hiperparâmetros. |
+| `--n-timesteps` | Total de passos de treinamento. Quanto mais passos, maior o tempo e potencialmente melhor o agente. |
+| `--log-folder` | Diretório onde os logs, checkpoints e o modelo final serão salvos. |
+| `--storage` | Banco de dados SQLite para registro do experimento. |
+| `--study-name` | Nome do estudo para identificar este treinamento no banco. |
+| `--trained-agent` | Caminho para um modelo `.zip` já treinado, para **continuar o treinamento** a partir de um checkpoint. |
+| `--n-eval-episodes` | Número de episódios usados para avaliar o agente durante o treinamento (padrão: 5). |
+| `--eval-freq` | Frequência (em passos) com que o agente é avaliado e um checkpoint é salvo. |
+| `--save-freq` | Frequência (em passos) para salvar checkpoints intermediários. |
+| `--verbose` | Nível de verbosidade: `0` = silencioso, `1` = informações básicas, `2` = detalhado. |
+| `--seed` | Seed para reprodutibilidade dos experimentos. |
+
+#### 🔹 Exemplos adicionais de treinamento
+
+```bash
+# Treinamento com avaliação frequente e seed fixo (reprodutibilidade)
+python train.py \
+  --algo ppo \
+  --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
+  --conf hyperparams/best_params_for_food_delivery_gym/ppo.yml \
+  --n-timesteps 18000000 \
+  --eval-freq 50000 \
+  --n-eval-episodes 10 \
+  --seed 42 \
+  --log-folder logs/training/
+
+# Treinamento com salvamento frequente de checkpoints
+python train.py \
+  --algo ppo \
+  --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
+  --conf hyperparams/best_params_for_food_delivery_gym/ppo.yml \
+  --n-timesteps 18000000 \
+  --save-freq 500000 \
+  --log-folder logs/training/
+
+# Treinamento com parâmetros padrão (sem arquivo YAML)
+python train.py \
+  --algo ppo \
+  --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
+  --n-timesteps 5000000 \
+  --log-folder logs/training/
+```
+
+**3º Passo**: Visualize a curva de aprendizado após o treinamento:
+
+```bash
+python scripts/plot_train.py -a ppo -e FoodDelivery-medium-obj1-v0 -f logs/training/
+```
+
+---
+
+### 4️⃣ Dicas Gerais de Uso do RL Baselines3 Zoo
+
+- **Organize os estudos por nome**: Use nomes descritivos como `ppo_medium_obj1_run1` para facilitar a rastreabilidade entre múltiplos experimentos.
+- **Use o mesmo banco SQLite para tudo**: Centralizar todos os estudos (tuning e treinamento) em um único `optuna_studies.db` facilita comparações e consultas.
+- **Sempre salve com `--storage`**: Mesmo para experimentos curtos, a persistência no banco de dados protege contra perdas inesperadas.
+- **Verifique os logs regularmente**: O TensorBoard pode ser usado para acompanhar métricas em tempo real:
+
+```bash
+tensorboard --logdir logs/training/
+```
+
+Acesse em: `http://localhost:6006`
 
 ## 🧩 Criação de Agentes Otimizadores com `OptimizerGym`
 
