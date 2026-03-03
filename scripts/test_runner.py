@@ -92,8 +92,8 @@ def main():
 
     args = parser.parse_args()
 
-    if args.objective < 1 or args.objective > 10:
-        parser.error("O argumento --objective deve ser um inteiro entre 1 e 10.")
+    if args.objective < 1 or args.objective > 11:
+        parser.error("O argumento --objective deve ser um inteiro entre 1 e 11.")
 
     if args.cost_function and args.optimizer != "lowest":
         parser.error("Erro: --cost-function só pode ser usado com --optimizer lowest")
@@ -120,7 +120,7 @@ def main():
         elif args.optimizer == "nearest":
             optimizer = NearestDriverOptimizerGym(env)
         elif args.optimizer == "lowest":
-            if args.objective in [1, 3, 5, 7, 9, 10]:
+            if args.objective in [1, 3, 5, 7, 9, 10, 11]:
                 objective_for_cost_function = 1
             elif args.objective in [2, 4, 6, 8]:
                 objective_for_cost_function = 2
@@ -170,7 +170,7 @@ def main():
             env.print_enviroment_state()
             print(f"Observação final: {env.get_observation()}")
             print(f"Quantidade de rotas criadas = {env.simpy_env.state.get_length_orders()}")
-            print(f"Quantidade de rotas entregues = {env.simpy_env.state.orders_delivered}")
+            print(f"Quantidade de rotas entregues = {env.simpy_env.state.get_orders_delivered()}")
             optimizer.show_statistics_board()
         except Exception as e:
             print(f"Erro ao mostrar estatísticas: {e}")

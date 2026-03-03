@@ -401,7 +401,7 @@ class GridViewPygame(FoodDeliveryView):
         # Coletar estatísticas atuais
         current_stats = {
             'time': int(environment.now),
-            'delivered': environment.state.orders_delivered,
+            'delivered': environment.state.get_orders_delivered(),
             'waiting': sum(1 for c in environment.state.customers if c.status == CustumerStatus.WAITING_DELIVERY),
             'available': sum(1 for d in environment.state.drivers if d.status == DriverStatus.AVAILABLE),
             'picking': sum(1 for d in environment.state.drivers if d.status == DriverStatus.PICKING_UP),

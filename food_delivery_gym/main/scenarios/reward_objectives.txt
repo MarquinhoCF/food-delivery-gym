@@ -29,4 +29,6 @@ Minimizar o tempo de entrega dos motoristas a partir do tempo efetivo gasto (Com
 
 * Objetivo 10: 
 Minimizar o tempo de entrega dos motoristas a partir do tempo efetivo gasto (Com penalização 5x para pedidos não coletados) -> Recompensa negativa no fim do episódio
-        
+
+* Objetivo 11:
+Maximizar o número de pedidos entregues -> Recompensa positiva a cada pedido entregue
