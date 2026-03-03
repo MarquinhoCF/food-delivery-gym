@@ -29,10 +29,10 @@ WINDOW_WIDTH = int(os.getenv("WINDOW_WIDTH"))
 WINDOW_HEIGHT = int(os.getenv("WINDOW_HEIGHT"))
 FPS = int(os.getenv("FPS"))
 
-def prepare_env(scenario_filename: str, seed: int, render: bool) -> FoodDeliveryGymEnv:
+def prepare_env(scenario_filename: str, reward_objective: int, seed: int, render: bool) -> FoodDeliveryGymEnv:
     """Prepara e retorna o ambiente configurado."""
     scenario_path = str(files("food_delivery_gym.main.scenarios").joinpath(scenario_filename))
-    env = FoodDeliveryGymEnv(scenario_json_file_path=scenario_path, reward_objective=DEFAULT_OBJECTIVE)
+    env = FoodDeliveryGymEnv(scenario_json_file_path=scenario_path, reward_objective=reward_objective)
     env.set_mode(EnvMode.TESTING)
     
     # Reset com compatibilidade
@@ -92,6 +92,9 @@ def main():
 
     args = parser.parse_args()
 
+    if args.objective < 1 or args.objective > 10:
+        parser.error("O argumento --objective deve ser um inteiro entre 1 e 10.")
+
     if args.cost_function and args.optimizer != "lowest":
         parser.error("Erro: --cost-function só pode ser usado com --optimizer lowest")
     
@@ -107,7 +110,7 @@ def main():
 
     try:
         # Prepara o ambiente
-        env = prepare_env(args.scenario, seed=args.seed, render=args.render)
+        env = prepare_env(args.scenario, args.objective, seed=args.seed, render=args.render)
         
         # Cria o otimizador apropriado
         if args.optimizer == "random":
@@ -144,6 +147,9 @@ def main():
             raise ValueError(f"Otimizador '{args.optimizer}' não reconhecido")
         
         print(f"=== Ambiente pronto com otimizador: {optimizer.get_title()} ===")
+        print()
+        print(env.get_description())
+        print()
         print(f"Action space: {env.action_space}")
         print("Iniciando...\n")
         
