@@ -98,7 +98,7 @@ class Driver(MapActor):
             if self.route_requests:
                 route = self.route_requests.pop(0)
                 self.process_route_request(route)
-                yield self.timeout(self.time_to_accept_or_reject_route()) # TODO Eliminar essa incerteza
+                yield self.timeout(self.time_to_accept_or_reject_route())
             else:
                 yield self.timeout(1)
 
@@ -328,13 +328,10 @@ class Driver(MapActor):
     def estimate_time_to_driver_receive_order(self) -> int:
         return self.rng.integers(1, 5)
 
-    def time_to_accept_or_reject_route(self, average_time: bool = False) -> int:
-        min_time = 3
-        max_time = 10
-        if average_time:
-            return ((max_time - min_time) // 2) + min_time
-        else:
-            return self.rng.integers(min_time, max_time)
+    def time_to_accept_or_reject_route(self) -> int:
+        # Retirando incerteza
+        # return self.rng.integers(3, 10)
+        return 1
 
     def time_between_accept_and_start_picking_up(self) -> int:
         return self.rng.integers(0, 3)
