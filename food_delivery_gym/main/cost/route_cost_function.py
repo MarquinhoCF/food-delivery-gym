@@ -7,7 +7,7 @@ from food_delivery_gym.main.order.order_status import OrderStatus
 from food_delivery_gym.main.route.route_segment import RouteSegment
 
 
-class ObjectiveBasedCostFunction(CostFunction):
+class RouteCostFunction(CostFunction):
     def __init__(self, objective: int = 1):
         """
         :param objective: Define o critério de custo.

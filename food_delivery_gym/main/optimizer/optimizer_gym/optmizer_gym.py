@@ -565,7 +565,7 @@ class OptimizerGym(Optimizer, ABC):
                 try:
                     order = self.gym_env.get_current_order()
                     action = self.assign_driver_to_order(self.state, order)
-                    print(f"Ação automática (otimizador): {action}")
+                    print(f"Ação automática ({self.get_title()}): {action}")
                 except Exception as e:
                     print(f"Erro ao obter ação do otimizador: {e}")
                     action = action_space.sample()

@@ -6,7 +6,8 @@ import textwrap
 
 from dotenv import load_dotenv
 from stable_baselines3 import PPO
-from food_delivery_gym.main.cost.objective_based_cost_function import ObjectiveBasedCostFunction
+from food_delivery_gym.main.cost.marginal_route_cost_function import MarginalRouteCostFunction
+from food_delivery_gym.main.cost.route_cost_function import RouteCostFunction
 from food_delivery_gym.main.environment.env_mode import EnvMode
 from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
 
@@ -28,10 +29,10 @@ WINDOW_WIDTH = int(os.getenv("WINDOW_WIDTH"))
 WINDOW_HEIGHT = int(os.getenv("WINDOW_HEIGHT"))
 FPS = int(os.getenv("FPS"))
 
-def prepare_env(scenario_filename: str, seed: int, render: bool) -> FoodDeliveryGymEnv:
+def prepare_env(scenario_filename: str, reward_objective: int, seed: int, render: bool) -> FoodDeliveryGymEnv:
     """Prepara e retorna o ambiente configurado."""
     scenario_path = str(files("food_delivery_gym.main.scenarios").joinpath(scenario_filename))
-    env = FoodDeliveryGymEnv(scenario_json_file_path=scenario_path, reward_objective=DEFAULT_OBJECTIVE)
+    env = FoodDeliveryGymEnv(scenario_json_file_path=scenario_path, reward_objective=reward_objective)
     env.set_mode(EnvMode.TESTING)
     
     # Reset com compatibilidade
@@ -76,6 +77,8 @@ def main():
                        help="Modo de execução")
     parser.add_argument("--optimizer", choices=("random", "first", "nearest", "lowest", "rl"), default="random",
                        help="Tipo de otimizador a usar")
+    parser.add_argument("--cost-function", choices=("route", "marginal_route"), default=None,
+        help="Função de custo usada pelo LowestCostDriverOptimizerGym (apenas quando --optimizer lowest)")
     parser.add_argument("--model-path", default=None, 
                        help="Caminho para um modelo PPO (necessário para --optimizer rl)")
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
@@ -89,6 +92,15 @@ def main():
 
     args = parser.parse_args()
 
+    if args.objective < 1 or args.objective > 10:
+        parser.error("O argumento --objective deve ser um inteiro entre 1 e 10.")
+
+    if args.cost_function and args.optimizer != "lowest":
+        parser.error("Erro: --cost-function só pode ser usado com --optimizer lowest")
+    
+    if not args.cost_function and args.optimizer == "lowest":
+        parser.error("Erro: --optimizer lowest requer --cost-function")
+
     if args.save_log:
         log_file = open("log.txt", "w", encoding="utf-8")
         sys.stdout = log_file
@@ -98,7 +110,7 @@ def main():
 
     try:
         # Prepara o ambiente
-        env = prepare_env(args.scenario, seed=args.seed, render=args.render)
+        env = prepare_env(args.scenario, args.objective, seed=args.seed, render=args.render)
         
         # Cria o otimizador apropriado
         if args.optimizer == "random":
@@ -109,14 +121,20 @@ def main():
             optimizer = NearestDriverOptimizerGym(env)
         elif args.optimizer == "lowest":
             if args.objective in [1, 3, 5, 7, 9, 10]:
-                # Seleciona a função de custo baseada em tempo de entrega
                 objective_for_cost_function = 1
             elif args.objective in [2, 4, 6, 8]:
-                # Seleciona a função de custo baseada em custo de operação (distância)
                 objective_for_cost_function = 2
             else:
                 raise ValueError(f"Objetivo {args.objective} não reconhecido.")
-            optimizer = LowestCostDriverOptimizerGym(env, cost_function=ObjectiveBasedCostFunction(objective=objective_for_cost_function))
+
+            if args.cost_function == "route":
+                cost_function = RouteCostFunction(objective=objective_for_cost_function)
+            elif args.cost_function == "marginal_route":
+                cost_function = MarginalRouteCostFunction(objective=objective_for_cost_function)
+            else:
+                raise ValueError(f"Cost function '{args.cost_function}' inválida")
+
+            optimizer = LowestCostDriverOptimizerGym(env, cost_function=cost_function)
         elif args.optimizer == "rl":
             # TODO: Testar pra ver se isso vai funcionar mesmo
             # if not args.model_path:
@@ -129,6 +147,9 @@ def main():
             raise ValueError(f"Otimizador '{args.optimizer}' não reconhecido")
         
         print(f"=== Ambiente pronto com otimizador: {optimizer.get_title()} ===")
+        print()
+        print(env.get_description())
+        print()
         print(f"Action space: {env.action_space}")
         print("Iniciando...\n")
         

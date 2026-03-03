@@ -275,29 +275,14 @@ class Driver(MapActor):
         order.delivered()
         self.orders_delivered += 1
         self.environment.state.increment_orders_delivered()
+
+        total_orders_list = self.orders_list + [route.get_current_order() for route in self.route_requests]
         
         # Remove o pedido da lista de pedidos do motorista e soma a penalidade do tempo gasto para entrega
-        for i, o in enumerate(self.orders_list):
+        for i, o in enumerate(total_orders_list):
             if o.order_id == order.order_id:
-                # Se o pedido foi alocado depois do último tempo de verificação, soma o tempo desde a alocação até agora
-                # Agora se o pedido foi alocado antes do último tempo de verificação, soma o tempo desde o último tempo de verificação até agora
                 start_time = max(order.time_that_driver_was_allocated, self.last_time_check)
-                
-                if self.reward_objective in [9, 10]:
-                    # O pedido já foi coletado
-                    if order.time_it_was_picked_up > start_time:
-                        # Penalidade dividida entre antes e depois da coleta
-                        penalty_before_pickup = (order.time_it_was_picked_up - start_time) * 5
-                        penalty_after_pickup = self.now - order.time_it_was_picked_up
-                        penalty = penalty_before_pickup + penalty_after_pickup
-                    else:
-                        # Todo o tempo é depois da coleta
-                        penalty = self.now - start_time
-                else:
-                    penalty = self.now - start_time
-
-                self.sum_penalty_for_time_spent += penalty
-
+                self.sum_penalty_for_time_spent += self._calculate_order_penalty(order, start_time)
                 del self.orders_list[i]
                 break
 
@@ -305,6 +290,20 @@ class Driver(MapActor):
         # print(f"Driver {self.driver_id} entregou o pedido ao cliente no tempo {self.now}")
         
         self.process(self.sequential_processor())
+
+    def _calculate_order_penalty(self, order: Order, start_time: Number) -> Number:
+        if self.reward_objective in [9, 10]:
+            if order.is_already_caught():
+                if order.time_it_was_picked_up > start_time:
+                    penalty_before_pickup = (order.time_it_was_picked_up - start_time) * 5
+                    penalty_after_pickup = self.now - order.time_it_was_picked_up
+                    return penalty_before_pickup + penalty_after_pickup
+                else:
+                    return self.now - start_time
+            else:
+                return (self.now - start_time) * 5
+        else:
+            return self.now - start_time
 
     def move_to(self, destination: Coordinate) -> ProcessGenerator:
         while self.coordinate != destination:
@@ -329,13 +328,10 @@ class Driver(MapActor):
     def estimate_time_to_driver_receive_order(self) -> int:
         return self.rng.integers(1, 5)
 
-    def time_to_accept_or_reject_route(self, average_time: bool = False) -> int:
-        min_time = 3
-        max_time = 10
-        if average_time:
-            return ((max_time - min_time) // 2) + min_time
-        else:
-            return self.rng.integers(min_time, max_time)
+    def time_to_accept_or_reject_route(self) -> int:
+        # Retirando incerteza
+        # return self.rng.integers(3, 10)
+        return 1
 
     def time_between_accept_and_start_picking_up(self) -> int:
         return self.rng.integers(0, 3)
@@ -442,29 +438,12 @@ class Driver(MapActor):
     def get_penality_for_time_spent_for_delivery(self) -> Number:
         total_penalty = self.sum_penalty_for_time_spent
 
-        for order in self.orders_list:
+        total_orders_list = self.orders_list + [route.get_current_order() for route in self.route_requests]
+
+        for order in total_orders_list:
             # Considera o tempo de início como o maior entre o momento de alocação do driver e o último tempo de verificação
             time_count_start = max(order.time_that_driver_was_allocated, self.last_time_check)
-
-            if self.reward_objective in [9, 10]:
-                if order.is_already_caught():
-                    # O pedido já foi coletado
-                    if order.time_it_was_picked_up > time_count_start:
-                        # Penalidade dividida entre antes e depois da coleta
-                        penalty_before_pickup = (order.time_it_was_picked_up - time_count_start) * 5
-                        penalty_after_pickup = self.now - order.time_it_was_picked_up
-                        penalty = penalty_before_pickup + penalty_after_pickup
-                    else:
-                        # Todo o tempo é depois da coleta
-                        penalty = self.now - time_count_start
-                else:
-                    # Pedido ainda não foi coletado, aplica multiplicador
-                    penalty = (self.now - time_count_start) * 5
-            else:
-                # Outros objetivos de recompensa
-                penalty = self.now - time_count_start
-
-            total_penalty += penalty
+            total_penalty += self._calculate_order_penalty(order, time_count_start)
 
         self.last_time_check = self.now
         self.sum_penalty_for_time_spent = 0

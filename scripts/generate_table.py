@@ -16,28 +16,31 @@ AGENT_TO_COLUMN = {
         'random_heuristic': 'D',
         'first_driver_heuristic': 'E',
         'nearest_driver_heuristic': 'F',
-        'lowest_cost_driver_heuristic': 'G',
-        'ppo_otimizado_trained_18M_steps': 'H',
-        'ppo_otimizado_trained_50M_steps': 'I',
-        'ppo_otimizado_trained_100M_steps': 'J'
+        'lowest_route_cost_driver_heuristic': 'G',
+        'lowest_marginal_route_cost_driver_heuristic': 'H',
+        'ppo_otimizado_trained_18M_steps': 'I',
+        'ppo_otimizado_trained_50M_steps': 'J',
+        'ppo_otimizado_trained_100M_steps': 'K'
     },
     'medium_scenario': {
-        'random_heuristic': 'L',
-        'first_driver_heuristic': 'M',
-        'nearest_driver_heuristic': 'N',
-        'lowest_cost_driver_heuristic': 'O',
-        'ppo_otimizado_trained_18M_steps': 'P',
-        'ppo_otimizado_trained_50M_steps': 'Q',
-        'ppo_otimizado_trained_100M_steps': 'R'
+        'random_heuristic': 'M',
+        'first_driver_heuristic': 'N',
+        'nearest_driver_heuristic': 'O',
+        'lowest_route_cost_driver_heuristic': 'P',
+        'lowest_marginal_route_cost_driver_heuristic': 'Q',
+        'ppo_otimizado_trained_18M_steps': 'R',
+        'ppo_otimizado_trained_50M_steps': 'S',
+        'ppo_otimizado_trained_100M_steps': 'T'
     },
     'complex_scenario': {
-        'random_heuristic': 'T',
-        'first_driver_heuristic': 'U',
-        'nearest_driver_heuristic': 'V',
-        'lowest_cost_driver_heuristic': 'W',
-        'ppo_otimizado_trained_18M_steps': 'X',
-        'ppo_otimizado_trained_50M_steps': 'Y',
-        'ppo_otimizado_trained_100M_steps': 'Z'
+        'random_heuristic': 'V',
+        'first_driver_heuristic': 'W',
+        'nearest_driver_heuristic': 'X',
+        'lowest_route_cost_driver_heuristic': 'Y',
+        'lowest_marginal_route_cost_driver_heuristic': 'Z',
+        'ppo_otimizado_trained_18M_steps': 'AA',
+        'ppo_otimizado_trained_50M_steps': 'AB',
+        'ppo_otimizado_trained_100M_steps': 'AC'
     }
 }
 
