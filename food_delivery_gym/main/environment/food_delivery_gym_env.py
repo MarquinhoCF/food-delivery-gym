@@ -57,8 +57,6 @@ class FoodDeliveryGymEnv(Env):
         self.orders_generated = None # Número de pedidos que o gerador de pedidos vai gerar
 
         # Definindo o objetivo da recompensa
-        if reward_objective not in range(1, 11):
-            raise ValueError("reward_objective deve ser um valor entre 1 e 10.")
         self.set_reward_objective(reward_objective)
 
         # Espaço de Observação
@@ -278,15 +276,15 @@ class FoodDeliveryGymEnv(Env):
         core_event = None
         
         while (not terminated) and (not truncated) and (core_event is None):
-            if self.simpy_env.state.orders_delivered < self.orders_generated:
+            if self.simpy_env.state.get_orders_delivered() < self.orders_generated:
                 self.simpy_env.step(self.render_mode)
                 
                 # TODO: Logs
                 # # Verifica se um pedido foi entregue
-                # if self.simpy_env.state.orders_delivered > self.last_num_orders_delivered:
+                # if self.simpy_env.state.get_orders_delivered() > self.last_num_orders_delivered:
                     # print("Pedido entregue!")
-                    # print(f"Número de pedidos entregues: {self.simpy_env.state.orders_delivered}")
-                    # self.last_num_orders_delivered = self.simpy_env.state.orders_delivered
+                    # print(f"Número de pedidos entregues: {self.simpy_env.state.get_orders_delivered()}")
+                    # self.last_num_orders_delivered = self.simpy_env.state.get_orders_delivered()
 
                 # Verifica o próximo evento principal
                 core_event = self.simpy_env.dequeue_core_event()
@@ -395,7 +393,7 @@ class FoodDeliveryGymEnv(Env):
             # Soma do tempo efetivo gasto por cada motorista
             reward = -sum(driver.get_penality_for_time_spent_for_delivery() for driver in self.simpy_env.state.drivers)
 
-            if truncated and self.simpy_env.state.orders_delivered < self.orders_generated:
+            if truncated and self.simpy_env.state.get_orders_delivered() < self.orders_generated:
                 # Se a simulação foi truncada e não foram entregues todos os pedidos, penaliza a recompensa
                 reward -= sum(driver.get_penality_for_late_orders() for driver in self.simpy_env.state.drivers)
         
@@ -404,9 +402,9 @@ class FoodDeliveryGymEnv(Env):
             # Distância percorrida desde a última recompensa para o motorista selecionado
             reward = -sum(driver.get_and_update_distance_traveled() for driver in self.simpy_env.state.drivers)
 
-            if truncated and self.simpy_env.state.orders_delivered < self.orders_generated:
+            if truncated and self.simpy_env.state.get_orders_delivered() < self.orders_generated:
                 # Se a simulação foi truncada e não foram entregues todos os pedidos, penaliza a recompensa
-                reward -= (self.orders_generated - self.simpy_env.state.orders_delivered) * self.simpy_env.map.max_distance() * 2
+                reward -= (self.orders_generated - self.simpy_env.state.get_orders_delivered()) * self.simpy_env.map.max_distance() * 2
 
         # Objetivo 5: Minimizar o tempo de entrega a partir da expectativa de tempo gasto com a entrega -> Recompensa negativa ao final do episódio
         elif self.reward_objective == 5:
@@ -434,7 +432,7 @@ class FoodDeliveryGymEnv(Env):
             # Soma do tempo efetivo gasto por cada motorista
             reward = -sum(driver.get_penality_for_time_spent_for_delivery() for driver in self.simpy_env.state.drivers)
 
-            if truncated and self.simpy_env.state.orders_delivered < self.orders_generated:
+            if truncated and self.simpy_env.state.get_orders_delivered() < self.orders_generated:
                 # Se a simulação foi truncada e não foram entregues todos os pedidos, penaliza a recompensa
                 reward -= sum(driver.get_penality_for_late_orders() for driver in self.simpy_env.state.drivers)
 
@@ -443,13 +441,17 @@ class FoodDeliveryGymEnv(Env):
             # Distância total percorrida por cada motorista
             reward = -sum(driver.get_and_update_distance_traveled() for driver in self.simpy_env.state.drivers)
 
-            if truncated and self.simpy_env.state.orders_delivered < self.orders_generated:
+            if truncated and self.simpy_env.state.get_orders_delivered() < self.orders_generated:
                 # Se a simulação foi truncada e não foram entregues todos os pedidos, penaliza a recompensa
-                reward -= (self.orders_generated - self.simpy_env.state.orders_delivered) * self.simpy_env.map.max_distance() * 2
+                reward -= (self.orders_generated - self.simpy_env.state.get_orders_delivered()) * self.simpy_env.map.max_distance() * 2
 
-        if (terminated or truncated) and (self.simpy_env.state.orders_delivered < self.orders_generated):
+        # Objetivo 11: Maximizar o número de pedidos entregues -> Recompensa positiva a cada pedido entregue
+        elif self.reward_objective == 11:
+            reward = self.simpy_env.state.get_orders_delivered_since_last_check()
+
+        if (terminated or truncated) and (self.simpy_env.state.get_orders_delivered() < self.orders_generated):
             # Penaliza a recompensa se o episódio terminou ou foi truncado e não foram entregues todos os pedidos
-            reward -= (self.orders_generated - self.simpy_env.state.orders_delivered) * 10000
+            reward -= (self.orders_generated - self.simpy_env.state.get_orders_delivered()) * 10000
         
         return reward
         
@@ -609,9 +611,9 @@ class FoodDeliveryGymEnv(Env):
         return self.reward_objective
     
     def set_reward_objective(self, reward_objective: int):
-        valid_objectives = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-        if reward_objective not in valid_objectives:
-            raise ValueError(f"Objetivo inválido! Escolha entre {valid_objectives}")
+        valid_objectives = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+        if reward_objective not in range(1, 12):
+            raise ValueError(f"reward_objective deve ser um valor entre {valid_objectives}.")
         self.reward_objective = reward_objective
     
     def print_enviroment_state(self, options = None):

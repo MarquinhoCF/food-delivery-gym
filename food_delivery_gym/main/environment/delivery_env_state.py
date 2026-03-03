@@ -14,6 +14,9 @@ class DeliveryEnvState:
         self.orders_awaiting_delivery: List[Order] = []
         self.orders_delivered = 0
 
+        # Qual nome eu deveria dar pra essa variável? Ela é usada para calcular a quantidade de pedidos entregues desde a última vez que foi verificada, para fins de logging
+        self._last_checked_orders_delivered = 0
+
         self.successfully_assigned_routes = 0
 
         self.events = []
@@ -54,6 +57,14 @@ class DeliveryEnvState:
 
     def increment_orders_delivered(self) -> None:
         self.orders_delivered += 1
+    
+    def get_orders_delivered(self) -> int:
+        return self.orders_delivered
+    
+    def get_orders_delivered_since_last_check(self) -> int:
+        delivered_since_last_check = self.orders_delivered - self._last_checked_orders_delivered
+        self._last_checked_orders_delivered = self.orders_delivered
+        return delivered_since_last_check
 
     def add_event(self, event) -> None:
         self.events.append(event)
