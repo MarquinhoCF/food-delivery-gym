@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "food_delivery_gym"
-version = "1.2.1"
+version = "1.2.2"
 description = "Custom Gymnasium environment for simulating food delivery operations."
 readme = "README.md"
 authors = [
