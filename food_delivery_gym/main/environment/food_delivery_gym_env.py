@@ -262,7 +262,7 @@ class FoodDeliveryGymEnv(Env):
         return obs
        
     def get_info(self):
-        return {'info': self.simpy_env.now}
+        return {'simpy_time_step': self.simpy_env.now}
     
     def set_mode(self, mode: EnvMode):
         self.env_mode = mode

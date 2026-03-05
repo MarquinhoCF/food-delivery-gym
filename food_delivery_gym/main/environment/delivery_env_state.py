@@ -14,7 +14,6 @@ class DeliveryEnvState:
         self.orders_awaiting_delivery: List[Order] = []
         self.orders_delivered = 0
 
-        # Qual nome eu deveria dar pra essa variável? Ela é usada para calcular a quantidade de pedidos entregues desde a última vez que foi verificada, para fins de logging
         self._last_checked_orders_delivered = 0
 
         self.successfully_assigned_routes = 0
