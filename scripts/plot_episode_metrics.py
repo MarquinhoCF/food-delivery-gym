@@ -8,9 +8,9 @@ Cada figura é salva como:
     episode_metrics_<label_sanitizado>.png
 
 Uso:
-    python plot_episode_metrics.py
-    python plot_episode_metrics.py --base-dir results/obj_11/medium/
-    python plot_episode_metrics.py \
+    python -m scripts.plot_episode_metrics
+    python -m scripts.plot_episode_metrics --base-dir results/obj_11/medium/
+    python -m scripts.plot_episode_metrics. \
         --dirs ppo_otimizado_trained_18M_steps \
                ppo_otimizado_trained_18M_steps_with_penalty \
                ppo_otimizado_trained_18M_steps_with_bonus \
