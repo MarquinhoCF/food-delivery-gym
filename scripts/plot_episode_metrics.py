@@ -1,20 +1,17 @@
 """
-Plota por episódio, gerando UMA FIGURA POR SÉRIE de experimento PPO:
+Plota métricas por episódio para UMA série de experimento PPO:
   • Retorno (total_rewards)
   • Tamanho do episódio em passos (episode_lengths)
   • Último tempo SimPy do episódio (simpy_last_time_steps)
 
-Cada figura é salva como:
+A figura é salva como:
     episode_metrics_<label_sanitizado>.png
 
 Uso:
-    python -m scripts.plot_episode_metrics
-    python -m scripts.plot_episode_metrics --base-dir results/obj_11/medium/
-    python -m scripts.plot_episode_metrics. \
-        --dirs ppo_otimizado_trained_18M_steps \
-               ppo_otimizado_trained_18M_steps_with_penalty \
-               ppo_otimizado_trained_18M_steps_with_bonus \
-        --labels "Base" "Penalty" "Bonus"
+    python -m scripts.plot_episode_metrics --dir results/meu_experimento/
+    python -m scripts.plot_episode_metrics --dir results/meu_experimento/ --label "Meu Experimento"
+    python -m scripts.plot_episode_metrics --dir results/meu_experimento/ --label "Teste" --color "#FF6B6B"
+    python -m scripts.plot_episode_metrics --dir results/meu_experimento/ --output-dir ./plots/
 """
 
 import argparse
@@ -28,15 +25,8 @@ import seaborn as sns
 
 sns.set_theme(style="darkgrid", font_scale=1.05)
 
-COLORS  = ["#3A86FF", "#FF6B6B", "#06D6A0"]
-MARKERS = ["o",        "s",       "D"      ]
-
-DEFAULT_DIRS = [
-    "ppo_otimizado_trained_18M_steps",
-    "ppo_otimizado_trained_18M_steps_with_penalty",
-    "ppo_otimizado_trained_18M_steps_with_bonus",
-]
-DEFAULT_LABELS = ["Base", "With Penalty", "With Bonus"]
+DEFAULT_COLOR  = "#3A86FF"
+DEFAULT_MARKER = "o"
 
 
 # ── Carregamento ───────────────────────────────────────────────────────────
@@ -114,7 +104,7 @@ def _plot_box(ax, s, key, ylabel, title, color):
         ax.set_title(title, fontweight="bold", fontsize=11)
         return
     valid = arr[~np.isnan(arr)]
-    bp = ax.boxplot([valid], labels=[s["label"]], patch_artist=True,
+    bp = ax.boxplot([valid], tick_labels=[s["label"]], patch_artist=True,
                     medianprops=dict(color="white", linewidth=2.2),
                     whiskerprops=dict(linewidth=1.2),
                     capprops=dict(linewidth=1.2),
@@ -129,9 +119,9 @@ def _plot_box(ax, s, key, ylabel, title, color):
     ax.set_ylabel(ylabel, fontsize=9)
 
 
-# ── Figura individual ──────────────────────────────────────────────────────
+# ── Figura ─────────────────────────────────────────────────────────────────
 
-def build_figure_for_series(s, output, color, marker):
+def build_figure(s, output, color, marker):
     fig = plt.figure(figsize=(13, 16))
     fig.suptitle(
         f"Análise por Episódio  ·  {s['label']}  ({s['n']} simulações)",
@@ -168,23 +158,22 @@ def build_figure_for_series(s, output, color, marker):
 
 # ── Sumário no terminal ────────────────────────────────────────────────────
 
-def print_summary(series_list):
+def print_summary(s):
     SEP = "=" * 72
     FMT = "{:<24} {:>4}  {:>9} {:>9}  {:>8} {:>8}  {:>8} {:>8}"
+    r  = s["rewards"]
+    l  = s["lengths"] if s["lengths"]  is not None else np.array([np.nan])
+    st = s["simpy_t"] if s["simpy_t"]  is not None else np.array([np.nan])
     print(f"\n{SEP}")
     print(FMT.format("SÉRIE", "N",
                      "RET μ", "RET σ", "LEN μ", "LEN σ", "SIMPY μ", "SIMPY σ"))
     print(SEP)
-    for s in series_list:
-        r  = s["rewards"]
-        l  = s["lengths"]  if s["lengths"]  is not None else np.array([np.nan])
-        st = s["simpy_t"]  if s["simpy_t"]  is not None else np.array([np.nan])
-        print(FMT.format(
-            s["label"][:24], s["n"],
-            f"{np.nanmean(r):>9.2f}", f"{np.nanstd(r):>9.2f}",
-            f"{np.nanmean(l):>8.1f}", f"{np.nanstd(l):>8.1f}",
-            f"{np.nanmean(st):>8.1f}", f"{np.nanstd(st):>8.1f}",
-        ))
+    print(FMT.format(
+        s["label"][:24], s["n"],
+        f"{np.nanmean(r):>9.2f}", f"{np.nanstd(r):>9.2f}",
+        f"{np.nanmean(l):>8.1f}", f"{np.nanstd(l):>8.1f}",
+        f"{np.nanmean(st):>8.1f}", f"{np.nanstd(st):>8.1f}",
+    ))
     print(SEP)
 
 
@@ -196,47 +185,43 @@ def _sanitize(label):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Gera UMA FIGURA POR SÉRIE com retorno, episode_length e simpy_time_step."
+        description="Gera uma figura com retorno, episode_length e simpy_time_step para um diretório."
     )
-    parser.add_argument("--base-dir", "-b", type=str, default=None)
-    parser.add_argument("--dirs", "-d", nargs="+", default=None)
-    parser.add_argument("--labels", "-l", nargs="+", default=DEFAULT_LABELS)
-    parser.add_argument("--output-dir", "-o", type=str, default=".",
-                        help="Pasta onde salvar os PNGs (default: pasta atual)")
+    parser.add_argument(
+        "--dir", "-d", type=str, required=True,
+        help="Diretório contendo metrics_data.npz"
+    )
+    parser.add_argument(
+        "--label", "-l", type=str, default=None,
+        help="Nome da série (default: nome do diretório)"
+    )
+    parser.add_argument(
+        "--color", "-c", type=str, default=DEFAULT_COLOR,
+        help=f"Cor hex para os gráficos (default: {DEFAULT_COLOR})"
+    )
+    parser.add_argument(
+        "--output-dir", "-o", type=str, default=".",
+        help="Pasta onde salvar o PNG (default: pasta atual)"
+    )
     args = parser.parse_args()
 
-    if args.dirs:
-        dirs = args.dirs
-    elif args.base_dir:
-        dirs = [os.path.join(args.base_dir, d) for d in DEFAULT_DIRS]
-    else:
-        dirs = DEFAULT_DIRS
+    label = args.label or os.path.basename(os.path.normpath(args.dir))
 
-    labels = list(args.labels)
-    if len(labels) < len(dirs):
-        labels += [os.path.basename(d) for d in dirs[len(labels):]]
+    print(f"\n📂 Carregando série de: {args.dir}")
+    s = load_series(args.dir, label)
 
-    os.makedirs(args.output_dir, exist_ok=True)
-
-    print(f"\n📂 Carregando {len(dirs)} séries...")
-    series_list = []
-    for d, lbl in zip(dirs, labels):
-        s = load_series(d, lbl)
-        if s is not None:
-            series_list.append(s)
-
-    if not series_list:
-        print("❌ Nenhuma série válida. Verifique os caminhos.")
+    if s is None:
+        print("❌ Série inválida. Verifique o caminho.")
         return
 
-    print_summary(series_list)
-    print(f"\n📊 Gerando {len(series_list)} figura(s)...")
+    print_summary(s)
 
-    for s, color, marker in zip(series_list, COLORS, MARKERS):
-        fname  = f"episode_metrics_{_sanitize(s['label'])}.png"
-        output = os.path.join(args.output_dir, fname)
-        build_figure_for_series(s, output, color, marker)
+    os.makedirs(args.output_dir, exist_ok=True)
+    fname  = f"episode_metrics_{_sanitize(label)}.png"
+    output = os.path.join(args.output_dir, fname)
 
+    print(f"\n📊 Gerando figura...")
+    build_figure(s, output, args.color, DEFAULT_MARKER)
     print("\n✅ Concluído.")
 
 
