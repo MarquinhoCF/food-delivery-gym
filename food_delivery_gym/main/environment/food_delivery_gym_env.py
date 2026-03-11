@@ -449,8 +449,11 @@ class FoodDeliveryGymEnv(Env):
         elif self.reward_objective == 11:
             reward = self.simpy_env.state.get_orders_delivered_since_last_check()
 
-            if (terminated or truncated) and (self.simpy_env.state.get_orders_delivered() == self.orders_generated):
-                reward += 10000  # Bônus para entregar todos os pedidos
+            # if (terminated or truncated) and (self.simpy_env.state.get_orders_delivered() == self.orders_generated):
+            #     reward += 10000  # Bônus para entregar todos os pedidos
+
+            if (terminated or truncated) and (self.simpy_env.state.get_orders_delivered() < self.orders_generated):
+                reward -= self.orders_generated - self.simpy_env.state.get_orders_delivered()
 
         # if (terminated or truncated) and (self.simpy_env.state.get_orders_delivered() < self.orders_generated):
         #     # Penaliza a recompensa se o episódio terminou ou foi truncado e não foram entregues todos os pedidos
