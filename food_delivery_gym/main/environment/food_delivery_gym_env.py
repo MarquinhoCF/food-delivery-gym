@@ -447,13 +447,25 @@ class FoodDeliveryGymEnv(Env):
 
         # Objetivo 11: Maximizar o número de pedidos entregues -> Recompensa positiva a cada pedido entregue
         elif self.reward_objective == 11:
-            reward = self.simpy_env.state.get_orders_delivered_since_last_check()
+            reward = self.simpy_env.state.get_num_orders_delivered_since_last_check()
 
             # if (terminated or truncated) and (self.simpy_env.state.get_orders_delivered() == self.orders_generated):
             #     reward += 10000  # Bônus para entregar todos os pedidos
 
             if (terminated or truncated) and (self.simpy_env.state.get_orders_delivered() < self.orders_generated):
                 reward -= self.orders_generated - self.simpy_env.state.get_orders_delivered()
+
+        # Objetivo 12: Penaliza pelo tempo total de cada pedido entregue neste step.bQuanto mais rápido o pedido for entregue, menor a penalidade (maior a recompensa).
+        elif self.reward_objective == 12:
+            recently_delivered = self.simpy_env.state.get_and_clear_recently_delivered_orders()
+            reward = -sum(
+                order.time_it_was_delivered - order.request_date
+                for order in recently_delivered
+            )
+
+            if truncated and self.simpy_env.state.get_orders_delivered() < self.orders_generated:
+                reward -= (self.orders_generated - self.simpy_env.state.get_orders_delivered()) * self.simpy_env.map.max_distance() * 2
+
 
         # if (terminated or truncated) and (self.simpy_env.state.get_orders_delivered() < self.orders_generated):
         #     # Penaliza a recompensa se o episódio terminou ou foi truncado e não foram entregues todos os pedidos
@@ -617,8 +629,8 @@ class FoodDeliveryGymEnv(Env):
         return self.reward_objective
     
     def set_reward_objective(self, reward_objective: int):
-        valid_objectives = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
-        if reward_objective not in range(1, 12):
+        valid_objectives = range(1, 13)
+        if reward_objective not in valid_objectives:
             raise ValueError(f"reward_objective deve ser um valor entre {valid_objectives}.")
         self.reward_objective = reward_objective
     

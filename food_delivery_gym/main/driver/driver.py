@@ -272,9 +272,9 @@ class Driver(MapActor):
             time=self.now
         ))
         self.status = DriverStatus.AVAILABLE
-        order.delivered()
+        order.delivered(self.now)
         self.orders_delivered += 1
-        self.environment.state.increment_orders_delivered()
+        self.environment.state.increment_orders_delivered(order)
         
         # Remove o pedido da lista de pedidos do motorista e soma a penalidade do tempo gasto para entrega
         for i, o in enumerate(self.orders_list):

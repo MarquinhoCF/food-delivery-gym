@@ -34,7 +34,7 @@ def setup_logging(results_dir: str):
     return log_file
 
 def create_environment(reward_objective: int, scenario_name: str):
-    if reward_objective not in range(1, 12):
+    if reward_objective not in range(1, 13):
         raise ValueError("reward_objective deve ser um valor entre 1 e 11.")
 
     scenario_file = scenario_name + ".json"
@@ -69,7 +69,7 @@ def main():
 
     print("=== Executando Agentes Otimizadores ao Ambiente de Entrega de Última Milha ===")
 
-    for i in range(1, 12):  # objetivos de 1 a 11
+    for i in range(1, 13):
         for scenario in SCENARIOS:
             results_dir = BASE_RESULTS_DIR.format(i, scenario)
             if SAVE_LOG_TO_FILE:
@@ -90,7 +90,7 @@ def main():
             print(f"\n=== Executando simulações com o Agente do Motorista mais Próximo no cenário '{scenario}' ===")
             NearestDriverOptimizerGym(base_env).run_simulations(num_runs, results_dir + "nearest_driver_heuristic/", seed=seed)
 
-            if i in [1, 3, 5, 7, 9, 10, 11]:
+            if i in [1, 3, 5, 7, 9, 10, 11, 12]:
                 # Seleciona a função de custo baseada em tempo de entrega
                 objective_for_cost_function = 1
             elif i in [2, 4, 6, 8]:
@@ -107,7 +107,7 @@ def main():
             LowestCostDriverOptimizerGym(base_env, cost_function=MarginalRouteCostFunction(objective=objective_for_cost_function))\
                 .run_simulations(num_runs, results_dir + "lowest_marginal_route_cost_driver_heuristic/", seed=seed)
 
-            # RL - tenta os 3 time steps possíveis
+            # RL - tenta os time steps possíveis
             print("\n=== Tentando executar modelos de Aprendizado por Reforço ===")
             for timestep in TIMESTEPS_OPTIONS:
                 model_dir = f"{MODEL_BASE_DIR}/obj_{i}/medium/{timestep}/"

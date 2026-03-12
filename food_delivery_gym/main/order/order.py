@@ -46,6 +46,7 @@ class Order:
         # Atributos de tempo para entrega (atualizados pelo motorista)
         self.time_that_driver_was_allocated = None # Momento em que o motorista foi alocado
         self.time_it_was_picked_up = None # Momento em que o pedido foi retirado
+        self.time_it_was_delivered = None # Momento em que o pedido foi entregue
 
         self.estimated_time_between_accept_and_start_picking_up = None # Estimativa de tempo entre aceitar o pedido e começar a retirá-lo
         self.estimated_pickup_travel_time = None # Estimativa de tempo de viagem para retirada
@@ -136,8 +137,9 @@ class Order:
     def driver_arrived(self):
         self.status = OrderStatus.DRIVER_ARRIVED_DELIVERY_LOCATION
 
-    def delivered(self):
+    def delivered(self, now):
         self.status = OrderStatus.DELIVERED
+        self.time_it_was_delivered = now
 
     def is_already_caught(self):
         return self.status in (
