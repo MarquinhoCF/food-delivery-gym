@@ -79,6 +79,15 @@ register(
 )
 
 register(
+    id='food_delivery_gym/FoodDelivery-initial-obj13-v0',
+    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
+    kwargs={
+        "scenario_json_file_path": get_scenario_path("initial.json"),
+        "reward_objective": 13
+    }
+)
+
+register(
     id='food_delivery_gym/FoodDelivery-medium-obj1-v0',
     entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
     kwargs={
@@ -151,6 +160,15 @@ register(
 )
 
 register(
+    id='food_delivery_gym/FoodDelivery-medium-obj13-v0',
+    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
+    kwargs={
+        "scenario_json_file_path": get_scenario_path("medium.json"),
+        "reward_objective": 13
+    }
+)
+
+register(
     id='food_delivery_gym/FoodDelivery-complex-obj1-v0',
     entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
     kwargs={
@@ -219,5 +237,14 @@ register(
     kwargs={
         "scenario_json_file_path": get_scenario_path("complex.json"),
         "reward_objective": 12
+    }
+)
+
+register(
+    id='food_delivery_gym/FoodDelivery-complex-obj13-v0',
+    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
+    kwargs={
+        "scenario_json_file_path": get_scenario_path("complex.json"),
+        "reward_objective": 13
     }
 )

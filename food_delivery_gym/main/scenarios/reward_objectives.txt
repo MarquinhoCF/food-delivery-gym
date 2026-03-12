@@ -34,4 +34,7 @@ Minimizar o tempo de entrega dos motoristas a partir do tempo efetivo gasto (Com
 Maximizar o número de pedidos entregues -> Recompensa positiva a cada pedido entregue
 
 * Objetivo 12:
-Objetivo 12: Penaliza pelo tempo total de cada pedido entregue neste step.bQuanto mais rápido o pedido for entregue, menor a penalidade (maior a recompensa).
+Penaliza pelo tempo total de cada pedido entregue neste step.bQuanto mais rápido o pedido for entregue, menor a penalidade (maior a recompensa).
+
+* Objetivo 13:
+Penaliza pelo tempo gasto de cada pedido que está na pipeline de entrega (pedidos prontos e não entregues) e de cada pedido entregue neste step. 

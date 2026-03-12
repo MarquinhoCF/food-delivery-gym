@@ -53,6 +53,7 @@ class FoodDeliveryGymEnv(Env):
         self.env_mode = EnvMode.TRAINING
 
         self.simpy_env = None # Ambiente de simulação será criado no reset
+        self._last_decision_time_step = None # Último passo de tempo em que o agente tomou uma decisão
         self.last_simpy_env = None # Ambiente de simulação da execução anterior -> para fins de computação de estatísticas
         self.orders_generated = None # Número de pedidos que o gerador de pedidos vai gerar
 
@@ -366,6 +367,8 @@ class FoodDeliveryGymEnv(Env):
         observation = self.get_observation()
         info = self.get_info()
 
+        self._last_decision_time_step = self.simpy_env.now
+
         return observation, info
     
     def _select_driver_to_order(self, selected_driver, order):
@@ -466,11 +469,30 @@ class FoodDeliveryGymEnv(Env):
             if truncated and self.simpy_env.state.get_orders_delivered() < self.orders_generated:
                 reward -= (self.orders_generated - self.simpy_env.state.get_orders_delivered()) * self.simpy_env.map.max_distance() * 2
 
+        # Objetivo 13: Penaliza pelo tempo gasto de cada pedido que está na pipeline de entrega (pedidos prontos e não entregues) e de cada pedido entregue neste step. 
+        elif self.reward_objective == 13:
+            penalty = 0
+
+            orders_in_delivery_pipeline = [order for order in self.simpy_env.state.orders if order.is_ready() and not order.is_delivered()]
+
+            orders_recently_delivered = self.simpy_env.state.get_and_clear_recently_delivered_orders()
+
+            for _ in orders_in_delivery_pipeline:
+                penalty += self.simpy_env.now - self._last_decision_time
+            
+            for order in orders_recently_delivered:
+                # Pedido foi enregue nesse intervalo, então penalidade baseada no tempo total do pedido
+                penalty += order.time_it_was_delivered - self._last_decision_time
+
+            reward = -penalty
+
 
         # if (terminated or truncated) and (self.simpy_env.state.get_orders_delivered() < self.orders_generated):
         #     # Penaliza a recompensa se o episódio terminou ou foi truncado e não foram entregues todos os pedidos
         #     reward -= (self.orders_generated - self.simpy_env.state.get_orders_delivered()) * 10000
         
+        self._last_decision_time = self.simpy_env.now
+
         return reward
         
     def step(self, action):
@@ -629,7 +651,7 @@ class FoodDeliveryGymEnv(Env):
         return self.reward_objective
     
     def set_reward_objective(self, reward_objective: int):
-        valid_objectives = range(1, 13)
+        valid_objectives = range(1, 14)
         if reward_objective not in valid_objectives:
             raise ValueError(f"reward_objective deve ser um valor entre {valid_objectives}.")
         self.reward_objective = reward_objective

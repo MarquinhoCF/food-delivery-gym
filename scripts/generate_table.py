@@ -68,7 +68,7 @@ def destacar_melhor_media():
         sheet = workbook[sheet_name]
         buscar_maior = sheet_name == "Recompensas"
 
-        for obj_num in range(1, 13):
+        for obj_num in range(1, 14):
             base_row = 3 + (obj_num - 1) * 4
 
             for scenario_name, heuristics_cols in AGENT_TO_COLUMN.items():
@@ -117,7 +117,7 @@ print("Carregando workbook...")
 workbook = load_workbook(OUTPUT_PATH)
 
 print("Preenchendo planilhas com dados das execuções...")
-for obj_num in range(1, 13):  # objetivos de 1 a 12
+for obj_num in range(1, 14):  # objetivos de 1 a 13
     obj_dir = os.path.join(ROOT_DIR, f'obj_{obj_num}')
     base_row = 3 + (obj_num - 1) * 4
     print(f" - Processando objetivo {obj_num}...")

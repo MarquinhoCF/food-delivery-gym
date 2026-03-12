@@ -141,6 +141,12 @@ class Order:
         self.status = OrderStatus.DELIVERED
         self.time_it_was_delivered = now
 
+    def is_ready(self):
+        return self.isReady
+    
+    def is_delivered(self):
+        return self.status == OrderStatus.DELIVERED
+
     def is_already_caught(self):
         return self.status in (
             OrderStatus.PICKED_UP,

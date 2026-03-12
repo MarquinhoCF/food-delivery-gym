@@ -92,8 +92,8 @@ def main():
 
     args = parser.parse_args()
 
-    if args.objective < 1 or args.objective > 12:
-        parser.error("O argumento --objective deve ser um inteiro entre 1 e 12.")
+    if args.objective < 1 or args.objective > 13:
+        parser.error("O argumento --objective deve ser um inteiro entre 1 e 13.")
 
     if args.cost_function and args.optimizer != "lowest":
         parser.error("Erro: --cost-function só pode ser usado com --optimizer lowest")
@@ -120,7 +120,7 @@ def main():
         elif args.optimizer == "nearest":
             optimizer = NearestDriverOptimizerGym(env)
         elif args.optimizer == "lowest":
-            if args.objective in [1, 3, 5, 7, 9, 10, 11, 12]:
+            if args.objective in [1, 3, 5, 7, 9, 10, 11, 12, 13]:
                 objective_for_cost_function = 1
             elif args.objective in [2, 4, 6, 8]:
                 objective_for_cost_function = 2

@@ -55,9 +55,9 @@ class DeliveryEnvState:
     def increment_assigned_routes(self) -> None:
         self.successfully_assigned_routes += 1
 
-    def increment_orders_delivered(self, order: Order) -> None:
-        self.orders_delivered += 1
+    def add_order_delivered(self, order: Order) -> None:
         self.recently_delivered_orders.append(order)
+        self.orders_delivered += 1
     
     def get_orders_delivered(self) -> int:
         return self.orders_delivered
