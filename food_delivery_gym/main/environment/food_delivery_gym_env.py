@@ -53,7 +53,7 @@ class FoodDeliveryGymEnv(Env):
         self.env_mode = EnvMode.TRAINING
 
         self.simpy_env = None # Ambiente de simulação será criado no reset
-        self._last_decision_time_step = None # Último passo de tempo em que o agente tomou uma decisão
+        self._last_decision_time = None # Último passo de tempo em que o agente tomou uma decisão
         self.last_simpy_env = None # Ambiente de simulação da execução anterior -> para fins de computação de estatísticas
         self.orders_generated = None # Número de pedidos que o gerador de pedidos vai gerar
 
@@ -367,7 +367,7 @@ class FoodDeliveryGymEnv(Env):
         observation = self.get_observation()
         info = self.get_info()
 
-        self._last_decision_time_step = self.simpy_env.now
+        self._last_decision_time = self.simpy_env.now
 
         return observation, info
     
