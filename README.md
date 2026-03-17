@@ -694,30 +694,104 @@ Isso executará múltiplas simulações, coletará estatísticas (recompensa, te
 
 Para facilitar a execução massiva de simulações e a geração de tabelas com os resultados dos agentes otimizadores (heurísticos e baseados em AR), o projeto fornece dois scripts utilitários:
 
-### 🚀 Script `run_optimizer`: Execução de Múltiplos Otimizadores
+### 🚀 Script `run_batch_eval`: Execução de Múltiplos Otimizadores
 
-Esse script automatiza a execução de diferentes agentes otimizadores em todos os **cenários experimentais** (`initial`, `medium`, `complex`) e para todos os **10 objetivos de recompensa**.
+Esse script automatiza a execução de diferentes agentes otimizadores em combinações de cenários experimentais e objetivos de recompensa.
 
 #### ✅ O que ele faz:
 
-* Executa os seguintes agentes:
+* Executa os seguintes agentes heurísticos:
   * `RandomDriverOptimizerGym`
   * `FirstDriverOptimizerGym`
   * `NearestDriverOptimizerGym`
-  * `LowestCostDriverOptimizerGym`
-  * `RLModelOptimizerGym` (com diferentes checkpoints de modelos PPO treinados)
+  * `LowestCostDriverOptimizerGym` (com custo de rota)
+  * `LowestCostDriverOptimizerGym` (com custo marginal de rota)
+* Executa modelos PPO (`RLModelOptimizerGym`), com **descoberta automática** dos modelos disponíveis em `--model-base-dir`
 * Gera arquivos `.txt` com os resultados das execuções
 * Gera arquivos `.npz` contendo as métricas agregadas para análise
 
 #### 📦 Como usar:
 
-Execute o comando:
+Execução padrão (todos os objetivos, cenários, heurísticas e modelos disponíveis):
 
 ```bash
-python -m scripts.run_optimizer
+python -m scripts.run_batch_eval
 ```
 
-> **Observação:** o script procura modelos PPO previamente treinados nos diretórios definidos em `MODEL_BASE_DIR`. Certifique-se de que os modelos `.zip` e arquivos `vecnormalize.pkl` estão no local correto para que o RL funcione.
+#### ⚙️ Opções de Configuração
+
+| Opção | Descrição | Padrão |
+|-------|-----------|--------|
+| `--objectives` / `-o` | Objetivos de recompensa a executar (1–13). Aceita múltiplos valores. | todos (1–13) |
+| `--scenarios` / `-s` | Cenários a executar: `initial`, `medium`, `complex`. Aceita múltiplos valores. | todos |
+| `--heuristics` | Heurísticas a executar. Aceita múltiplos valores. | todas |
+| `--models` / `-m` | Nomes dos modelos RL (subdiretórios de `obj_N/` com `best_model.zip`). Ver estrutura de diretórios abaixo. | descoberta automática |
+| `--no-heuristics` | Desativa a execução de todas as heurísticas. | — |
+| `--no-rl` | Desativa a execução dos modelos PPO. | — |
+| `--num-runs` / `-n` | Número de simulações por agente. | `20` |
+| `--seed` | Seed para reprodutibilidade. | `123456789` |
+| `--model-base-dir` | Diretório base dos modelos PPO treinados. | `./data/ppo_training/.../treinamento` |
+| `--results-base-dir` | Diretório base para salvar resultados. Use `{}` como placeholder para objetivo e cenário. | `./data/runs/execucoes/obj_{}/{}_scenario/` |
+| `--save-log` | Salva o output em `log.txt` dentro do diretório de resultados. | — |
+
+Os valores possíveis para `--heuristics` são: `random`, `first_driver`, `nearest_driver`, `lowest_route_cost`, `lowest_marginal_route_cost`.
+
+#### 📁 Estrutura de diretórios para modelos RL
+
+O script descobre automaticamente os modelos disponíveis varrendo `--model-base-dir`. Para que um modelo seja reconhecido, os arquivos devem estar organizados da seguinte forma:
+
+```
+<model-base-dir>/
+└── obj_1/
+│   ├── 18M_steps/
+│   │   ├── best_model.zip
+│   │   └── food_delivery_gym-FoodDelivery-medium-obj1-v0/
+│   │       └── vecnormalize.pkl
+│   └── outro_experimento/
+│       ├── best_model.zip
+│       └── food_delivery_gym-FoodDelivery-medium-obj1-v0/
+│           └── vecnormalize.pkl
+└── obj_2/
+    └── ...
+```
+
+As regras são:
+
+* Cada objetivo deve ter seu próprio subdiretório `obj_N/` dentro de `--model-base-dir`
+* Dentro de `obj_N/`, qualquer subdiretório que contenha `best_model.zip` na raiz é detectado como um modelo — o nome do subdiretório se torna o identificador do modelo nos resultados
+* O `vecnormalize.pkl` deve estar no caminho `<modelo>/food_delivery_gym-FoodDelivery-medium-obj{N}-v0/vecnormalize.pkl` — se não encontrado, o modelo é pulado com aviso
+
+> **Observação:** se os modelos foram treinados com o RL Baselines3 Zoo sem mover os arquivos gerados, a estrutura já estará no formato correto automaticamente. Use `--models` apenas para restringir a execução a modelos específicos dentro de `obj_N/`.
+
+#### 🔹 Exemplos
+
+```bash
+# Rodar apenas heurísticas, sem PPO
+python -m scripts.run_optimizer --no-rl
+
+# Rodar apenas os modelos PPO, sem heurísticas
+python -m scripts.run_optimizer --no-heuristics
+
+# Cenário e objetivo específicos
+python -m scripts.run_optimizer --scenarios medium --objectives 1 3 5
+
+# Selecionar heurísticas específicas
+python -m scripts.run_optimizer --heuristics random nearest_driver
+
+# Forçar modelos RL específicos (sem descoberta automática)
+python -m scripts.run_optimizer --models 18M_steps 100M_steps
+
+# Execução rápida
+python -m scripts.run_optimizer --num-runs 5 --seed 42 --scenarios initial --objectives 1
+
+# Execução completa salvando logs e usando diretórios customizados
+python -m scripts.run_optimizer \
+    --model-base-dir ./meus_modelos \
+    --results-base-dir ./resultados/obj_{}/{}_scenario/ \
+    --save-log
+```
+
+---
 
 ### 📊 Script `generate_table`: Geração de Planilhas Excel com Métricas
 
