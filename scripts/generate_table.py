@@ -1,155 +1,420 @@
+"""
+generate_table.py
+
+Gera automaticamente a planilha de resultados (objective_table.xlsx) a partir
+dos dados produzidos pelo script evaluate_agents.py.
+
+- Descobre agentes e modelos PPO varrendo os diretórios de resultados
+- Constrói o Excel dinamicamente: sem mapeamentos manuais de colunas
+- Replica o estilo visual do template original
+- Destaca em negrito o melhor agente por cenário/objetivo em cada aba
+"""
+
 import os
+import argparse
 import numpy as np
-from openpyxl import load_workbook
-from shutil import copyfile
-from openpyxl.styles import Font
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 
-# Caminhos
-TEMPLATE_PATH = '/templates/template_objective_table.xlsx'
-OUTPUT_PATH = 'objective_table.xlsx'
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # Volta da pasta /objective_table
-ROOT_DIR = os.path.join(BASE_DIR, 'data', 'runs', 'execucoes')
+# ── Configuração de diretórios ────────────────────────────────────────────────
 
-# Mapear heurísticas para colunas por cenário
-AGENT_TO_COLUMN = {
-    'initial_scenario': {
-        'random_heuristic': 'D',
-        'first_driver_heuristic': 'E',
-        'nearest_driver_heuristic': 'F',
-        'lowest_route_cost_driver_heuristic': 'G',
-        'lowest_marginal_route_cost_driver_heuristic': 'H',
-        'ppo_otimizado_trained_18M_steps': 'I',
-        'ppo_otimizado_trained_50M_steps': 'J',
-        'ppo_otimizado_trained_100M_steps': 'K'
-    },
-    'medium_scenario': {
-        'random_heuristic': 'M',
-        'first_driver_heuristic': 'N',
-        'nearest_driver_heuristic': 'O',
-        'lowest_route_cost_driver_heuristic': 'P',
-        'lowest_marginal_route_cost_driver_heuristic': 'Q',
-        'ppo_otimizado_trained_18M_steps': 'R',
-        'ppo_otimizado_trained_50M_steps': 'S',
-        'ppo_otimizado_trained_100M_steps': 'T'
-    },
-    'complex_scenario': {
-        'random_heuristic': 'V',
-        'first_driver_heuristic': 'W',
-        'nearest_driver_heuristic': 'X',
-        'lowest_route_cost_driver_heuristic': 'Y',
-        'lowest_marginal_route_cost_driver_heuristic': 'Z',
-        'ppo_otimizado_trained_18M_steps': 'AA',
-        'ppo_otimizado_trained_50M_steps': 'AB',
-        'ppo_otimizado_trained_100M_steps': 'AC'
-    }
+DEFAULT_RESULTS_DIR = "./data/runs/execucoes"
+DEFAULT_OUTPUT_PATH = "objective_table.xlsx"
+ALL_OBJECTIVES      = list(range(1, 14))
+ALL_SCENARIOS       = ["initial", "medium", "complex"]
+SCENARIO_LABELS     = {"initial": "Inicial", "medium": "Médio", "complex": "Complexo"}
+METRICS             = ["avg", "std_dev", "median", "mode"]
+METRIC_LABELS       = ["Média", "Desvio Padrão", "Mediana", "Moda"]
+ROWS_PER_OBJECTIVE  = len(METRICS)   # 4 linhas por objetivo
+HEADER_ROWS         = 2              # linhas de cabeçalho antes dos dados
+
+# Heurísticas conhecidas: dir_name → label legível
+KNOWN_HEURISTICS = {
+    "random":                    "Motorista Aleatório",
+    "first_driver":              "Primeiro Motorista",
+    "nearest_driver":            "Motorista mais Próximo",
+    "lowest_route_cost":         "Motorista de Menor Custo de Rota",
+    "lowest_marginal_route_cost":"Motorista de Menor Custo Marginal de Rota",
 }
 
-# Métricas por ordem
-METRIC_KEYS = ['avg', 'std_dev', 'median', 'mode']
-
-# Mapear nome do dicionário no .npz para aba no Excel
-STAT_KEY_TO_SHEET = {
-    'total_rewards_statistics': 'Recompensas',
-    'time_spent_on_delivery_statistics': 'Tempo Efetivo Gasto',
-    'total_distance_traveled_statistics': 'Distância Percorrida'
+# Métricas disponíveis nos .npz → nome da aba
+NPZ_KEY_TO_SHEET = {
+    "total_rewards_statistics":          "Recompensas",
+    "time_spent_on_delivery_statistics": "Tempo Efetivo Gasto",
+    "total_distance_traveled_statistics":"Distância Percorrida",
 }
 
-# Função auxiliar para aplicar negrito em um conjunto de células
-def aplicar_negrito(sheet, col, base_row):
-    bold_font = Font(bold=True)
-    for i in range(4):  # média, desvio padrão, mediana, moda
-        cell = sheet[f"{col}{base_row + i}"]
-        cell.font = bold_font
+# Recompensas: maior é melhor; demais métricas: menor é melhor
+HIGHER_IS_BETTER = {"Recompensas"}
 
-# Função para destacar a melhor média de cada cenário
-def destacar_melhor_media():
-    print("Aplicando negrito nas melhores heurísticas por cenário...")
-    for sheet_name in STAT_KEY_TO_SHEET.values():
-        sheet = workbook[sheet_name]
-        buscar_maior = sheet_name == "Recompensas"
+# ── Paleta de cores (extraída do template original) ───────────────────────────
+COLOR_HEADER_BG   = "104862"   # azul escuro — cabeçalhos
+COLOR_HEADER_FG   = "FFFFFF"   # branco
+COLOR_OBJ_BG      = "CAEEFB"   # azul claro — célula do objetivo
+COLOR_ROW_ALT_A   = "A6CAEC"   # azul médio — média / mediana
+COLOR_ROW_ALT_B   = "DCEAF7"   # azul pálido — desvio padrão / moda
+COLOR_SEP_BG      = "104862"   # separador entre cenários
 
-        for obj_num in range(1, 14):
-            base_row = 3 + (obj_num - 1) * 4
+ROW_FILLS = [COLOR_ROW_ALT_A, COLOR_ROW_ALT_B, COLOR_ROW_ALT_A, COLOR_ROW_ALT_B]
 
-            for scenario_name, heuristics_cols in AGENT_TO_COLUMN.items():
-                melhor_valor = None
-                melhor_col = None
+# ── Descrições dos objetivos (preservadas do template) ───────────────────────
+OBJECTIVE_DESCRIPTIONS = {
+    1:  "Minimizar o tempo de entrega a partir da expectativa de tempo gasto com a entrega a cada passo",
+    2:  "Minimizar o custo de operação a partir da expectativa da distância a ser percorrida a cada passo",
+    3:  "Minimizar o tempo de entrega dos motoristas a partir do tempo efetivo gasto a cada passo",
+    4:  "Minimizar o custo de operação a partir da distância efetiva a cada passo",
+    5:  "Minimizar o tempo de entrega a partir da expectativa de tempo gasto com a entrega ao final do episódio",
+    6:  "Minimizar o custo de operação a partir da expectativa da distância a ser percorrida ao final do episódio",
+    7:  "Minimizar o tempo de entrega dos motoristas a partir do tempo efetivo gasto ao final do episódio",
+    8:  "Minimizar o custo de operação a partir da distância efetiva ao final do episódio",
+    9:  "Minimizar o tempo de entrega dos motoristas a partir do tempo efetivo gasto (Com penalização 5x para pedidos não coletados)  a cada passo",
+    10: "Minimizar o tempo de entrega dos motoristas a partir do tempo efetivo gasto (Com penalização 5x para pedidos não coletados) ao final do episódio",
+    11: "Maximizar o número de pedidos entregues Recompensa positiva a cada pedido entregue",
+    12: "Penaliza pelo tempo total de cada pedido entregue neste step. Quanto mais rápido o pedido for entregue, menor a penalidade (maior a recompensa)",
+    13: "Penaliza pelo tempo gasto de cada pedido que está na pipeline de entrega (pedidos prontos e não entregues) e de cada pedido entregue neste step. ",
+}
 
-                for heuristic, col in heuristics_cols.items():
-                    cell_value = sheet[f"{col}{base_row}"].value  # linha da média
-                    try:
-                        val = float(cell_value)
-                        if melhor_valor is None:
-                            melhor_valor = val
-                            melhor_col = col
-                        else:
-                            if buscar_maior and val > melhor_valor:
-                                melhor_valor = val
-                                melhor_col = col
-                            elif not buscar_maior and val < melhor_valor:
-                                melhor_valor = val
-                                melhor_col = col
-                    except (TypeError, ValueError):
-                        continue
+# ── Helpers de estilo ─────────────────────────────────────────────────────────
 
-                if melhor_col:
-                    aplicar_negrito(sheet, melhor_col, base_row)
+def _fill(hex_color: str) -> PatternFill:
+    return PatternFill("solid", fgColor=hex_color)
 
-        print(f" - Concluído: {sheet_name}")
+def _font(bold=False, color="000000", size=11) -> Font:
+    return Font(bold=bold, color=color, size=size, name="Arial")
 
-# Função para preencher as planilhas com os dados carregados
-def preencher_planilhas(base_row, col, stats_dicts):
-    for stat_key, sheet_name in STAT_KEY_TO_SHEET.items():
-        stats = stats_dicts.get(stat_key)
-        if stats is None:
-            continue
-        sheet = workbook[sheet_name]
-        for i, metric in enumerate(METRIC_KEYS):
-            cell = f'{col}{base_row + i}'
-            sheet[cell] = stats.get(metric, 'N/A')
+def _border(style="medium") -> Border:
+    s = Side(border_style=style)
+    return Border(left=s, right=s, top=s, bottom=s)
 
-# ================== Execução do Script ====================
+def _thin_border() -> Border:
+    s = Side(border_style="thin")
+    return Border(left=s, right=s, top=s, bottom=s)
 
-print("Copiando template para arquivo de saída...")
-copyfile(BASE_DIR + TEMPLATE_PATH, OUTPUT_PATH)
+def _center() -> Alignment:
+    return Alignment(horizontal="center", vertical="center", wrap_text=True)
 
-print("Carregando workbook...")
-workbook = load_workbook(OUTPUT_PATH)
+def _left() -> Alignment:
+    return Alignment(horizontal="left", vertical="center", wrap_text=True)
 
-print("Preenchendo planilhas com dados das execuções...")
-for obj_num in range(1, 14):  # objetivos de 1 a 13
-    obj_dir = os.path.join(ROOT_DIR, f'obj_{obj_num}')
-    base_row = 3 + (obj_num - 1) * 4
-    print(f" - Processando objetivo {obj_num}...")
+def style_header(cell, label):
+    cell.value     = label
+    cell.font      = _font(bold=True, color=COLOR_HEADER_FG)
+    cell.fill      = _fill(COLOR_HEADER_BG)
+    cell.border    = _border("medium")
+    cell.alignment = _center()
 
-    for scenario_name, agents_cols in AGENT_TO_COLUMN.items():
-        scenario_dir = os.path.join(obj_dir, scenario_name)
-        print(f"   - Cenário: {scenario_name}")
+def style_separator(cell, label=""):
+    cell.value     = label
+    cell.font      = _font(bold=True, color=COLOR_HEADER_FG)
+    cell.fill      = _fill(COLOR_SEP_BG)
+    cell.border    = _border("medium")
+    cell.alignment = _center()
 
-        for agent, col in agents_cols.items():
-            npz_path = os.path.join(scenario_dir, agent, 'metrics_data.npz')
+def style_obj_label(cell, label):
+    cell.value     = label
+    cell.font      = _font(bold=True)
+    cell.fill      = _fill(COLOR_OBJ_BG)
+    cell.border    = _thin_border()
+    cell.alignment = _center()
 
-            if not os.path.exists(npz_path):
-                print(f"     [Aviso] Arquivo não encontrado: {npz_path}")
+def style_obj_desc(cell, label):
+    cell.value     = label
+    cell.font      = _font()
+    cell.fill      = _fill(COLOR_OBJ_BG)
+    cell.border    = _thin_border()
+    cell.alignment = _center()
+
+def style_metric_label(cell, label, row_idx):
+    cell.value     = label
+    cell.font      = _font(bold=True)
+    cell.fill      = _fill(ROW_FILLS[row_idx])
+    cell.border    = _thin_border()
+    cell.alignment = _center()
+
+def style_data_cell(cell, value, row_idx, bold=False):
+    cell.value     = value
+    cell.font      = _font(bold=bold)
+    cell.fill      = _fill(ROW_FILLS[row_idx])
+    cell.border    = _thin_border()
+    cell.alignment = _center()
+
+# ── Descoberta de agentes ─────────────────────────────────────────────────────
+
+def agent_label(dir_name: str) -> str:
+    """Converte nome de diretório em label legível."""
+    if dir_name in KNOWN_HEURISTICS:
+        return KNOWN_HEURISTICS[dir_name]
+    if dir_name.startswith("ppo_"):
+        suffix = dir_name[4:]   # remove "ppo_"
+        return f"PPO — {suffix}"
+    return dir_name
+
+def discover_agents(results_dir: str, objectives: list, scenarios: list) -> list:
+    """
+    Varre results_dir para descobrir todos os agentes presentes.
+    Retorna lista ordenada: primeiro as heurísticas conhecidas (na ordem de
+    KNOWN_HEURISTICS), depois os modelos PPO em ordem alfabética.
+    """
+    found = set()
+    for obj in objectives:
+        for scenario in scenarios:
+            path = os.path.join(results_dir, f"obj_{obj}", f"{scenario}_scenario")
+            if not os.path.isdir(path):
                 continue
+            for entry in os.scandir(path):
+                if entry.is_dir() and os.path.isfile(
+                    os.path.join(entry.path, "metrics_data.npz")
+                ):
+                    found.add(entry.name)
 
-            try:
-                data = np.load(npz_path, allow_pickle=True)
+    heuristics = [k for k in KNOWN_HEURISTICS if k in found]
+    ppo_models = sorted(d for d in found if d not in KNOWN_HEURISTICS)
+    return heuristics + ppo_models
 
-                stats_dicts = {}
-                for key in STAT_KEY_TO_SHEET.keys():
-                    arr = data.get(key)
-                    stats_dicts[key] = arr.item() if isinstance(arr, np.ndarray) and arr.dtype == object else None
+def load_metrics(npz_path: str) -> dict:
+    """Carrega métricas de um arquivo .npz. Retorna dict vazio se inválido."""
+    try:
+        data = np.load(npz_path, allow_pickle=True)
+        result = {}
+        for key in NPZ_KEY_TO_SHEET:
+            arr = data.get(key)
+            result[key] = arr.item() if (isinstance(arr, np.ndarray) and arr.dtype == object) else None
+        return result
+    except Exception as e:
+        print(f"  [Erro] {npz_path}: {e}")
+        return {}
 
-                preencher_planilhas(base_row, col, stats_dicts)
+# ── Construção do Excel ───────────────────────────────────────────────────────
 
-            except Exception as e:
-                print(f"     [Erro] Falha ao processar {npz_path}: {e}")               
+def build_workbook(results_dir: str, objectives: list, scenarios: list, agents: list) -> Workbook:
+    wb = Workbook()
+    wb.remove(wb.active)
 
-print("Concluído o preenchimento de dados. Destacando agentes...")
-destacar_melhor_media()
+    for sheet_key, sheet_name in NPZ_KEY_TO_SHEET.items():
+        ws = wb.create_sheet(sheet_name)
+        _build_sheet(ws, sheet_name, sheet_key, results_dir, objectives, scenarios, agents)
 
-print("Salvando o arquivo final...")
-workbook.save(OUTPUT_PATH)
+    return wb
 
-print(f"Processo concluído. Arquivo salvo como {OUTPUT_PATH}")
+
+def _build_sheet(ws, sheet_name: str, sheet_key: str, results_dir: str,
+                 objectives: list, scenarios: list, agents: list):
+    """Constrói uma aba completa."""
+
+    # ── Dimensões dinâmicas ──────────────────────────────────────────────────
+    # Layout de colunas por cenário:
+    #   col_A: "Objetivo N"
+    #   col_B: descrição
+    #   col_C: rótulo estatístico ("Média", "Desvio Padrão", …)  — separador
+    #   col_D … col_D+len(agents)-1: dados de cada agente
+    #
+    # COL_A=1, COL_B=2
+    # Para cada cenário i:
+    #   sep_col   = 3 + i * (1 + len(agents) + 1)
+    #   first_agent_col = sep_col + 1
+    #   last_agent_col  = sep_col + 1 + len(agents)
+
+    n = len(agents)
+
+    def scenario_start(i):
+        """Coluna do separador "/////..." para o cenário i (0-indexed)."""
+        return 3 + i * (n + 1)   # sep + stats_label + n agents
+
+    def first_agent_col(i):
+        return scenario_start(i) + 1
+
+    total_cols = scenario_start(len(scenarios))  # after last scenario
+
+    # ── Linha 1: Cenário ─────────────────────────────────────────────────────
+    # Colunas A, B fixas
+    style_header(ws.cell(1, 1), "Cenário")
+    style_separator(ws.cell(1, 2), "//////////")
+
+    for i, scenario in enumerate(scenarios):
+        sep = scenario_start(i)
+        # Merge da label do cenário sobre as colunas de dados
+        label_start = sep
+        label_end   = sep + n
+        style_header(ws.cell(1, label_start), SCENARIO_LABELS[scenario])
+        if label_end > label_start:
+            ws.merge_cells(
+                start_row=1, start_column=label_start,
+                end_row=1,   end_column=label_end
+            )
+
+    # ── Linha 2: Cabeçalhos dos agentes ──────────────────────────────────────
+    style_header(ws.cell(2, 1), "Heurísticas")
+    style_header(ws.cell(2, 2), "Descrição")
+
+    for i in enumerate(scenarios):
+        sc_idx = i[0]
+        sep = scenario_start(sc_idx)
+        style_header(ws.cell(2, sep), "Estatísticas")
+        for j, agent in enumerate(agents):
+            style_header(ws.cell(2, first_agent_col(sc_idx) + j), agent_label(agent))
+
+    # ── Linhas de dados (objetivos × 4 métricas) ─────────────────────────────
+    for obj_i, obj in enumerate(objectives):
+        base_row = HEADER_ROWS + 1 + obj_i * ROWS_PER_OBJECTIVE
+
+        for m_i, (metric_key, metric_label) in enumerate(zip(METRICS, METRIC_LABELS)):
+            row = base_row + m_i
+
+            # Coluna A: label do objetivo (apenas na primeira linha, com merge)
+            if m_i == 0:
+                style_obj_label(ws.cell(row, 1), f"Objetivo {obj}")
+                if ROWS_PER_OBJECTIVE > 1:
+                    ws.merge_cells(
+                        start_row=row, start_column=1,
+                        end_row=row + ROWS_PER_OBJECTIVE - 1, end_column=1
+                    )
+                # Coluna B: descrição (merge nas 4 linhas do objetivo)
+                desc = OBJECTIVE_DESCRIPTIONS.get(obj, "")
+                style_obj_desc(ws.cell(row, 2), desc)
+                ws.merge_cells(
+                    start_row=row, start_column=2,
+                    end_row=row + ROWS_PER_OBJECTIVE - 1, end_column=2
+                )
+            else:
+                # preenche A e B vazios com mesmo fill para aparência uniforme
+                c_a = ws.cell(row, 1)
+                c_a.fill   = _fill(COLOR_OBJ_BG)
+                c_a.border = _thin_border()
+                c_b = ws.cell(row, 2)
+                c_b.fill   = _fill(COLOR_OBJ_BG)
+                c_b.border = _thin_border()
+
+            # Por cenário
+            for sc_i, scenario in enumerate(scenarios):
+                sep = scenario_start(sc_i)
+
+                # Rótulo estatístico
+                style_metric_label(ws.cell(row, sep), metric_label, m_i)
+
+                # Dados de cada agente
+                for j, agent in enumerate(agents):
+                    npz_path = os.path.join(
+                        results_dir, f"obj_{obj}", f"{scenario}_scenario",
+                        agent, "metrics_data.npz"
+                    )
+                    value = None
+                    if os.path.exists(npz_path):
+                        metrics = load_metrics(npz_path)
+                        stats = metrics.get(sheet_key)
+                        if stats:
+                            value = stats.get(metric_key)
+                            if isinstance(value, (np.floating, np.integer)):
+                                value = float(value)
+
+                    style_data_cell(ws.cell(row, first_agent_col(sc_i) + j), value, m_i)
+
+    # ── Destacar melhor média por cenário/objetivo ────────────────────────────
+    _highlight_best(ws, sheet_name, objectives, scenarios, agents,
+                    scenario_start, first_agent_col, n)
+    
+    # ── Altura das linhas ────────────────────────────────────────────────────
+    ws.row_dimensions[1].height = 35
+    ws.row_dimensions[2].height = 45
+
+    # ── Larguras de coluna ────────────────────────────────────────────────────
+    ws.column_dimensions[get_column_letter(1)].width = 12
+    ws.column_dimensions[get_column_letter(2)].width = 48
+    for i, scenario in enumerate(scenarios):
+        sep = scenario_start(i)
+        ws.column_dimensions[get_column_letter(sep)].width = 14
+        for j in range(n):
+            col = first_agent_col(i) + j
+            label = agent_label(agents[j])
+            ws.column_dimensions[get_column_letter(col)].width = max(18, min(len(label) * 1.1, 40))
+
+    # ── Freeze panes ─────────────────────────────────────────────────────────
+    ws.freeze_panes = "D3"
+
+
+def _highlight_best(ws, sheet_name, objectives, scenarios, agents,
+                    scenario_start_fn, first_agent_col_fn, n):
+    """Aplica negrito nas células da melhor média por cenário/objetivo."""
+    higher_is_better = sheet_name in HIGHER_IS_BETTER
+
+    for obj_i, obj in enumerate(objectives):
+        avg_row = HEADER_ROWS + 1 + obj_i * ROWS_PER_OBJECTIVE  # linha da média
+
+        for sc_i in range(len(scenarios)):
+            best_val = None
+            best_col = None
+
+            for j in range(n):
+                col   = first_agent_col_fn(sc_i) + j
+                value = ws.cell(avg_row, col).value
+                try:
+                    val = float(value)
+                except (TypeError, ValueError):
+                    continue
+
+                if best_val is None:
+                    best_val = val
+                    best_col = col
+                elif higher_is_better and val > best_val:
+                    best_val = val
+                    best_col = col
+                elif not higher_is_better and val < best_val:
+                    best_val = val
+                    best_col = col
+
+            if best_col is not None:
+                for m_i in range(ROWS_PER_OBJECTIVE):
+                    cell = ws.cell(avg_row + m_i, best_col)
+                    cell.font = _font(bold=True)
+
+# ── CLI ───────────────────────────────────────────────────────────────────────
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Gera a planilha de resultados a partir dos dados do evaluate_agents.",
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
+    parser.add_argument(
+        "--results-dir", "-r",
+        default=DEFAULT_RESULTS_DIR,
+        help=f"Diretório raiz com os resultados (obj_N/). Padrão: {DEFAULT_RESULTS_DIR}",
+    )
+    parser.add_argument(
+        "--output", "-out",
+        default=DEFAULT_OUTPUT_PATH,
+        help=f"Caminho do arquivo Excel de saída. Padrão: {DEFAULT_OUTPUT_PATH}",
+    )
+    parser.add_argument(
+        "--objectives", "-o",
+        nargs="+", type=int, default=ALL_OBJECTIVES, metavar="N",
+        help="Objetivos a incluir. Padrão: todos (1–13).",
+    )
+    parser.add_argument(
+        "--scenarios", "-s",
+        nargs="+", choices=ALL_SCENARIOS, default=ALL_SCENARIOS, metavar="SCENARIO",
+        help=f"Cenários a incluir. Opções: {ALL_SCENARIOS}. Padrão: todos.",
+    )
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+
+    print(f"Varrendo diretório: {args.results_dir}")
+    agents = discover_agents(args.results_dir, args.objectives, args.scenarios)
+
+    if not agents:
+        print("[AVISO] Nenhum agente encontrado. Verifique o --results-dir e se os arquivos metrics_data.npz existem.")
+        return
+
+    print(f"Agentes encontrados ({len(agents)}): {agents}")
+    print(f"Objetivos: {args.objectives}")
+    print(f"Cenários:  {args.scenarios}")
+
+    wb = build_workbook(args.results_dir, args.objectives, args.scenarios, agents)
+    wb.save(args.output)
+    print(f"\nPlanilha salva em: {args.output}")
+
+
+if __name__ == "__main__":
+    main()

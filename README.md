@@ -375,7 +375,7 @@ cd ../food-delivery-gym/
 **6º Passo**: Instale o pacote local:
 
 ```bash
-python -m pip install .
+python -m pip -e install .
 ```
 
 **7º Passo**: Volte para o diretório do `rl-baselines3-zoo`:
@@ -530,8 +530,6 @@ python train.py \
   --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
   --conf hyperparams/best_params_for_food_delivery_gym/ppo.yml \
   --n-timesteps 18000000 \
-  --storage sqlite:///optuna_studies.db \
-  --study-name training_ppo_medium_obj1 \
   --log-folder logs/training/
 ```
 
@@ -759,7 +757,7 @@ As regras são:
 
 * Cada objetivo deve ter seu próprio subdiretório `obj_N/` dentro de `--model-base-dir`
 * Dentro de `obj_N/`, qualquer subdiretório que contenha `best_model.zip` na raiz é detectado como um modelo — o nome do subdiretório se torna o identificador do modelo nos resultados
-* O `vecnormalize.pkl` deve estar no caminho `<modelo>/food_delivery_gym-FoodDelivery-medium-obj{N}-v0/vecnormalize.pkl` — se não encontrado, o modelo é pulado com aviso
+* O `vecnormalize.pkl` deve estar no caminho `<modelo>/food_delivery_gym-FoodDelivery-medium-obj{N}-v0/vecnormalize.pkl`. Se um vecnormalize.pkl for encontrado em qualquer subdiretório do modelo, ele é carregado automaticamente. Caso contrário, o modelo é executado sem normalização. 
 
 > **Observação:** se os modelos foram treinados com o RL Baselines3 Zoo sem mover os arquivos gerados, a estrutura já estará no formato correto automaticamente. Use `--models` apenas para restringir a execução a modelos específicos dentro de `obj_N/`.
 
@@ -767,25 +765,25 @@ As regras são:
 
 ```bash
 # Rodar apenas heurísticas, sem PPO
-python -m scripts.run_optimizer --no-rl
+python -m scripts.run_batch_eval --no-rl
 
 # Rodar apenas os modelos PPO, sem heurísticas
-python -m scripts.run_optimizer --no-heuristics
+python -m scripts.run_batch_eval --no-heuristics
 
 # Cenário e objetivo específicos
-python -m scripts.run_optimizer --scenarios medium --objectives 1 3 5
+python -m scripts.run_batch_eval --scenarios medium --objectives 1 3 5
 
 # Selecionar heurísticas específicas
-python -m scripts.run_optimizer --heuristics random nearest_driver
+python -m scripts.run_batch_eval --heuristics random nearest_driver
 
 # Forçar modelos RL específicos (sem descoberta automática)
-python -m scripts.run_optimizer --models 18M_steps 100M_steps
+python -m scripts.run_batch_eval --models 18M_steps 100M_steps
 
 # Execução rápida
-python -m scripts.run_optimizer --num-runs 5 --seed 42 --scenarios initial --objectives 1
+python -m scripts.run_batch_eval --num-runs 5 --seed 42 --scenarios initial --objectives 1
 
 # Execução completa salvando logs e usando diretórios customizados
-python -m scripts.run_optimizer \
+python -m scripts.run_batch_eval \
     --model-base-dir ./meus_modelos \
     --results-base-dir ./resultados/obj_{}/{}_scenario/ \
     --save-log
@@ -795,79 +793,48 @@ python -m scripts.run_optimizer \
 
 ### 📊 Script `generate_table`: Geração de Planilhas Excel com Métricas
 
-Esse script consolida os resultados gerados pelo `run_optimizer` e preenche automaticamente um modelo Excel (`template_objective_table.xlsx`) com os dados das métricas estatísticas:
-
-* **Recompensas**
-* **Tempo efetivo de entrega**
-* **Distância total percorrida**
+Esse script consolida os resultados gerados pelo `run_batch_eval` e gera automaticamente a planilha Excel com as métricas estatísticas de todos os agentes.
 
 #### ✅ O que ele faz:
 
-* Para cada heurística e modelo PPO, em cada cenário e objetivo, extrai as métricas do arquivo `metrics_data.npz`
-* Preenche as abas do Excel com média, desvio padrão, mediana e moda
+* Varre o diretório de resultados e **descobre automaticamente** todos os agentes presentes — sem mapeamentos manuais de colunas
+* Organiza os agentes em ordem: heurísticas conhecidas primeiro, modelos PPO em seguida (ordem alfabética)
+* Gera o Excel do zero com estrutura dinâmica: novas heurísticas ou modelos PPO geram colunas novas automaticamente
+* Preenche três abas com média, desvio padrão, mediana e moda:
+  * **Recompensas**
+  * **Tempo Efetivo Gasto**
+  * **Distância Percorrida**
+* Destaca em negrito o melhor agente por cenário/objetivo em cada aba (maior média em Recompensas; menor nas demais)
 * Gera um novo arquivo: `objective_table.xlsx`
 
 #### 📦 Como usar:
 
-1. Garanta que o script `run_optimizer` já foi executado e os arquivos `metrics_data.npz` foram gerados.
-2. Certifique-se de ter o template em: `./templates/template_objective_table.xlsx`
-3. Execute o comando:
+Garanta que o script `run_batch_eval` já foi executado e os arquivos `metrics_data.npz` foram gerados, então execute:
 
 ```bash
 python -m scripts.generate_table
 ```
 
-> O Excel final será salvo com o nome `objective_table.xlsx` no diretório atual.
+#### ⚙️ Opções de Configuração
 
----
+| Opção | Descrição | Padrão |
+|-------|-----------|--------|
+| `--results-dir` / `-r` | Diretório raiz com os resultados (`obj_N/`). | `./data/runs/execucoes` |
+| `--output` / `-out` | Caminho do arquivo Excel de saída. | `objective_table.xlsx` |
+| `--objectives` / `-o` | Objetivos a incluir (1–13). Aceita múltiplos valores. | todos (1–13) |
+| `--scenarios` / `-s` | Cenários a incluir: `initial`, `medium`, `complex`. Aceita múltiplos valores. | todos |
 
-## 📂 Acesso aos Dados Experimentais
+#### 🔹 Exemplos
 
-Os resultados completos dos experimentos realizados com o simulador, incluindo logs, métricas agregadas, modelos treinados, arquivos de normalização e tabelas comparativas, estão disponíveis na nuvem.
+```bash
+# Padrão — gera tabela com todos os dados disponíveis
+python -m scripts.generate_table
 
-A estrutura de diretórios de saída segue o seguinte padrão:
+# Diretório e arquivo de saída customizados
+python -m scripts.generate_table \
+    --results-dir ./data/runs/execucoes \
+    --output ./resultados/minha_tabela.xlsx
 
+# Apenas objetivos e cenários específicos
+python -m scripts.generate_table --objectives 1 3 5 --scenarios initial medium
 ```
-data/
-├── ppo_training/
-│   └── otimizacao_1M_steps_200_trials
-│        ├── otimização
-│        │    ├── logs
-│        │    │    └── ... (modelos treinados e logs)
-│        │    └── ppo_best_hyperparameters_food_delivery_gym.yml  # Resultados dos ajustes de hiperparâmetros
-│        └── treinamento
-│             └── ... (modelos treinados e arquivos de normalização)
-└── runs/
-    └── execucoes/
-        ├── obj_<N>/               # Objetivos 1 a 10
-        │    └── <cenario>_scenario/
-        │        └── <heuristica>/
-        │            ├── results.txt
-        │            ├── mean_results_(valor).png
-        │            └── figs/
-        └── objective_table.xlsx   # Tabela consolidada com resultados
-
-notebooks/
-├── reward_objective_graphs.ipynb (Notebook com análises preliminares das funções de recompensa)
-│
-└── data_notebooks
-     ├── ppo_training/
-     │   └── ... (modelos treinados, logs e resultados)
-     │  
-     │       
-     │        
-     │             
-     └── runs/
-         └── obj_<N>/               # Objetivos 1 a 10
-              └── <cenario>_scenario/
-                  └── <heuristica>/
-                      ├── results.txt
-                      ├── metrics_data.npz
-                      ├── mean_results_(valor).png
-                      └── figs/
-```
-
-> 📂 **Download dos dados completos (Google Drive):**
-> [Clique aqui para acessar](https://drive.google.com/drive/folders/1YzpAzy5L5YcqjMntWio_5JnyfXeccu-S?usp=sharing)
-
-Caso deseje rodar os scripts localmente com todos os dados originais, baixe e extraia o conteúdo do diretório `data/`, de forma a garantir que a estrutura, descrita na seção anterior, se mantenha.

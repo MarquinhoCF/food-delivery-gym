@@ -49,7 +49,7 @@ ALL_HEURISTICS = {
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Executa simulações de agentes otimizadores no ambiente de entrega de última milha.",
+        description="Avalia agentes otimizadores (heurísticas e PPO) no ambiente de entrega de última milha.",
         formatter_class=argparse.RawTextHelpFormatter,
     )
 
@@ -136,7 +136,7 @@ def parse_args():
     parser.add_argument(
         "--model-base-dir",
         type=str,
-        default="./data/ppo_training/otimizacao_1M_steps_200_trials/treinamento",
+        default="./data/ppo_training/medium/otimizacao_1M_steps_200_trials/treinamento",
         help="Diretório base dos modelos PPO treinados.",
     )
 
@@ -181,14 +181,42 @@ def create_environment(reward_objective: int, scenario_name: str):
     return gym_env
 
 
-def load_with_separate_vecnormalize(model_path: str, vecnormalize_path: str, reward_objective: int, scenario_name: str):
+def find_vecnormalize(model_dir: str, objective: int) -> str | None:
+    """Procura o vecnormalize.pkl no diretório do modelo.
+
+    O rl_zoo3 salva o arquivo em um subdiretório com o nome do ambiente
+    registrado. Como o nome pode variar (ex: diferentes versões ou cenários
+    de treino), a busca é feita de forma recursiva para ser resiliente a
+    variações no nome do subdiretório.
+    """
+    for root, _dirs, files_found in os.walk(model_dir):
+        if "vecnormalize.pkl" in files_found:
+            return os.path.join(root, "vecnormalize.pkl")
+    return None
+
+
+def load_rl_model(model_path: str, model_dir: str, reward_objective: int, scenario_name: str):
+    """Carrega o modelo PPO e monta o ambiente adequado.
+
+    Casos tratados:
+    - Com vecnormalize.pkl  → VecNormalize carregado do arquivo (ambiente normalizado)
+    - Sem vecnormalize.pkl  → DummyVecEnv simples (ambiente sem normalização)
+    """
     model = PPO.load(model_path)
 
     base_env = create_environment(reward_objective=reward_objective, scenario_name=scenario_name)
     vec_env = DummyVecEnv([lambda: base_env])
-    env = VecNormalize.load(vecnormalize_path, vec_env)
-    env.training = False
-    env.norm_reward = False
+
+    vecnormalize_path = find_vecnormalize(model_dir, reward_objective)
+
+    if vecnormalize_path:
+        print(f"  [VecNormalize] Carregando: {vecnormalize_path}")
+        env = VecNormalize.load(vecnormalize_path, vec_env)
+        env.training = False
+        env.norm_reward = False
+    else:
+        print("  [VecNormalize] Não encontrado — usando ambiente sem normalização.")
+        env = vec_env
 
     return model, env
 
@@ -250,23 +278,15 @@ def run_rl_models(objective: int, scenario: str, models: list, model_base_dir: s
     for model_name in models:
         model_dir = os.path.join(model_base_dir, f"obj_{objective}", model_name)
         model_path = os.path.join(model_dir, "best_model.zip")
-        vecnormalize_path = os.path.join(
-            model_dir,
-            f"food_delivery_gym-FoodDelivery-medium-obj{objective}-v0",
-            "vecnormalize.pkl",
-        )
 
         if not os.path.exists(model_path):
             print(f"\n[AVISO] Modelo não encontrado: {model_path}")
             continue
-        if not os.path.exists(vecnormalize_path):
-            print(f"\n[AVISO] VecNormalize não encontrado: {vecnormalize_path}")
-            continue
 
         print(f"\nExecutando PPO — Objetivo {objective}, cenário '{scenario}', modelo '{model_name}'")
         try:
-            model, rl_env = load_with_separate_vecnormalize(
-                model_path, vecnormalize_path,
+            model, rl_env = load_rl_model(
+                model_path, model_dir,
                 reward_objective=objective,
                 scenario_name=scenario,
             )
@@ -284,7 +304,7 @@ def run_rl_models(objective: int, scenario: str, models: list, model_base_dir: s
 def main():
     args = parse_args()
 
-    print("=== Executando Agentes Otimizadores ao Ambiente de Entrega de Última Milha ===")
+    print("=== Avaliando Agentes no Ambiente de Entrega de Última Milha ===")
     print(f"  Objetivos    : {args.objectives}")
     print(f"  Cenários     : {args.scenarios}")
     print(f"  Modelos RL   : {args.models if args.models else 'descoberta automática'}")
@@ -302,7 +322,7 @@ def main():
             if args.save_log:
                 log_file = setup_logging(results_dir)
 
-            print(f"\n\n=== Iniciando simulações para Objetivo {objective} no cenário '{scenario}' ===")
+            print(f"\n\n=== Iniciando avaliações para Objetivo {objective} no cenário '{scenario}' ===")
             base_env = create_environment(reward_objective=objective, scenario_name=scenario)
 
             if not args.no_heuristics:
@@ -316,7 +336,7 @@ def main():
             if log_file:
                 log_file.close()
 
-    print("\n=== Execução concluída ===")
+    print("\n=== Avaliação concluída ===")
 
 
 if __name__ == "__main__":
