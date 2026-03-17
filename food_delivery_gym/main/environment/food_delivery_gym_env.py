@@ -61,7 +61,7 @@ class FoodDeliveryGymEnv(Env):
         self.set_reward_objective(reward_objective)
 
         # Espaço de Observação
-        self.dtype_observation = np.int32
+        self.dtype_observation = np.float32
         self.observation_space = Dict({
             # --- Motoristas ---
             'drivers_coord': Box(low=0, high=self.grid_map_size - 1, shape=(self.num_drivers*2,), dtype=self.dtype_observation),
@@ -361,6 +361,7 @@ class FoodDeliveryGymEnv(Env):
         self.simpy_env.set_env_mode(self.env_mode)
 
         # Avança até o primeiro evento principal
+        self._last_decision_time = 0
         core_event, _, _ = self._advance_simulation_until_event()
         self.current_order: Order = core_event.order if core_event else None
 
