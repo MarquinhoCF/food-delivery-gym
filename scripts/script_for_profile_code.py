@@ -1,30 +1,16 @@
-import sys
+from importlib.resources import files
 
-from stable_baselines3 import PPO
-from food_delivery_gym.main.utils.load_scenarios import load_scenario
-from food_delivery_gym.main.cost.route_cost_function import RouteCostFunction
 from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
 from food_delivery_gym.main.environment.env_mode import EnvMode
-from food_delivery_gym.main.optimizer.optimizer_gym.first_driver_optimizer_gym import FirstDriverOptimizerGym
-from food_delivery_gym.main.optimizer.optimizer_gym.lowest_cost_driver_optimizer_gym import LowestCostDriverOptimizerGym
-from food_delivery_gym.main.optimizer.optimizer_gym.nearest_driver_optimizer_gym import NearestDriverOptimizerGym
 from food_delivery_gym.main.optimizer.optimizer_gym.random_driver_optimizer_gym import RandomDriverOptimizerGym
-from food_delivery_gym.main.optimizer.optimizer_gym.rl_model_optimizer_gym import RLModelOptimizerGym
 
 SEED = 101010
 
-# Escolha se deseja salvar o log em um arquivo
-SAVE_LOG_TO_FILE = False
-
 RESULTS_DIR = "./data/runs/teste/"
 
-if SAVE_LOG_TO_FILE:
-    log_file = open(RESULTS_DIR + "log.txt", "w", encoding="utf-8")
-    sys.stdout = log_file
-    sys.stderr = log_file
-
 def main():
-    gym_env: FoodDeliveryGymEnv = load_scenario("complex.json")
+    scenario_path = str(files("food_delivery_gym.main.scenarios").joinpath("complex.json"))
+    gym_env = FoodDeliveryGymEnv.from_file(scenario_path)
 
     optimizer = RandomDriverOptimizerGym(gym_env)
     optimizer.set_gym_env_mode(EnvMode.TRAINING)
@@ -35,9 +21,5 @@ def main():
         optimizer.reset_env()
 
 
-
 if __name__ == '__main__':
     main()
-
-if SAVE_LOG_TO_FILE:
-    log_file.close()

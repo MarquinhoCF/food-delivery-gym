@@ -10,5 +10,6 @@ sb3-contrib
 tensorflow
 tensorboard
 snakeviz
+seaborn
 openpyxl
 python-dotenv

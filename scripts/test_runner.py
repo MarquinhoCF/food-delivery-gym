@@ -32,7 +32,7 @@ FPS = int(os.getenv("FPS"))
 def prepare_env(scenario_filename: str, reward_objective: int, seed: int, render: bool) -> FoodDeliveryGymEnv:
     """Prepara e retorna o ambiente configurado."""
     scenario_path = str(files("food_delivery_gym.main.scenarios").joinpath(scenario_filename))
-    env = FoodDeliveryGymEnv(scenario_json_file_path=scenario_path, reward_objective=reward_objective)
+    env = FoodDeliveryGymEnv.from_file(scenario_json_file_path=scenario_path, reward_objective=reward_objective)
     env.set_mode(EnvMode.TESTING)
     
     # Reset com compatibilidade
