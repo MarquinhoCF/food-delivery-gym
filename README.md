@@ -242,6 +242,37 @@ Nesse exemplo, pedidos são gerados de acordo com um **processo de Poisson homog
 
 Neste caso, a taxa de geração de pedidos **varia ao longo do tempo** de forma senoidal, simulando períodos de alta e baixa demanda (por exemplo, picos no horário de almoço e jantar).
 
+#### 🛠️ Poisson Tuner — Ferramenta Visual para Criação da Função de Taxa
+
+Criar e calibrar a `rate_function` manualmente pode ser trabalhoso. Para facilitar esse processo, foi criado o **[Poisson Tuner](https://github.com/MarquinhoCF/poisson-tuner)** uma interface visual em React que permite configurar, visualizar e exportar funções de taxa λ(t) prontas para uso no simulador.
+
+**O que ele oferece:**
+
+- Configuração dos **parâmetros globais**: janela de tempo, número de pedidos desejados e taxa base
+- Adição e remoção de **picos de demanda** com controle individual de centro (minuto do pico), intensidade e largura (dispersão do pico)
+- **Ajuste automático de escala**: a ferramenta calcula um fator de escala e ajusta todos os parâmetros para que o número esperado de pedidos bata exatamente com o valor desejado
+- **Gráfico da taxa de chegada** λ(t) ao longo do tempo, comparando a função original e a ajustada
+- **Gráfico de pedidos acumulados**, com linha de referência na meta definida
+- **Importação de código**: cole uma `rate_function` existente e a ferramenta a parseia, carregando os parâmetros automaticamente nos controles
+- **Exportação do código Python** pronto para copiar e colar diretamente no arquivo JSON do cenário
+
+**Como rodar:**
+
+```bash
+# Requisito: Node.js 20.19.0 (recomendado via nvm)
+nvm use 20.19.0
+
+# Clone o projeto
+git clone https://github.com/MarquinhoCF/poisson-tuner.git
+cd rate-analyzer
+
+# Instale as depedências
+npm install
+
+# Execute
+npm run dev
+```
+
 ---
 
 ### 🚗 Configurações dos Motoristas
@@ -522,7 +553,7 @@ food_delivery_gym/FoodDelivery-medium-obj1-v0:
   normalize: true
 ```
 
-**2º Passo**: Execute o treinamento. O comando abaixo **salva checkpoints e permite retomada** via `--storage` e `--study-name`:
+**2º Passo**: Execute o treinamento:
 
 ```bash
 python train.py \

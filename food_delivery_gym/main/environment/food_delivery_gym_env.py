@@ -456,8 +456,8 @@ class FoodDeliveryGymEnv(Env):
             # if (terminated or truncated) and (self.simpy_env.state.get_orders_delivered() == self.orders_generated):
             #     reward += 10000  # Bônus para entregar todos os pedidos
 
-            if (terminated or truncated) and (self.simpy_env.state.get_orders_delivered() < self.orders_generated):
-                reward -= self.orders_generated - self.simpy_env.state.get_orders_delivered()
+            # if (terminated or truncated) and (self.simpy_env.state.get_orders_delivered() < self.orders_generated):
+            #     reward -= self.orders_generated - self.simpy_env.state.get_orders_delivered()
 
         # Objetivo 12: Penaliza pelo tempo total de cada pedido entregue neste step.bQuanto mais rápido o pedido for entregue, menor a penalidade (maior a recompensa).
         elif self.reward_objective == 12:
