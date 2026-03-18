@@ -2,249 +2,34 @@ __path__ = __import__('pkgutil').extend_path(__path__, __name__)
 
 from gymnasium.envs.registration import register
 from importlib.resources import files
+from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
 
-def get_scenario_path(filename):
+
+def get_scenario_path(filename: str) -> str:
     return str(files("food_delivery_gym.main.scenarios").joinpath(filename))
 
-register(
-    id='food_delivery_gym/FoodDelivery-initial-obj1-v0',
-    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
-    kwargs={
-        "scenario_json_file_path": get_scenario_path("initial.json"),
-        "reward_objective": 1
-    }
-)
 
-register(
-    id='food_delivery_gym/FoodDelivery-initial-obj2-v0',
-    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
-    kwargs={
-        "scenario_json_file_path": get_scenario_path("initial.json"),
-        "reward_objective": 2
-    }
-)
+def _make_env(scenario_json_file_path: str, reward_objective: int) -> FoodDeliveryGymEnv:
+    """Entry point genérico usado pelo gymnasium.register.
 
-register(
-    id='food_delivery_gym/FoodDelivery-initial-obj3-v0',
-    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
-    kwargs={
-        "scenario_json_file_path": get_scenario_path("initial.json"),
-        "reward_objective": 3
-    }
-)
+    O gymnasium instancia o ambiente chamando o entry_point com os kwargs
+    definidos no register. Como o construtor de FoodDeliveryGymEnv espera um
+    dict já parseado, esta wrapper faz a leitura do arquivo e delega para
+    FoodDeliveryGymEnv.from_file, mantendo o construtor livre de I/O.
+    """
+    return FoodDeliveryGymEnv.from_file(scenario_json_file_path, reward_objective)
 
-register(
-    id='food_delivery_gym/FoodDelivery-initial-obj4-v0',
-    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
-    kwargs={
-        "scenario_json_file_path": get_scenario_path("initial.json"),
-        "reward_objective": 4
-    }
-)
 
-register(
-    id='food_delivery_gym/FoodDelivery-initial-obj7-v0',
-    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
-    kwargs={
-        "scenario_json_file_path": get_scenario_path("initial.json"),
-        "reward_objective": 7
-    }
-)
+SCENARIOS = ["initial", "medium", "complex"]
+OBJECTIVES = [1, 2, 3, 4, 7, 8, 11, 12, 13]
 
-register(
-    id='food_delivery_gym/FoodDelivery-initial-obj8-v0',
-    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
-    kwargs={
-        "scenario_json_file_path": get_scenario_path("initial.json"),
-        "reward_objective": 8
-    }
-)
-
-register(
-    id='food_delivery_gym/FoodDelivery-initial-obj11-v0',
-    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
-    kwargs={
-        "scenario_json_file_path": get_scenario_path("initial.json"),
-        "reward_objective": 11
-    }
-)
-
-register(
-    id='food_delivery_gym/FoodDelivery-initial-obj12-v0',
-    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
-    kwargs={
-        "scenario_json_file_path": get_scenario_path("initial.json"),
-        "reward_objective": 12
-    }
-)
-
-register(
-    id='food_delivery_gym/FoodDelivery-initial-obj13-v0',
-    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
-    kwargs={
-        "scenario_json_file_path": get_scenario_path("initial.json"),
-        "reward_objective": 13
-    }
-)
-
-register(
-    id='food_delivery_gym/FoodDelivery-medium-obj1-v0',
-    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
-    kwargs={
-        "scenario_json_file_path": get_scenario_path("medium.json"),
-        "reward_objective": 1
-    }
-)
-
-register(
-    id='food_delivery_gym/FoodDelivery-medium-obj2-v0',
-    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
-    kwargs={
-        "scenario_json_file_path": get_scenario_path("medium.json"),
-        "reward_objective": 2
-    }
-)
-
-register(
-    id='food_delivery_gym/FoodDelivery-medium-obj3-v0',
-    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
-    kwargs={
-        "scenario_json_file_path": get_scenario_path("medium.json"),
-        "reward_objective": 3
-    }
-)
-
-register(
-    id='food_delivery_gym/FoodDelivery-medium-obj4-v0',
-    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
-    kwargs={
-        "scenario_json_file_path": get_scenario_path("medium.json"),
-        "reward_objective": 4
-    }
-)
-
-register(
-    id='food_delivery_gym/FoodDelivery-medium-obj7-v0',
-    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
-    kwargs={
-        "scenario_json_file_path": get_scenario_path("medium.json"),
-        "reward_objective": 7
-    }
-)
-
-register(
-    id='food_delivery_gym/FoodDelivery-medium-obj8-v0',
-    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
-    kwargs={
-        "scenario_json_file_path": get_scenario_path("medium.json"),
-        "reward_objective": 8
-    }
-)
-
-register(
-    id='food_delivery_gym/FoodDelivery-medium-obj11-v0',
-    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
-    kwargs={
-        "scenario_json_file_path": get_scenario_path("medium.json"),
-        "reward_objective": 11
-    }
-)
-
-register(
-    id='food_delivery_gym/FoodDelivery-medium-obj12-v0',
-    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
-    kwargs={
-        "scenario_json_file_path": get_scenario_path("medium.json"),
-        "reward_objective": 12
-    }
-)
-
-register(
-    id='food_delivery_gym/FoodDelivery-medium-obj13-v0',
-    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
-    kwargs={
-        "scenario_json_file_path": get_scenario_path("medium.json"),
-        "reward_objective": 13
-    }
-)
-
-register(
-    id='food_delivery_gym/FoodDelivery-complex-obj1-v0',
-    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
-    kwargs={
-        "scenario_json_file_path": get_scenario_path("complex.json"),
-        "reward_objective": 1
-    }
-)
-
-register(
-    id='food_delivery_gym/FoodDelivery-complex-obj2-v0',
-    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
-    kwargs={
-        "scenario_json_file_path": get_scenario_path("complex.json"),
-        "reward_objective": 2
-    }
-)
-
-register(
-    id='food_delivery_gym/FoodDelivery-complex-obj3-v0',
-    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
-    kwargs={
-        "scenario_json_file_path": get_scenario_path("complex.json"),
-        "reward_objective": 3
-    }
-)
-
-register(
-    id='food_delivery_gym/FoodDelivery-complex-obj4-v0',
-    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
-    kwargs={
-        "scenario_json_file_path": get_scenario_path("complex.json"),
-        "reward_objective": 4
-    }
-)
-
-register(
-    id='food_delivery_gym/FoodDelivery-complex-obj7-v0',
-    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
-    kwargs={
-        "scenario_json_file_path": get_scenario_path("complex.json"),
-        "reward_objective": 7
-    }
-)
-
-register(
-    id='food_delivery_gym/FoodDelivery-complex-obj8-v0',
-    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
-    kwargs={
-        "scenario_json_file_path": get_scenario_path("complex.json"),
-        "reward_objective": 8
-    }
-)
-
-register(
-    id='food_delivery_gym/FoodDelivery-complex-obj11-v0',
-    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
-    kwargs={
-        "scenario_json_file_path": get_scenario_path("complex.json"),
-        "reward_objective": 11
-    }
-)
-
-register(
-    id='food_delivery_gym/FoodDelivery-complex-obj12-v0',
-    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
-    kwargs={
-        "scenario_json_file_path": get_scenario_path("complex.json"),
-        "reward_objective": 12
-    }
-)
-
-register(
-    id='food_delivery_gym/FoodDelivery-complex-obj13-v0',
-    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
-    kwargs={
-        "scenario_json_file_path": get_scenario_path("complex.json"),
-        "reward_objective": 13
-    }
-)
+for _scenario in SCENARIOS:
+    for _obj in OBJECTIVES:
+        register(
+            id=f"food_delivery_gym/FoodDelivery-{_scenario}-obj{_obj}-v0",
+            entry_point="food_delivery_gym:_make_env",
+            kwargs={
+                "scenario_json_file_path": get_scenario_path(f"{_scenario}.json"),
+                "reward_objective": _obj,
+            },
+        )

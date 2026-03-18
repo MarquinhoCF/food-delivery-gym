@@ -136,7 +136,7 @@ def parse_args():
     parser.add_argument(
         "--model-base-dir",
         type=str,
-        default="./data/ppo_training/medium/otimizacao_1M_steps_200_trials/treinamento",
+        default="./data/ppo_training/medium/treinamento",
         help="Diretório base dos modelos PPO treinados.",
     )
 
@@ -175,9 +175,13 @@ def create_environment(reward_objective: int, scenario_name: str):
 
     scenario_file = scenario_name + ".json"
     scenario_path = str(files("food_delivery_gym.main.scenarios").joinpath(scenario_file))
-    gym_env = FoodDeliveryGymEnv(scenario_json_file_path=scenario_path)
+
+    gym_env = FoodDeliveryGymEnv.from_file(
+        scenario_json_file_path=scenario_path,
+        reward_objective=reward_objective,
+    )
+
     gym_env.set_mode(EnvMode.EVALUATING)
-    gym_env.set_reward_objective(reward_objective)
     return gym_env
 
 
@@ -205,7 +209,11 @@ def load_rl_model(model_path: str, model_dir: str, reward_objective: int, scenar
     model = PPO.load(model_path)
 
     base_env = create_environment(reward_objective=reward_objective, scenario_name=scenario_name)
-    vec_env = DummyVecEnv([lambda: base_env])
+    
+    # O argumento default (env=base_env) captura o valor atual da variável no
+    # momento da criação da lambda, evitando o bug clássico de closure em loop
+    # onde todas as lambdas acabariam referenciando o mesmo objeto.
+    vec_env = DummyVecEnv([lambda env=base_env: env])
 
     vecnormalize_path = find_vecnormalize(model_dir, reward_objective)
 

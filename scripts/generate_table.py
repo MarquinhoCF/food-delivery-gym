@@ -329,7 +329,7 @@ def _build_sheet(ws, sheet_name: str, sheet_key: str, results_dir: str,
             ws.column_dimensions[get_column_letter(col)].width = max(18, min(len(label) * 1.1, 40))
 
     # ── Freeze panes ─────────────────────────────────────────────────────────
-    ws.freeze_panes = "D3"
+    ws.freeze_panes = "B3"
 
 
 def _highlight_best(ws, sheet_name, objectives, scenarios, agents,

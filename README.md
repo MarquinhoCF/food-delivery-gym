@@ -256,23 +256,6 @@ Criar e calibrar a `rate_function` manualmente pode ser trabalhoso. Para facilit
 - **Importação de código**: cole uma `rate_function` existente e a ferramenta a parseia, carregando os parâmetros automaticamente nos controles
 - **Exportação do código Python** pronto para copiar e colar diretamente no arquivo JSON do cenário
 
-**Como rodar:**
-
-```bash
-# Requisito: Node.js 20.19.0 (recomendado via nvm)
-nvm use 20.19.0
-
-# Clone o projeto
-git clone https://github.com/MarquinhoCF/poisson-tuner.git
-cd rate-analyzer
-
-# Instale as depedências
-npm install
-
-# Execute
-npm run dev
-```
-
 ---
 
 ### 🚗 Configurações dos Motoristas

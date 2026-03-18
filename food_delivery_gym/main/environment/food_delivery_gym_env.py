@@ -38,18 +38,9 @@ from food_delivery_gym.main.view.grid_view_pygame import GridViewPygame
 
 class FoodDeliveryGymEnv(Env):
 
-    def __init__(self, scenario_json_file_path = str, reward_objective: int = 1):
-
-        path = Path(scenario_json_file_path)
-
-        if not path.is_file():
-            raise FileNotFoundError(f"Scenario file not found: {path}")
-
-        with open(path, "r", encoding="utf-8") as f:
-            scenario = json.load(f)
-
+    def __init__(self, scenario: dict, reward_objective: int = 1):
         self._read_scenario_json(scenario)
-
+ 
         self.env_mode = EnvMode.TRAINING
 
         self.simpy_env = None # Ambiente de simulação será criado no reset
@@ -82,6 +73,20 @@ class FoodDeliveryGymEnv(Env):
 
         # Espaço de Ação
         self.action_space = Discrete(self.num_drivers)  # Escolher qual driver pegará o pedido
+
+    @classmethod
+    def from_file(cls, scenario_json_file_path: str, reward_objective: int = 1) -> "FoodDeliveryGymEnv":
+        """
+            Isola a leitura de disco e garante que cada instância receba seu próprio dict.
+            Isso evita previne segmentation faults causados por acesso repetido ao disco em
+            ambientes paralelizados.
+        """
+        path = Path(scenario_json_file_path)
+        if not path.is_file():
+            raise FileNotFoundError(f"Scenario file not found: {path}")
+        with open(path, "r", encoding="utf-8") as f:
+            scenario = json.load(f)
+        return cls(scenario=scenario, reward_objective=reward_objective)
 
     def _read_scenario_json(self, scenario: dict):
         # Estrutura esperada
