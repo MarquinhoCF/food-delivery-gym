@@ -223,7 +223,14 @@ class OptimizerGym(Optimizer, ABC):
         
         return result
 
-    def run_simulations(self, num_runs: int, dir_path: str, seed: int | None = None):
+    def run_simulations(
+            self, 
+            num_runs: int, 
+            dir_path: str, 
+            seed: int | None = None,
+            save_individual_plots: bool = True,
+            save_mean_plots: bool = True,
+        ):
         self.initialize(seed=seed)
         self.set_gym_env_mode(EnvMode.EVALUATING)
 
@@ -292,11 +299,12 @@ class OptimizerGym(Optimizer, ABC):
                         f"SimPy t = {simpy_t} | "
                         f"Truncada = {was_truncated}\n"
                     )
-                    try:
-                        self._call_env_method('show_statistics_board',
-                                            sum_reward=sum_reward, dir_path=dir_path)
-                    except Exception as e:
-                        print(f"  ⚠  show_statistics_board falhou: {e}")
+                    if save_individual_plots:
+                        try:
+                            self._call_env_method('show_statistics_board',
+                                                sum_reward=sum_reward, dir_path=dir_path)
+                        except Exception as e:
+                            print(f"  ⚠  show_statistics_board falhou: {e}")
 
                 self.reset_env()
 
@@ -309,6 +317,7 @@ class OptimizerGym(Optimizer, ABC):
                 num_runs, total_rewards, episode_lengths,
                 simpy_last_time_steps, num_orders_generated,
                 truncated_runs, results_file,
+                save_mean_plots=save_mean_plots,
             )
 
         # ── Persiste o .npz  ─
@@ -369,6 +378,7 @@ class OptimizerGym(Optimizer, ABC):
         num_orders_generated: list,
         truncated_runs: list,
         results_file,
+        save_mean_plots: bool = True,
     ) -> dict:
         """
         Calcula todas as estatísticas das simulações e escreve no results_file.
@@ -497,15 +507,16 @@ class OptimizerGym(Optimizer, ABC):
             traceback.print_exc()
 
         # ── 9. Board de médias ────────────────────────────────────────────────
-        try:
-            avg_reward = reward_stats["avg"] if reward_stats else 0.0
-            self._call_env_method(
-                'show_total_mean_statistics_board',
-                sum_rewards_mean=avg_reward,
-                dir_path=self._current_dir_path,   # definido em run_simulations
-            )
-        except Exception as e:
-            results_file.write(f"\n⚠  Erro ao mostrar board de médias: {e}\n")
+        if save_mean_plots:
+            try:
+                avg_reward = reward_stats["avg"] if reward_stats else 0.0
+                self._call_env_method(
+                    'show_total_mean_statistics_board',
+                    sum_rewards_mean=avg_reward,
+                    dir_path=self._current_dir_path,   # definido em run_simulations
+                )
+            except Exception as e:
+                results_file.write(f"\n⚠  Erro ao mostrar board de médias: {e}\n")
 
         return out
 

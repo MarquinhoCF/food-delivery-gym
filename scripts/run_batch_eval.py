@@ -152,6 +152,18 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--no-individual-plots",
+        action="store_true",
+        help="Desativa a geração de gráficos individuais por execução.",
+    )
+
+    parser.add_argument(
+        "--no-plots",
+        action="store_true",
+        help="Desativa todos os gráficos (equivale a --no-individual-plots e desativa o gráfico de médias).",
+    )
+
+    parser.add_argument(
         "--save-log",
         action="store_true",
         help="Salva o log de saída em arquivo (log.txt) dentro do diretório de resultados.",
@@ -266,17 +278,29 @@ def build_heuristic_optimizer(key: str, base_env, cost_obj: int):
     raise ValueError(f"Heurística desconhecida: '{key}'")
 
 
-def run_heuristics(base_env, scenario: str, heuristics: list, objective: int, results_dir: str, num_runs: int, seed: int):
+def run_heuristics(
+    base_env, scenario: str, heuristics: list, objective: int,
+    results_dir: str, num_runs: int, seed: int,
+    save_individual_plots: bool, save_mean_plots: bool,
+):
     cost_obj = get_cost_objective(objective)
 
     for key in heuristics:
         meta = ALL_HEURISTICS[key]
         output_dir = os.path.join(results_dir, meta["dir"]) + "/"
         print(f"\n=== Executando simulações com o {meta['label']} no cenário '{scenario}' ===")
-        build_heuristic_optimizer(key, base_env, cost_obj).run_simulations(num_runs, output_dir, seed=seed)
+        build_heuristic_optimizer(key, base_env, cost_obj).run_simulations(
+            num_runs, output_dir, seed=seed,
+            save_individual_plots=save_individual_plots,
+            save_mean_plots=save_mean_plots,
+        )
 
 
-def run_rl_models(objective: int, scenario: str, models: list, model_base_dir: str, results_dir: str, num_runs: int, seed: int):
+def run_rl_models(
+    objective: int, scenario: str, models: list, model_base_dir: str,
+    results_dir: str, num_runs: int, seed: int,
+    save_individual_plots: bool, save_mean_plots: bool,
+):
     print("\n=== Tentando executar modelos de Aprendizado por Reforço ===")
 
     if not models:
@@ -303,6 +327,8 @@ def run_rl_models(objective: int, scenario: str, models: list, model_base_dir: s
                 num_runs,
                 os.path.join(results_dir, f"ppo_{model_name}") + "/",
                 seed=seed,
+                save_individual_plots=save_individual_plots,
+                save_mean_plots=save_mean_plots,
             )
         except Exception as e:
             print(f"Erro ao executar PPO — objetivo {objective}, cenário '{scenario}', modelo '{model_name}': {e}")
@@ -311,6 +337,13 @@ def run_rl_models(objective: int, scenario: str, models: list, model_base_dir: s
 
 def main():
     args = parse_args()
+
+    # --no-plots ativa os dois flags de uma vez
+    if args.no_plots:
+        args.no_individual_plots = True
+
+    save_individual_plots = not args.no_individual_plots
+    save_mean_plots       = not args.no_plots
 
     print("=== Avaliando Agentes no Ambiente de Entrega de Última Milha ===")
     print(f"  Objetivos    : {args.objectives}")
@@ -321,6 +354,8 @@ def main():
     print(f"  Runs         : {args.num_runs} | Seed: {args.seed}")
     print(f"  Model base   : {args.model_base_dir}")
     print(f"  Results base : {args.results_base_dir}")
+    print(f"  Plots indiv. : {'desativados' if not save_individual_plots else 'ativados'}")
+    print(f"  Plot médias  : {'desativado' if not save_mean_plots else 'ativado'}")
 
     for objective in args.objectives:
         for scenario in args.scenarios:
@@ -335,11 +370,21 @@ def main():
 
             if not args.no_heuristics:
                 print("\n=== Executando Heurísticas ===")
-                run_heuristics(base_env, scenario, args.heuristics, objective, results_dir, args.num_runs, args.seed)
+                run_heuristics(
+                    base_env, scenario, args.heuristics, objective, results_dir,
+                    args.num_runs, args.seed,
+                    save_individual_plots=save_individual_plots,
+                    save_mean_plots=save_mean_plots,
+                )
 
             if not args.no_rl:
                 models = args.models if args.models else discover_models(args.model_base_dir, objective)
-                run_rl_models(objective, scenario, models, args.model_base_dir, results_dir, args.num_runs, args.seed)
+                run_rl_models(
+                    objective, scenario, models, args.model_base_dir, results_dir,
+                    args.num_runs, args.seed,
+                    save_individual_plots=save_individual_plots,
+                    save_mean_plots=save_mean_plots,
+                )
 
             if log_file:
                 log_file.close()
