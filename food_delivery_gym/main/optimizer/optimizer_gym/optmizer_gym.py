@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from collections import defaultdict
 import os
+import traceback
 from typing import List, Union
 
 import numpy as np
@@ -222,197 +223,388 @@ class OptimizerGym(Optimizer, ABC):
         
         return result
 
-    def run_simulations(self, num_runs: int, dir_path: str, seed: int | None = None):
+    def run_simulations(
+            self, 
+            num_runs: int, 
+            dir_path: str, 
+            seed: int | None = None,
+            save_individual_plots: bool = True,
+            save_mean_plots: bool = True,
+        ):
         self.initialize(seed=seed)
         self.set_gym_env_mode(EnvMode.EVALUATING)
 
-        # Garantir que o diretório existe
         os.makedirs(dir_path, exist_ok=True)
-        file_path = dir_path + "results.txt"
+        file_path = os.path.join(dir_path, "results.txt")
 
-        total_rewards = []
-        truncated_runs = []
-        num_orders_generated = []
+        self._current_dir_path = dir_path
+
+        # ── Listas de coleta por episódio ─────────────────────────────────────
+        total_rewards:         list = []
+        episode_lengths:       list = []
+        simpy_last_time_steps: list = []
+        num_orders_generated:  list = []
+        truncated_runs:        list = []
+
         with open(file_path, "w", encoding="utf-8") as results_file:
             self.get_description(results_file, num_runs, seed)
             results_file.write("---> Registro de execuções:\n")
-            
+
             for i in range(num_runs):
                 print(f"-> Execução {i + 1} de {num_runs}...")
 
-                try:
-                    resultado = self.run()
+                # ── Executa o episódio ────────────────────────────────────
+                run_ok     = False
+                sum_reward = 0
+                ep_length  = 0
+                simpy_t    = None
+                was_truncated = True   # pessimista: se falhar, trata como truncada
 
-                    sum_reward = resultado["sum_reward"]
+                try:
+                    resultado     = self.run()
+                    sum_reward    = resultado["sum_reward"]
+                    ep_length     = resultado["steps"]
                     was_truncated = resultado["truncated"]
-                    
-                    # Tenta mostrar o board de estatísticas
-                    try:
-                        self._call_env_method('show_statistics_board', sum_reward=sum_reward, dir_path=dir_path)
-                    except Exception as e:
-                        print(f"Aviso: Não foi possível mostrar o board de estatísticas: {e}")
-                    
-                    total_rewards.append(sum_reward)
-                    num_orders_generated.append(self._call_env_method('get_num_orders_generated'))
-                    truncated_runs.append(was_truncated)
-                    results_file.write(f"Execução {i + 1}: Soma das Recompensas = {sum_reward} (Passos: {resultado.get('steps', 'N/A')})\n")
+                    info          = resultado.get("info", {})
+
+                    if isinstance(info, list):
+                        info = info[0] if info else {}
+
+                    simpy_t = info.get("simpy_time_step", None)
+                    run_ok  = True
 
                 except Exception as e:
-                    print(f"Erro na execução {i + 1}: {e}")
-                    results_file.write(f"Execução {i + 1}: ERRO - {str(e)}\n")
-                    total_rewards.append(0)  # Adiciona 0 para manter o count
+                    print(f"  ✗ Erro na execução {i + 1}: {e}")
+                    traceback.print_exc()
+                    results_file.write(f"Execução {i + 1}: ERRO - {e}\n")
+
+                # ── Coleta métricas do episódio ───────────────────────────
+                total_rewards.append(sum_reward)
+                episode_lengths.append(ep_length)
+                simpy_last_time_steps.append(simpy_t)
+                truncated_runs.append(was_truncated)
+
+                # Número de pedidos gerados — só faz sentido se o episódio rodou
+                try:
+                    orders = self._call_env_method('get_num_orders_generated') if run_ok else 0
+                except Exception:
+                    orders = 0
+                num_orders_generated.append(orders)
+
+                # ── Board individual de estatísticas ──────────────────────
+                if run_ok:
+                    results_file.write(
+                        f"Execução {i + 1}: Retorno = {sum_reward:.4f} | "
+                        f"Passos = {ep_length} | "
+                        f"SimPy t = {simpy_t} | "
+                        f"Truncada = {was_truncated}\n"
+                    )
+                    if save_individual_plots:
+                        try:
+                            self._call_env_method('show_statistics_board',
+                                                sum_reward=sum_reward, dir_path=dir_path)
+                        except Exception as e:
+                            print(f"  ⚠  show_statistics_board falhou: {e}")
 
                 self.reset_env()
-            
-            # Calcula estatísticas apenas se houver recompensas válidas
-            if total_rewards:
-                total_rewards_statistics = {}
-                valid_rewards = [r for r in total_rewards if r != 0]  # Remove erros
-                
-                if valid_rewards:
-                    total_rewards_statistics['avg'] = sum(valid_rewards) / len(valid_rewards)
-                    total_rewards_statistics['std_dev'] = stt.stdev(valid_rewards) if len(valid_rewards) > 1 else 0
-                    total_rewards_statistics['median'] = stt.median(valid_rewards)
-                    total_rewards_statistics['mode'] = stt.mode(valid_rewards) if len(set(valid_rewards)) > 1 else "Nenhuma moda única"
-                else:
-                    total_rewards_statistics = {'avg': 0, 'std_dev': 0, 'median': 0, 'mode': 'N/A'}
 
-                results_file.write("\n---> Estatísticas das Recompensas:\n")
-                results_file.write(f"* Média: {total_rewards_statistics['avg']:.2f}\n")
-                results_file.write(f"* Desvio Padrão: {total_rewards_statistics['std_dev']:.2f}\n")
-                results_file.write(f"* Mediana: {total_rewards_statistics['median']:.2f}\n")
-                results_file.write(f"* Moda: {total_rewards_statistics['mode']}\n")
+            # ── Calcula estatísticas e escreve no arquivo ─────────────────
+            results_file.write("\n" + "=" * 60 + "\n")
+            results_file.write("RESUMO ESTATÍSTICO\n")
+            results_file.write("=" * 60 + "\n")
 
-                try:
-                    establishment_metrics, driver_metrics = self._call_env_method('get_statistics_data')
+            stats_data = self._compute_simulation_stats(
+                num_runs, total_rewards, episode_lengths,
+                simpy_last_time_steps, num_orders_generated,
+                truncated_runs, results_file,
+                save_mean_plots=save_mean_plots,
+            )
 
-                    time_spent_on_delivery_list = []
-                    total_distance_traveled_list = []
+        # ── Persiste o .npz  ─
+        self.save_metrics_to_file(stats_data, dir_path=dir_path)
+        print(f"Resultados salvos em {file_path}")
 
-                    for i in range(num_runs):
-                        sum_time_spent_on_delivery_i = 0
-                        for driver_id, metrics in driver_metrics.items():
-                            sum_time_spent_on_delivery_i += metrics["time_spent_on_delivery"][i]
-                        time_spent_on_delivery_list.append(sum_time_spent_on_delivery_i)
+    # ═════════════════════════════════════════════════════════════════════════════
+    #  Helpers privados de estatística
+    # ═════════════════════════════════════════════════════════════════════════════
 
-                        if not truncated_runs[i]:
-                            sum_total_distance_traveled_i = 0
-                            for driver_id, metrics in driver_metrics.items():
-                                sum_total_distance_traveled_i += metrics["total_distance"][i]
-                            total_distance_traveled_list.append(sum_total_distance_traveled_i)
+    def _safe_stats(self, values: list) -> dict:
+        """
+        Calcula avg / std_dev / median / mode de forma segura.
+        Aceita listas com None — os Nones são ignorados.
+        Retorna None se não houver valores válidos.
+        """
+        clean = [v for v in values if v is not None]
+        if not clean:
+            return None
 
-                    time_spent_on_delivery_statistics = {}
-                    time_spent_on_delivery_statistics["avg"] = stt.mean(time_spent_on_delivery_list)
-                    time_spent_on_delivery_statistics["std_dev"] = stt.stdev(time_spent_on_delivery_list)
-                    time_spent_on_delivery_statistics["median"] = stt.median(time_spent_on_delivery_list)
-                    time_spent_on_delivery_statistics["mode"] = stt.mode(time_spent_on_delivery_list)
+        result = {
+            "avg":     sum(clean) / len(clean),
+            "std_dev": stt.stdev(clean) if len(clean) > 1 else 0.0,
+            "median":  stt.median(clean),
+            "mode":    None,
+            "n":       len(clean),
+        }
+        try:
+            result["mode"] = stt.mode(clean)
+        except stt.StatisticsError:
+            result["mode"] = "Sem moda única"
+        return result
 
-                    results_file.write("\n---> Estatísticas do Tempo Gasto com entregas:\n")
-                    results_file.write(f"* Média: {time_spent_on_delivery_statistics['avg']:.2f}\n")
-                    results_file.write(f"* Desvio Padrão: {time_spent_on_delivery_statistics['std_dev']:.2f}\n")
-                    results_file.write(f"* Mediana: {time_spent_on_delivery_statistics['median']:.2f}\n")
-                    results_file.write(f"* Moda: {time_spent_on_delivery_statistics['mode']}\n")
 
-                    # Verifica se há dados confiáveis de distância
-                    num_truncated = sum(truncated_runs)
-                    num_valid = num_runs - num_truncated
-                    
-                    results_file.write(f"\n---> Execuções válidas para métricas de distância: {num_valid}/{num_runs}\n")
-                    if num_truncated > 0:
-                        results_file.write(f"* {num_truncated} execução(ões) truncada(s) foram excluídas das estatísticas de distância\n")
+    def _write_stats_block(self, results_file, title: str, stats: dict | None):
+        """Escreve um bloco de estatísticas no arquivo de resultados."""
+        results_file.write(f"\n---> {title}:\n")
+        if stats is None:
+            results_file.write("* NULO - Sem dados válidos\n")
+            return
+        results_file.write(f"* N amostras:    {stats['n']}\n")
+        results_file.write(f"* Média:         {stats['avg']:.4f}\n")
+        results_file.write(f"* Desvio Padrão: {stats['std_dev']:.4f}\n")
+        results_file.write(f"* Mediana:       {stats['median']:.4f}\n")
+        results_file.write(f"* Moda:          {stats['mode']}\n")
 
-                    # Calcula estatísticas apenas se houver dados válidos
-                    if total_distance_traveled_list and len(total_distance_traveled_list) > 0:
-                        total_distance_traveled_statistics = {}
-                        total_distance_traveled_statistics["avg"] = stt.mean(total_distance_traveled_list)
-                        total_distance_traveled_statistics["std_dev"] = stt.stdev(total_distance_traveled_list)
-                        total_distance_traveled_statistics["median"] = stt.median(total_distance_traveled_list)
-                        total_distance_traveled_statistics["mode"] = stt.mode(total_distance_traveled_list)
-                        
-                        results_file.write("\n---> Estatísticas da Distância Percorrida:\n")
-                        results_file.write(f"* Média: {total_distance_traveled_statistics['avg']:.2f}\n")
-                        results_file.write(f"* Desvio Padrão: {total_distance_traveled_statistics['std_dev']:.2f}\n")
-                        results_file.write(f"* Mediana: {total_distance_traveled_statistics['median']:.2f}\n")
-                        results_file.write(f"* Moda: {total_distance_traveled_statistics['mode']}\n")
-                    else:
-                        total_distance_traveled_statistics = None
-                        results_file.write("\n---> Estatísticas da Distância Percorrida:\n")
-                        results_file.write("* NULO - Todas as execuções foram truncadas\n")
 
-                    total_orders_generated_statistics = {}
-                    total_orders_generated_statistics["avg"] = stt.mean(num_orders_generated)
-                    total_orders_generated_statistics["std_dev"] = stt.stdev(num_orders_generated)
-                    total_orders_generated_statistics["median"] = stt.median(num_orders_generated)
-                    total_orders_generated_statistics["mode"] = stt.mode(num_orders_generated)
+    # ═════════════════════════════════════════════════════════════════════════════
+    #  _compute_simulation_stats — separado para facilitar testes e reuso
+    # ═════════════════════════════════════════════════════════════════════════════
 
-                    results_file.write("\n---> Estatísticas do Número de Pedidos Gerados:\n")
-                    results_file.write(f"* Média: {stt.mean(num_orders_generated):.2f}\n")
-                    results_file.write(f"* Desvio Padrão: {stt.stdev(num_orders_generated):.2f}\n")
-                    results_file.write(f"* Mediana: {stt.median(num_orders_generated):.2f}\n")
-                    results_file.write(f"* Moda: {stt.mode(num_orders_generated):.2f}\n")
+    def _compute_simulation_stats(
+        self,
+        num_runs: int,
+        total_rewards: list,
+        episode_lengths: list,
+        simpy_last_time_steps: list,
+        num_orders_generated: list,
+        truncated_runs: list,
+        results_file,
+        save_mean_plots: bool = True,
+    ) -> dict:
+        """
+        Calcula todas as estatísticas das simulações e escreve no results_file.
 
-                    geral_statistics = self._call_env_method('get_statistics')
-                    results_file.write(f"\n---> Estatísticas Finais:\n")
-                    results_file.write(f"{self.format_statistics(geral_statistics)}")
+        Retorna um dicionário com todos os dados calculados prontos para o .npz.
+        Nunca lança exceção — erros são capturados, logados e representados como None.
+        """
+        out = {
+            # listas brutas
+            "total_rewards":              total_rewards,
+            "episode_lengths":            episode_lengths,
+            "simpy_last_time_steps":      simpy_last_time_steps,
+            "num_orders_generated":       num_orders_generated,
+            "truncated_runs":             truncated_runs,
+            # estatísticas (preenchidas abaixo)
+            "total_rewards_statistics":             None,
+            "episode_lengths_statistics":           None,
+            "simpy_last_time_steps_statistics":     None,
+            "time_spent_on_delivery_list":          None,
+            "time_spent_on_delivery_statistics":    None,
+            "total_distance_traveled_list":         None,
+            "total_distance_traveled_statistics":   None,
+            "total_orders_generated_statistics":    None,
+            "establishment_metrics":                None,
+            "driver_metrics":                       None,
+            "geral_statistics":                     None,
+        }
 
-                    self._call_env_method('show_total_mean_statistics_board', 
-                                        sum_rewards_mean=total_rewards_statistics['avg'], 
-                                        dir_path=dir_path)
+        # ── 1. Estatísticas das recompensas ───────────────────────────────────
+        # Usa todas as recompensas, inclusive 0 — runs com erro já foram marcadas
+        # como truncated e serão separadas nas métricas de distância.
+        reward_stats = self._safe_stats(total_rewards)
+        out["total_rewards_statistics"] = reward_stats
+        self._write_stats_block(results_file, "Estatísticas das Recompensas", reward_stats)
 
-                    self.save_metrics_to_file(total_rewards, total_rewards_statistics, 
-                                            time_spent_on_delivery_list, time_spent_on_delivery_statistics, 
-                                            total_distance_traveled_list, total_distance_traveled_statistics,
-                                            num_orders_generated, total_orders_generated_statistics,
-                                            establishment_metrics, driver_metrics, 
-                                            geral_statistics, dir_path)
-                except Exception as e:
-                    print(f"Aviso: Erro ao processar estatísticas finais: {e}")
-                    results_file.write(f"\n---> Erro ao processar estatísticas finais: {e}\n")
-                    import traceback
-                    traceback.print_exc()
-        
-        print(f"Resultados salvos em " + file_path)
+        # ── 2. Estatísticas do tamanho dos episódios ──────────────────────────
+        length_stats = self._safe_stats(episode_lengths)
+        out["episode_lengths_statistics"] = length_stats
+        self._write_stats_block(results_file, "Estatísticas do Tamanho dos Episódios (passos)", length_stats)
+
+        # ── 3. Estatísticas do simpy_time_step final ──────────────────────────
+        valid_simpy = [v for v in simpy_last_time_steps if v is not None]
+        simpy_stats = self._safe_stats(valid_simpy) if valid_simpy else None
+        out["simpy_last_time_steps_statistics"] = simpy_stats
+        self._write_stats_block(results_file, "Estatísticas do Tempo de Simulação SimPy (último passo)", simpy_stats)
+
+        # ── 4. Métricas de drivers/estabelecimentos ───────────────────────────
+        try:
+            establishment_metrics, driver_metrics = self._call_env_method('get_statistics_data')
+            out["establishment_metrics"] = establishment_metrics
+            out["driver_metrics"]        = driver_metrics
+        except Exception as e:
+            results_file.write(f"\n⚠  Não foi possível obter get_statistics_data: {e}\n")
+            traceback.print_exc()
+            # sem dados de driver → não calcula tempo/distância
+            self._write_stats_block(results_file, "Estatísticas do Tempo Gasto com Entregas", None)
+            self._write_stats_block(results_file, "Estatísticas da Distância Percorrida", None)
+            self._write_stats_block(results_file, "Estatísticas do Número de Pedidos Gerados",
+                            self._safe_stats(num_orders_generated))
+            return out
+
+        # ── 5. Tempo gasto em entregas ────────────────────────────────────────
+        try:
+            time_spent_list = []
+            for i in range(num_runs):
+                total_i = sum(
+                    driver_metrics[drv]["time_spent_on_delivery"][i]
+                    for drv in driver_metrics
+                    if i < len(driver_metrics[drv].get("time_spent_on_delivery", []))
+                )
+                time_spent_list.append(total_i)
+
+            out["time_spent_on_delivery_list"]       = time_spent_list
+            out["time_spent_on_delivery_statistics"] = self._safe_stats(time_spent_list)
+            self._write_stats_block(results_file,
+                            "Estatísticas do Tempo Gasto com Entregas",
+                            out["time_spent_on_delivery_statistics"])
+        except Exception as e:
+            results_file.write(f"\n⚠  Erro ao calcular tempo de entrega: {e}\n")
+            traceback.print_exc()
+
+        # ── 6. Distância total percorrida (exclui runs truncadas) ─────────────
+        try:
+            num_truncated = sum(truncated_runs)
+            num_valid     = num_runs - num_truncated
+            results_file.write(f"\n---> Execuções válidas para métricas de distância: {num_valid}/{num_runs}\n")
+            if num_truncated > 0:
+                results_file.write(f"* {num_truncated} execução(ões) truncada(s) excluída(s) das estatísticas de distância\n")
+
+            distance_list = []
+            for i in range(num_runs):
+                if truncated_runs[i]:
+                    continue
+                total_i = sum(
+                    driver_metrics[drv]["total_distance"][i]
+                    for drv in driver_metrics
+                    if i < len(driver_metrics[drv].get("total_distance", []))
+                )
+                distance_list.append(total_i)
+
+            out["total_distance_traveled_list"]       = distance_list if distance_list else None
+            out["total_distance_traveled_statistics"] = self._safe_stats(distance_list) if distance_list else None
+            self._write_stats_block(results_file,
+                            "Estatísticas da Distância Percorrida",
+                            out["total_distance_traveled_statistics"])
+        except Exception as e:
+            results_file.write(f"\n⚠  Erro ao calcular distância percorrida: {e}\n")
+            traceback.print_exc()
+
+        # ── 7. Pedidos gerados ────────────────────────────────────────────────
+        try:
+            orders_stats = self._safe_stats(num_orders_generated)
+            out["total_orders_generated_statistics"] = orders_stats
+            self._write_stats_block(results_file, "Estatísticas do Número de Pedidos Gerados", orders_stats)
+        except Exception as e:
+            results_file.write(f"\n⚠  Erro ao calcular pedidos gerados: {e}\n")
+
+        # ── 8. Estatísticas gerais do ambiente ────────────────────────────────
+        try:
+            geral_statistics = self._call_env_method('get_statistics')
+            out["geral_statistics"] = geral_statistics
+            results_file.write(f"\n---> Estatísticas Finais:\n")
+            results_file.write(self.format_statistics(geral_statistics))
+        except Exception as e:
+            results_file.write(f"\n⚠  Erro ao obter estatísticas gerais: {e}\n")
+            traceback.print_exc()
+
+        # ── 9. Board de médias ────────────────────────────────────────────────
+        if save_mean_plots:
+            try:
+                avg_reward = reward_stats["avg"] if reward_stats else 0.0
+                self._call_env_method(
+                    'show_total_mean_statistics_board',
+                    sum_rewards_mean=avg_reward,
+                    dir_path=self._current_dir_path,   # definido em run_simulations
+                )
+            except Exception as e:
+                results_file.write(f"\n⚠  Erro ao mostrar board de médias: {e}\n")
+
+        return out
+
+
+    # ═════════════════════════════════════════════════════════════════════════════
+    #  save_metrics_to_file — robusto contra None em qualquer campo
+    # ═════════════════════════════════════════════════════════════════════════════
 
     def save_metrics_to_file(
         self,
-        total_rewards: list[float], 
-        total_rewards_statistics: dict[str, float],
-        time_spent_on_delivery_list: list[float],
-        time_spent_on_delivery_statistics: dict[str, float],
-        total_distance_traveled_list: list[float],
-        total_distance_traveled_statistics: dict[str, float],
-        total_orders_generated_list: list[float],
-        total_orders_generated_statistics: dict[str, float],
-        establishment_metrics: defaultdict[str, defaultdict[str, list[float]]], 
-        driver_metrics: defaultdict[str, defaultdict[str, list[float]]], 
-        geral_statistics: dict[str, dict[str, dict[str, float]]],
-        dir_path: str = "./", 
-        file_name: str = "metrics_data.npz"
+        stats_data: dict,
+        dir_path: str = "./",
+        file_name: str = "metrics_data.npz",
     ) -> None:
+        """
+        Persiste todos os dados de stats_data em um arquivo .npz.
+
+        Campos None são salvos como arrays vazios para não quebrar o npz.
+        O arquivo é sempre gerado, mesmo que parte dos dados esteja ausente.
+        """
+        file_path = os.path.join(dir_path, file_name)
+
+        def to_array(value):
+            """Converte qualquer valor para array numpy serializável."""
+            if value is None:
+                return np.array([])
+            if isinstance(value, np.ndarray):
+                return value
+            if isinstance(value, list):
+                # Listas com None → float, substituindo None por nan
+                try:
+                    clean = [float('nan') if v is None else v for v in value]
+                    return np.array(clean, dtype=float)
+                except (TypeError, ValueError):
+                    return np.array(value, dtype=object)
+            # dicts e outros objetos → array de objeto
+            return np.array(value, dtype=object)
+
+        def safe_metrics(metrics):
+            """Serializa defaultdict/dict de métricas de driver/establishment."""
+            if metrics is None:
+                return np.array({}, dtype=object)
+            try:
+                return np.array({k: dict(v) for k, v in metrics.items()}, dtype=object)
+            except Exception:
+                return np.array({}, dtype=object)
+
         try:
-            file_path = dir_path + file_name
-
-            # Converte defaultdict para dict para evitar problemas de serialização
-            establishment_metrics = {k: dict(v) for k, v in establishment_metrics.items()}
-            driver_metrics = {k: dict(v) for k, v in driver_metrics.items()}
-
-            np.savez_compressed(file_path, 
-                                total_rewards=np.array(total_rewards), 
-                                total_rewards_statistics=total_rewards_statistics,
-                                time_spent_on_delivery_list=np.array(time_spent_on_delivery_list),
-                                time_spent_on_delivery_statistics=time_spent_on_delivery_statistics,
-                                total_distance_traveled_list=np.array(total_distance_traveled_list),
-                                total_distance_traveled_statistics=total_distance_traveled_statistics,
-                                total_orders_generated_list=np.array(total_orders_generated_list),
-                                total_orders_generated_statistics=total_orders_generated_statistics,
-                                establishment_metrics=establishment_metrics, 
-                                driver_metrics=driver_metrics,
-                                geral_statistics=geral_statistics)
-            
+            np.savez_compressed(
+                file_path,
+                # ── listas brutas ──────────────────────────────────────────
+                total_rewards             = to_array(stats_data.get("total_rewards")),
+                episode_lengths           = to_array(stats_data.get("episode_lengths")),
+                simpy_last_time_steps     = to_array(stats_data.get("simpy_last_time_steps")),
+                truncated_runs            = to_array(stats_data.get("truncated_runs")),
+                num_orders_generated      = to_array(stats_data.get("num_orders_generated")),
+                time_spent_on_delivery_list     = to_array(stats_data.get("time_spent_on_delivery_list")),
+                total_distance_traveled_list    = to_array(stats_data.get("total_distance_traveled_list")),
+                # ── estatísticas (dicts salvos como array de objeto) ───────
+                total_rewards_statistics            = np.array(stats_data.get("total_rewards_statistics"),  dtype=object),
+                episode_lengths_statistics          = np.array(stats_data.get("episode_lengths_statistics"), dtype=object),
+                simpy_last_time_steps_statistics    = np.array(stats_data.get("simpy_last_time_steps_statistics"), dtype=object),
+                time_spent_on_delivery_statistics   = np.array(stats_data.get("time_spent_on_delivery_statistics"), dtype=object),
+                total_distance_traveled_statistics  = np.array(stats_data.get("total_distance_traveled_statistics"), dtype=object),
+                total_orders_generated_statistics   = np.array(stats_data.get("total_orders_generated_statistics"), dtype=object),
+                # ── métricas de agentes ────────────────────────────────────
+                establishment_metrics = safe_metrics(stats_data.get("establishment_metrics")),
+                driver_metrics        = safe_metrics(stats_data.get("driver_metrics")),
+                geral_statistics      = np.array(stats_data.get("geral_statistics"), dtype=object),
+            )
             print(f"Métricas salvas em {file_path}")
-            
+
         except Exception as e:
-            print(f"Erro ao salvar métricas: {e}")
+            print(f"Erro ao salvar métricas em {file_path}: {e}")
+            traceback.print_exc()
+
+            # Tentativa de emergência: salva pelo menos as listas brutas
+            try:
+                emergency_path = file_path.replace(".npz", "_emergency.npz")
+                np.savez_compressed(
+                    emergency_path,
+                    total_rewards    = to_array(stats_data.get("total_rewards")),
+                    episode_lengths  = to_array(stats_data.get("episode_lengths")),
+                    truncated_runs   = to_array(stats_data.get("truncated_runs")),
+                )
+                print(f"⚠  Arquivo de emergência salvo em {emergency_path}")
+            except Exception as e2:
+                print(f"Falha total ao salvar métricas: {e2}")
 
     # =====================================================================
     #     Funções usadas para teste e execução interativa do otimizador

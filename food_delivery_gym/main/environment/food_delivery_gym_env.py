@@ -38,21 +38,13 @@ from food_delivery_gym.main.view.grid_view_pygame import GridViewPygame
 
 class FoodDeliveryGymEnv(Env):
 
-    def __init__(self, scenario_json_file_path = str, reward_objective: int = 1):
-
-        path = Path(scenario_json_file_path)
-
-        if not path.is_file():
-            raise FileNotFoundError(f"Scenario file not found: {path}")
-
-        with open(path, "r", encoding="utf-8") as f:
-            scenario = json.load(f)
-
+    def __init__(self, scenario: dict, reward_objective: int = 1):
         self._read_scenario_json(scenario)
-
+ 
         self.env_mode = EnvMode.TRAINING
 
         self.simpy_env = None # Ambiente de simulação será criado no reset
+        self._last_decision_time = None # Último passo de tempo em que o agente tomou uma decisão
         self.last_simpy_env = None # Ambiente de simulação da execução anterior -> para fins de computação de estatísticas
         self.orders_generated = None # Número de pedidos que o gerador de pedidos vai gerar
 
@@ -60,7 +52,7 @@ class FoodDeliveryGymEnv(Env):
         self.set_reward_objective(reward_objective)
 
         # Espaço de Observação
-        self.dtype_observation = np.int32
+        self.dtype_observation = np.float32
         self.observation_space = Dict({
             # --- Motoristas ---
             'drivers_coord': Box(low=0, high=self.grid_map_size - 1, shape=(self.num_drivers*2,), dtype=self.dtype_observation),
@@ -81,6 +73,20 @@ class FoodDeliveryGymEnv(Env):
 
         # Espaço de Ação
         self.action_space = Discrete(self.num_drivers)  # Escolher qual driver pegará o pedido
+
+    @classmethod
+    def from_file(cls, scenario_json_file_path: str, reward_objective: int = 1) -> "FoodDeliveryGymEnv":
+        """
+            Isola a leitura de disco e garante que cada instância receba seu próprio dict.
+            Isso evita previne segmentation faults causados por acesso repetido ao disco em
+            ambientes paralelizados.
+        """
+        path = Path(scenario_json_file_path)
+        if not path.is_file():
+            raise FileNotFoundError(f"Scenario file not found: {path}")
+        with open(path, "r", encoding="utf-8") as f:
+            scenario = json.load(f)
+        return cls(scenario=scenario, reward_objective=reward_objective)
 
     def _read_scenario_json(self, scenario: dict):
         # Estrutura esperada
@@ -262,7 +268,7 @@ class FoodDeliveryGymEnv(Env):
         return obs
        
     def get_info(self):
-        return {'info': self.simpy_env.now}
+        return {'simpy_time_step': self.simpy_env.now}
     
     def set_mode(self, mode: EnvMode):
         self.env_mode = mode
@@ -360,11 +366,14 @@ class FoodDeliveryGymEnv(Env):
         self.simpy_env.set_env_mode(self.env_mode)
 
         # Avança até o primeiro evento principal
+        self._last_decision_time = 0
         core_event, _, _ = self._advance_simulation_until_event()
         self.current_order: Order = core_event.order if core_event else None
 
         observation = self.get_observation()
         info = self.get_info()
+
+        self._last_decision_time = self.simpy_env.now
 
         return observation, info
     
@@ -447,12 +456,49 @@ class FoodDeliveryGymEnv(Env):
 
         # Objetivo 11: Maximizar o número de pedidos entregues -> Recompensa positiva a cada pedido entregue
         elif self.reward_objective == 11:
-            reward = self.simpy_env.state.get_orders_delivered_since_last_check()
+            reward = self.simpy_env.state.get_num_orders_delivered_since_last_check()
 
-        if (terminated or truncated) and (self.simpy_env.state.get_orders_delivered() < self.orders_generated):
-            # Penaliza a recompensa se o episódio terminou ou foi truncado e não foram entregues todos os pedidos
-            reward -= (self.orders_generated - self.simpy_env.state.get_orders_delivered()) * 10000
+            # if (terminated or truncated) and (self.simpy_env.state.get_orders_delivered() == self.orders_generated):
+            #     reward += 10000  # Bônus para entregar todos os pedidos
+
+            # if (terminated or truncated) and (self.simpy_env.state.get_orders_delivered() < self.orders_generated):
+            #     reward -= self.orders_generated - self.simpy_env.state.get_orders_delivered()
+
+        # Objetivo 12: Penaliza pelo tempo total de cada pedido entregue neste step.bQuanto mais rápido o pedido for entregue, menor a penalidade (maior a recompensa).
+        elif self.reward_objective == 12:
+            recently_delivered = self.simpy_env.state.get_and_clear_recently_delivered_orders()
+            reward = -sum(
+                order.time_it_was_delivered - order.request_date
+                for order in recently_delivered
+            )
+
+            if truncated and self.simpy_env.state.get_orders_delivered() < self.orders_generated:
+                reward -= (self.orders_generated - self.simpy_env.state.get_orders_delivered()) * self.simpy_env.map.max_distance() * 2
+
+        # Objetivo 13: Penaliza pelo tempo gasto de cada pedido que está na pipeline de entrega (pedidos prontos e não entregues) e de cada pedido entregue neste step. 
+        elif self.reward_objective == 13:
+            penalty = 0
+
+            orders_in_delivery_pipeline = [order for order in self.simpy_env.state.orders if order.is_ready() and not order.is_delivered()]
+
+            orders_recently_delivered = self.simpy_env.state.get_and_clear_recently_delivered_orders()
+
+            for _ in orders_in_delivery_pipeline:
+                penalty += self.simpy_env.now - self._last_decision_time
+            
+            for order in orders_recently_delivered:
+                # Pedido foi enregue nesse intervalo, então penalidade baseada no tempo total do pedido
+                penalty += order.time_it_was_delivered - self._last_decision_time
+
+            reward = -penalty
+
+
+        # if (terminated or truncated) and (self.simpy_env.state.get_orders_delivered() < self.orders_generated):
+        #     # Penaliza a recompensa se o episódio terminou ou foi truncado e não foram entregues todos os pedidos
+        #     reward -= (self.orders_generated - self.simpy_env.state.get_orders_delivered()) * 10000
         
+        self._last_decision_time = self.simpy_env.now
+
         return reward
         
     def step(self, action):
@@ -611,8 +657,8 @@ class FoodDeliveryGymEnv(Env):
         return self.reward_objective
     
     def set_reward_objective(self, reward_objective: int):
-        valid_objectives = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
-        if reward_objective not in range(1, 12):
+        valid_objectives = range(1, 14)
+        if reward_objective not in valid_objectives:
             raise ValueError(f"reward_objective deve ser um valor entre {valid_objectives}.")
         self.reward_objective = reward_objective
     

@@ -272,14 +272,12 @@ class Driver(MapActor):
             time=self.now
         ))
         self.status = DriverStatus.AVAILABLE
-        order.delivered()
+        order.delivered(self.now)
         self.orders_delivered += 1
-        self.environment.state.increment_orders_delivered()
-
-        total_orders_list = self.orders_list + [route.get_current_order() for route in self.route_requests]
+        self.environment.state.add_order_delivered(order)
         
         # Remove o pedido da lista de pedidos do motorista e soma a penalidade do tempo gasto para entrega
-        for i, o in enumerate(total_orders_list):
+        for i, o in enumerate(self.orders_list):
             if o.order_id == order.order_id:
                 start_time = max(order.time_that_driver_was_allocated, self.last_time_check)
                 self.sum_penalty_for_time_spent += self._calculate_order_penalty(order, start_time)
@@ -363,7 +361,9 @@ class Driver(MapActor):
                 # Se o segmento atual é de coleta, considera o tempo para pegar o pedido
                 if self.current_route_segment.is_pickup():
                     total_busy_time += (
-                        current_order.estimated_ready_time - self.now
+                        # Caso o motorista esteja esperando o pedido ficar pronto, considera o tempo restante para o pedido ficar pronto
+                        # Porém como é uma estimativa, caso o tempo restante seja negativo (ou seja, o pedido já deveria estar pronto), considera 0
+                        max(0, current_order.estimated_ready_time - self.now)
                         if self.status == DriverStatus.PICKING_UP_WAITING
                         else self.environment.map.estimated_time(current_coordinate, self.current_route_segment.coordinate, self.movement_rate)
                     )

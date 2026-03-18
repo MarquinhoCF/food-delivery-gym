@@ -38,7 +38,7 @@ class DriverTimeSpentOnDelivery(Metric):
 
             _, drivers_metrics = self.environment.get_statistics_data()
 
-            times_spent_on_delivery: List[int] = [sum(drivers_metrics[driver.driver_id]["time_spent_on_delivery"]) for driver in drivers]
+            times_spent_on_delivery: List[int] = [drivers_metrics[driver.driver_id]["time_spent_on_delivery"][-1] for driver in drivers]
             title = 'Time spent on delivery per Driver'
             # print("\nTempo que cada motorista gastou entregando os pedidos:")
 

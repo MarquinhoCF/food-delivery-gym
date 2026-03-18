@@ -110,10 +110,10 @@
       "justMyCode": true
     },
     {
-        "name": "Run Optimizer",
+        "name": "Run Batch Evaluation",
         "type": "python",
         "request": "launch",
-        "module": "scripts.run_optimizer",
+        "module": "scripts.run_batch_eval",
         "console": "integratedTerminal",
         "justMyCode": true
     }
