@@ -188,16 +188,14 @@ def create_environment(reward_objective: int, scenario_name: str):
     scenario_file = scenario_name + ".json"
     scenario_path = str(files("food_delivery_gym.main.scenarios").joinpath(scenario_file))
 
-    gym_env = FoodDeliveryGymEnv.from_file(
-        scenario_json_file_path=scenario_path,
-        reward_objective=reward_objective,
-    )
-
-    gym_env.set_mode(EnvMode.EVALUATING)
+    # Atualiza o cache ANTES de instanciar — workers herdarão o dict via fork.
+    FoodDeliveryGymEnv.set_scenario(scenario_path)
+ 
+    gym_env = FoodDeliveryGymEnv(reward_objective=reward_objective, mode=EnvMode.EVALUATING)
     return gym_env
 
 
-def find_vecnormalize(model_dir: str, objective: int) -> str | None:
+def find_vecnormalize(model_dir: str) -> str | None:
     """Procura o vecnormalize.pkl no diretório do modelo.
 
     O rl_zoo3 salva o arquivo em um subdiretório com o nome do ambiente
@@ -222,12 +220,10 @@ def load_rl_model(model_path: str, model_dir: str, reward_objective: int, scenar
 
     base_env = create_environment(reward_objective=reward_objective, scenario_name=scenario_name)
     
-    # O argumento default (env=base_env) captura o valor atual da variável no
-    # momento da criação da lambda, evitando o bug clássico de closure em loop
-    # onde todas as lambdas acabariam referenciando o mesmo objeto.
+    # Captura o valor atual de base_env no default do argumento para evitar o bug de closure em loop.
     vec_env = DummyVecEnv([lambda env=base_env: env])
 
-    vecnormalize_path = find_vecnormalize(model_dir, reward_objective)
+    vecnormalize_path = find_vecnormalize(model_dir)
 
     if vecnormalize_path:
         print(f"  [VecNormalize] Carregando: {vecnormalize_path}")
@@ -239,15 +235,6 @@ def load_rl_model(model_path: str, model_dir: str, reward_objective: int, scenar
         env = vec_env
 
     return model, env
-
-
-def get_cost_objective(objective: int) -> int:
-    if objective in [1, 3, 5, 7, 9, 10, 11, 12, 13]:
-        return 1  # baseado em tempo de entrega
-    elif objective in [2, 4, 6, 8]:
-        return 2  # baseado em custo de operação (distância)
-    else:
-        raise ValueError(f"Objetivo {objective} não reconhecido.")
 
 
 def discover_models(model_base_dir: str, objective: int) -> list:
@@ -263,7 +250,7 @@ def discover_models(model_base_dir: str, objective: int) -> list:
     return found
 
 
-def build_heuristic_optimizer(key: str, base_env, cost_obj: int):
+def build_heuristic_optimizer(key: str, base_env, objective):
     """Instancia o otimizador correspondente à chave da heurística."""
     if key == "random":
         return RandomDriverOptimizerGym(base_env)
@@ -272,8 +259,10 @@ def build_heuristic_optimizer(key: str, base_env, cost_obj: int):
     if key == "nearest_driver":
         return NearestDriverOptimizerGym(base_env)
     if key == "lowest_route_cost":
+        cost_obj = RouteCostFunction.get_cost_objective(objective)
         return LowestCostDriverOptimizerGym(base_env, cost_function=RouteCostFunction(objective=cost_obj))
     if key == "lowest_marginal_route_cost":
+        cost_obj = MarginalRouteCostFunction.get_cost_objective(objective)
         return LowestCostDriverOptimizerGym(base_env, cost_function=MarginalRouteCostFunction(objective=cost_obj))
     raise ValueError(f"Heurística desconhecida: '{key}'")
 
@@ -283,13 +272,12 @@ def run_heuristics(
     results_dir: str, num_runs: int, seed: int,
     save_individual_plots: bool, save_mean_plots: bool,
 ):
-    cost_obj = get_cost_objective(objective)
 
     for key in heuristics:
         meta = ALL_HEURISTICS[key]
         output_dir = os.path.join(results_dir, meta["dir"]) + "/"
         print(f"\n=== Executando simulações com o {meta['label']} no cenário '{scenario}' ===")
-        build_heuristic_optimizer(key, base_env, cost_obj).run_simulations(
+        build_heuristic_optimizer(key, base_env, objective).run_simulations(
             num_runs, output_dir, seed=seed,
             save_individual_plots=save_individual_plots,
             save_mean_plots=save_mean_plots,

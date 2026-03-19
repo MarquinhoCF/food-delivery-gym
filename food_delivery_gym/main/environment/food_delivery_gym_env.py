@@ -38,10 +38,46 @@ from food_delivery_gym.main.view.grid_view_pygame import GridViewPygame
 
 class FoodDeliveryGymEnv(Env):
 
-    def __init__(self, scenario: dict, reward_objective: int = 1):
-        self._read_scenario_json(scenario)
+    SCENARIO: dict | None = None
+
+    @classmethod
+    def set_scenario(cls, scenario_json_file_path: str) -> None:
+        """
+        Lê o arquivo JSON e armazena o cenário no cache de classe.
  
-        self.env_mode = EnvMode.TRAINING
+        Deve ser chamado no processo principal antes de criar qualquer instância do ambiente ou workers 
+        de VecEnv. Em avaliações em lote com múltiplos cenários, chame novamente antes de cada grupo de
+        instâncias para atualizar o cache com o novo cenário.
+        """
+        path = Path(scenario_json_file_path)
+        if not path.is_file():
+            raise FileNotFoundError(f"Arquivo de cenário não encontrado: {path}")
+        with open(path, "r", encoding="utf-8") as f:
+            cls.SCENARIO = json.load(f)
+    
+    def set_reward_objective(self, reward_objective: int):
+        valid_objectives = range(1, 14)
+        if reward_objective not in valid_objectives:
+            raise ValueError(f"reward_objective deve ser um valor entre {valid_objectives}.")
+        self.reward_objective = reward_objective
+
+    def set_mode(self, mode: EnvMode):
+        self.env_mode = mode
+        if self.simpy_env is not None:
+            self.simpy_env.set_env_mode(mode)
+
+    def __init__(self, scenario_json_file_path: str | None = "", reward_objective: int = 1, mode: EnvMode = EnvMode.TRAINING):
+        if FoodDeliveryGymEnv.SCENARIO is None:
+            if not scenario_json_file_path:
+                raise ValueError(
+                    "Nenhum cenário carregado. Forneça 'scenario_json_file_path' "
+                    "ou chame 'FoodDeliveryGymEnv.set_scenario(path)' antes de instanciar."
+                )
+            FoodDeliveryGymEnv.set_scenario(scenario_json_file_path)
+ 
+        self._read_scenario_json(FoodDeliveryGymEnv.SCENARIO)
+ 
+        self.env_mode = mode
 
         self.simpy_env = None # Ambiente de simulação será criado no reset
         self._last_decision_time = None # Último passo de tempo em que o agente tomou uma decisão
@@ -73,20 +109,6 @@ class FoodDeliveryGymEnv(Env):
 
         # Espaço de Ação
         self.action_space = Discrete(self.num_drivers)  # Escolher qual driver pegará o pedido
-
-    @classmethod
-    def from_file(cls, scenario_json_file_path: str, reward_objective: int = 1) -> "FoodDeliveryGymEnv":
-        """
-            Isola a leitura de disco e garante que cada instância receba seu próprio dict.
-            Isso evita previne segmentation faults causados por acesso repetido ao disco em
-            ambientes paralelizados.
-        """
-        path = Path(scenario_json_file_path)
-        if not path.is_file():
-            raise FileNotFoundError(f"Scenario file not found: {path}")
-        with open(path, "r", encoding="utf-8") as f:
-            scenario = json.load(f)
-        return cls(scenario=scenario, reward_objective=reward_objective)
 
     def _read_scenario_json(self, scenario: dict):
         # Estrutura esperada
@@ -269,11 +291,6 @@ class FoodDeliveryGymEnv(Env):
        
     def get_info(self):
         return {'simpy_time_step': self.simpy_env.now}
-    
-    def set_mode(self, mode: EnvMode):
-        self.env_mode = mode
-        if self.simpy_env is not None:
-            self.simpy_env.set_env_mode(mode)
     
     # Avança na simulação até que um evento principal ocorra ou que a simulação termine/trunque.
     def _advance_simulation_until_event(self):
@@ -550,7 +567,7 @@ class FoodDeliveryGymEnv(Env):
             raise
 
     def show_statistics_board(self, sum_reward = None, dir_path = None):
-        if self.env_mode == EnvMode.EVALUATING:
+        if self.env_mode != EnvMode.TRAINING:
             if self.last_simpy_env == None:
                 raise ValueError(
                     "Dados de simulação indisponíveis. Certifique-se de que o ambiente foi executado ao menos uma vez "
@@ -655,12 +672,6 @@ class FoodDeliveryGymEnv(Env):
     
     def get_reward_objective(self):
         return self.reward_objective
-    
-    def set_reward_objective(self, reward_objective: int):
-        valid_objectives = range(1, 14)
-        if reward_objective not in valid_objectives:
-            raise ValueError(f"reward_objective deve ser um valor entre {valid_objectives}.")
-        self.reward_objective = reward_objective
     
     def print_enviroment_state(self, options = None):
         if options is None:

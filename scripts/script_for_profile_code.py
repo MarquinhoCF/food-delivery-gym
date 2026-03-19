@@ -6,14 +6,13 @@ from food_delivery_gym.main.optimizer.optimizer_gym.random_driver_optimizer_gym 
 
 SEED = 101010
 
-RESULTS_DIR = "./data/runs/teste/"
-
 def main():
     scenario_path = str(files("food_delivery_gym.main.scenarios").joinpath("complex.json"))
-    gym_env = FoodDeliveryGymEnv.from_file(scenario_path)
-
+ 
+    # Carrega o cenário no cache de classe antes de instanciar.
+    gym_env = FoodDeliveryGymEnv(scenario_json_file_path=scenario_path, reward_objective=1, mode=EnvMode.TRAINING)
+ 
     optimizer = RandomDriverOptimizerGym(gym_env)
-    optimizer.set_gym_env_mode(EnvMode.TRAINING)
     optimizer.initialize(seed=SEED)
 
     for i in range(200):

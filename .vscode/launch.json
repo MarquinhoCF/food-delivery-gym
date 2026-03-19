@@ -56,6 +56,15 @@
         "justMyCode": true
     },
     {
+        "name": "RLModelOptimizerGym interactive Render",
+        "type": "python",
+        "request": "launch",
+        "module": "scripts.test_runner",
+        "args": ["--mode", "interactive", "--scenario", "medium.json", "--optimizer", "rl", "--model-path", "data/ppo_training/treinamento/obj_1/medium/18M_steps/best_model.zip", "--objective", "1", "--render"],
+        "console": "integratedTerminal",
+        "justMyCode": true
+    },
+    {
         "name": "Debug FoodDeliveryGymEnv (interactive)",
         "type": "python",
         "request": "launch",

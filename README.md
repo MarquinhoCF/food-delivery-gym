@@ -69,7 +69,6 @@ source venv/bin/activate
 python -m scripts.test_runner --mode auto --scenario medium.json --render
 ```
 - Executa automaticamente com ações aleatórias
-- Útil para testes rápidos
 
 #### 2. **Modo Interativo** (Recomendado para desenvolvimento)
 ```shell
@@ -84,100 +83,28 @@ python -m scripts.test_runner --mode interactive --scenario medium.json --render
 
 #### 3. **Modo com Agente PPO** (Requer modelo treinado)
 ```shell
-python -m scripts.test_runner --mode agent --scenario medium.json --model-path models/ppo_food_delivery --render
+python -m scripts.test_runner --mode auto --optimizer rl --model-path models/ppo_food_delivery/best_model.zip --render
 ```
+- Usa `--optimizer rl` combinado com `--mode auto`
+- O `vecnormalize.pkl` é carregado automaticamente se encontrado no mesmo diretório do modelo
 
 ### ⚙️ Opções de Configuração
 
 | Opção | Descrição | Exemplo |
 |-------|-----------|---------|
-| `--mode` | Modo de execução: `interactive`, `auto`, `agent` | `--mode interactive` |
+| `--mode` | Modo de execução: `interactive`, `auto` | `--mode interactive` |
 | `--scenario` | Arquivo de cenário JSON | `--scenario medium.json` |
 | `--optimizer` | Otimizador: `random`, `first`, `nearest`, `lowest`, `rl` | `--optimizer lowest` |
-| `--objective` | Objetivo de recompensa do ambiente (1-10) | `--objective 1` |
+| `--objective` | Objetivo de recompensa do ambiente (1-13) | `--objective 1` |
 | `--cost-function` | Função de custo usada pelo `lowest`: `route`, `marginal_route` | `--cost-function route` |
+| `--model-path` | Caminho para o `best_model.zip` do PPO (obrigatório com `--optimizer rl`) | `--model-path models/ppo_model/best_model.zip` |
 | `--render` | Ativa visualização gráfica | `--render` |
 | `--seed` | Seed para reproducibilidade | `--seed 42` |
 | `--max-steps` | Limite máximo de passos | `--max-steps 1000` |
 | `--save-log` | Salva output em arquivo log.txt | `--save-log` |
-| `--model-path` | Caminho para modelo PPO (modo agent) | `--model-path models/ppo_model` |
 
-> A opção `--cost-function` é utilizada apenas quando `--optimizer lowest` está selecionado.
-
-#### Exemplos:
-
-##### Gerais:
-
-```shell
-# Execução automática simples (padrão: optimizer=random)
-python -m scripts.test_runner --mode auto --max-steps 100
-
-# Execução interativa com renderização
-python -m scripts.test_runner --mode interactive --render
-
-# Execução com seed fixa (reprodutibilidade)
-python -m scripts.test_runner --mode auto --seed 123
-
-# Executar com cenário específico
-python -m scripts.test_runner --scenario medium.json --mode auto --render
-
-# Executar salvando logs
-python -m scripts.test_runner --mode auto --save-log
-
-# Execução longa sem render
-python -m scripts.test_runner --mode auto --max-steps 10000
-```
-
-##### Otimizadores:
-
-```shell
-# Otimizador aleatório
-python -m scripts.test_runner --optimizer random --render
-
-# Primeiro motorista disponível
-python -m scripts.test_runner --optimizer first --render
-
-# Motorista mais próximo
-python -m scripts.test_runner --optimizer nearest --render
-
-# Lowest cost com custo baseado na rota
-python -m scripts.test_runner --optimizer lowest --cost-function route --render
-
-# Lowest cost com custo marginal de rota
-python -m scripts.test_runner --optimizer lowest --cost-function marginal_route --render
-```
-
-##### Objetivos de Recompensa:
-
-```shell
-# Objetivo baseado em tempo
-python -m scripts.test_runner --optimizer lowest --objective 1 --render
-
-# Objetivo baseado em distância
-python -m scripts.test_runner --optimizer lowest --objective 2 --render
-```
-
-##### Combinações completas:
-
-```shell
-# Execução completa com todos parâmetros
-python -m scripts.test_runner \
-    --scenario medium.json \
-    --mode auto \
-    --optimizer lowest \
-    --cost-function marginal_route \
-    --objective 2 \
-    --seed 42 \
-    --max-steps 5000 \
-    --save-log
-
-# Debug interativo com lowest cost
-python -m scripts.test_runner \
-    --mode interactive \
-    --optimizer lowest \
-    --cost-function route \
-    --render
-```
+> A opção `--cost-function` é obrigatória quando `--optimizer lowest` está selecionado, e inválida nos demais casos.
+> A opção `--model-path` é obrigatória quando `--optimizer rl` está selecionado.
 
 ## 🎯 Configuração dos Cenários Experimentais
 
@@ -201,20 +128,21 @@ A seguir são apresentadas as principais constantes e parâmetros utilizados na 
 A criação de novos pedidos é controlada por um gerador configurável no campo `order_generator`.
 Atualmente, o ambiente suporta dois tipos de geradores:
 
-| Tipo                        | Classe Interna                                                                                   | Descrição                                                                     |
-| --------------------------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
-| `"poisson"`                 | `PoissonOrderGenerator` | Gera pedidos de forma homogênea com taxa constante λ.                         |
-| `"non_homogeneous_poisson"` | `NonHomogeneousPoissonOrderGenerator` | Gera pedidos de forma não homogênea com taxa variável no tempo (função λ(t)). |
+| Tipo                        | Classe Interna                           | Descrição                                                                     |
+| --------------------------- | ---------------------------------------- | ----------------------------------------------------------------------------- |
+| `"poisson"`                 | `PoissonOrderGenerator`                  | Gera pedidos de forma homogênea com taxa constante λ.                         |
+| `"non_homogeneous_poisson"` | `NonHomogeneousPoissonOrderGenerator`    | Gera pedidos de forma não homogênea com taxa variável no tempo (função λ(t)). |
 
 #### 🔹 Parâmetros Disponíveis
 
-| Campo           | Descrição                                                                                                |
-| --------------- | -------------------------------------------------------------------------------------------------------- |
-| `type`          | Define o tipo de processo (`"poisson"` ou `"non_homogeneous_poisson"`).                                  |
-| `time_window`   | Janela total de tempo da geração de pedidos (em minutos).                                                |
-| `lambda_rate`   | Taxa média de chegada (λ) — usada apenas no gerador `"poisson"`. Não é necessária, caso não seja passado o sistema definirá a taxa como `num_orders/time_window`.  |
-| `rate_function` | Função lambda que define a taxa variável de chegada λ(t) — usada no gerador `"non_homogeneous_poisson"`. |
-| `max_rate`      | Taxa máxima usada para o método de *thinning* (necessária no gerador `"non_homogeneous_poisson"`).       |
+| Campo                   | Obrigatório | Descrição                                                                                                |
+| ----------------------- | ----------- | -------------------------------------------------------------------------------------------------------- |
+| `type`                  | ✅          | Define o tipo de processo: `"poisson"` ou `"non_homogeneous_poisson"`.                                   |
+| `estimated_num_orders`  | ✅          | Número inteiro positivo com o total estimado de pedidos a serem gerados.                                 |
+| `time_window`           | ✅          | Janela total de tempo da geração de pedidos (em minutos). Deve ser um valor positivo.                    |
+| `lambda_rate`           | ❌          | Taxa média de chegada (λ) — usada apenas no gerador `"poisson"`. Se omitida, o sistema calcula como `estimated_num_orders / time_window`. |
+| `rate_function`         | ✅ (não homogêneo) | Função lambda que define a taxa variável de chegada λ(t) — obrigatória no gerador `"non_homogeneous_poisson"`. |
+| `max_rate`              | ❌          | Taxa máxima usada para o método de *thinning* — usada no gerador `"non_homogeneous_poisson"`. Se omitida, é calculada automaticamente. |
 
 #### 🔸 Exemplo — Processo de Poisson Homogêneo
 
@@ -240,7 +168,7 @@ Nesse exemplo, pedidos são gerados de acordo com um **processo de Poisson homog
 }
 ```
 
-Neste caso, a taxa de geração de pedidos **varia ao longo do tempo** de forma senoidal, simulando períodos de alta e baixa demanda (por exemplo, picos no horário de almoço e jantar).
+Neste caso, a taxa de geração de pedidos **varia ao longo do tempo**, simulando períodos de alta e baixa demanda (por exemplo, picos no horário de almoço e jantar).
 
 #### 🛠️ Poisson Tuner — Ferramenta Visual para Criação da Função de Taxa
 
@@ -260,34 +188,36 @@ Criar e calibrar a `rate_function` manualmente pode ser trabalhoso. Para facilit
 
 ### 🚗 Configurações dos Motoristas
 
-| Variável      | Descrição                                                                     |
-| ------------- | ----------------------------------------------------------------------------- |
-| `vel_drivers` | Lista com `[mínimo, máximo]` de velocidade dos motoristas. Exemplo: `[3, 5]`. |
+| Variável                | Obrigatório | Descrição                                                                                  |
+| ----------------------- | ----------- | ------------------------------------------------------------------------------------------ |
+| `num`                   | ✅          | Número inteiro positivo com o total de motoristas.                                         |
+| `vel`                   | ✅          | Lista `[mínimo, máximo]` de velocidade dos motoristas. Exemplo: `[3, 5]`.                  |
+| `tolerance_percentage`  | ✅          | Percentual (≥ 0) de tolerância de piora no tempo de entrega ao reordenar rotas.            |
+| `max_capacity`          | ✅          | Número máximo inteiro positivo de pedidos simultâneos que um motorista pode carregar.       |
 
 ---
 
 ### 🏪 Configurações dos Estabelecimentos
 
-| Variável              | Descrição                                                                       |
-| --------------------- | ------------------------------------------------------------------------------- |
-| `prepare_time`        | Tempo de preparo dos pedidos `[mínimo, máximo]` (em minutos).                   |
-| `operating_radius`    | Raio de operação dos estabelecimentos `[mínimo, máximo]` (em unidades do grid). |
-| `production_capacity` | Capacidade de produção (número de cozinheiros) `[mínimo, máximo]`.              |
+| Variável                        | Obrigatório | Descrição                                                                                        |
+| ------------------------------- | ----------- | ------------------------------------------------------------------------------------------------ |
+| `num`                           | ✅          | Número inteiro positivo com o total de estabelecimentos.                                         |
+| `prepare_time`                  | ✅          | Tempo de preparo dos pedidos `[mínimo, máximo]` (em minutos). Deve estar em ordem crescente.    |
+| `operating_radius`              | ✅          | Raio de operação `[mínimo, máximo]` (em unidades do grid). Deve estar em ordem crescente.       |
+| `production_capacity`           | ✅          | Capacidade de produção (número de cozinheiros) `[mínimo, máximo]`. Deve estar em ordem crescente.|
+| `percentage_allocation_driver`  | ✅          | Fração de conclusão do preparo (entre `0` e `1`) para acionar a alocação do motorista.          |
 
 ---
 
 ### 🎛️ Alocação
 
-| Variável                       | Descrição                                                                               |
-| ------------------------------ | --------------------------------------------------------------------------------------- |
-| `percentage_allocation_driver` | Percentual de preparo necessário para acionar a alocação do motorista (exemplo: `0.7`). |
+O parâmetro `percentage_allocation_driver`, definido dentro da seção `establishments`, controla o percentual de preparo necessário para acionar a alocação do motorista — por exemplo, `0.7` significa que o motorista é chamado quando 70% do preparo estiver concluído.
 
 ---
 
 ### 💾 Exemplo de Cenário Experimental
 
-O cenário é configurado por um arquivo JSON dentro de
-`food_delivery_gym/main/scenarios/`, como mostrado a seguir:
+O cenário é configurado por um arquivo JSON dentro de `food_delivery_gym/main/scenarios/`, como mostrado a seguir:
 
 ```json
 {
@@ -324,22 +254,34 @@ Esse cenário define:
 * 288 pedidos ao longo de 1440 minutos e tempo limite de 2880 minutos;
 * geração de pedidos por **processo de Poisson homogêneo**.
 
-
 ### 📝 Registro do Cenário Experimental
 
-Para registrar o cenário ambiental criado deve ser acessado o arquivo `food_delivery_gym/__init__.py`. No arquivo o cenário criado deve ser incluído seguindo o padrão observado, passando o nome do arquivo JSON criado anteriormente e definindo o objetivo de recompensas (como as recompensas serão calculadas):
+O registro dos cenários é feito automaticamente no arquivo `food_delivery_gym/__init__.py`. Para cada combinação de cenário e objetivo de recompensa, um ambiente Gymnasium é registrado no formato:
 
-Obs: Os valores possíveis dos `reward objectives` vão de 1 a 10. As descrições de cada objetivo estão disponíveis no arquivo `food_delivery_gym/main/scenarios/reward_objectives.txt`:
+```
+food_delivery_gym/FoodDelivery-{cenário}-obj{N}-v0
+```
+
+Os **cenários disponíveis** são: `initial`, `medium`, `complex`.
+
+Os **objetivos de recompensa disponíveis** são: `1, 2, 3, 4, 7, 8, 11, 12, 13`. As descrições de cada objetivo estão no arquivo `food_delivery_gym/main/scenarios/reward_objectives.txt`.
+
+Para registrar um novo cenário, adicione o arquivo JSON correspondente em `food_delivery_gym/main/scenarios/` e inclua o novo cenário na lista `SCENARIOS` (e/ou novos objetivos em `OBJECTIVES`) no `__init__.py`, seguindo o padrão existente:
 
 ```python
-register(
-    id='food_delivery_gym/FoodDelivery-medium-obj1-v0',
-    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
-    kwargs={
-        "scenario_json_file_path": get_scenario_path("medium.json"),
-        "reward_objective": 1
-    }
-)
+SCENARIOS = ["initial", "medium", "complex", "meu_cenario"]
+OBJECTIVES = [1, 2, 3, 4, 7, 8, 11, 12, 13]
+
+for _scenario in SCENARIOS:
+    for _obj in OBJECTIVES:
+        register(
+            id=f"food_delivery_gym/FoodDelivery-{_scenario}-obj{_obj}-v0",
+            entry_point="food_delivery_gym:_make_env",
+            kwargs={
+                "scenario_json_file_path": get_scenario_path(f"{_scenario}.json"),
+                "reward_objective": _obj,
+            },
+        )
 ```
 
 ## 🤖 Treinamento de Agentes de Aprendizado por Reforço
@@ -347,6 +289,26 @@ register(
 Antes de iniciar o treinamento de agentes de Aprendizado por Reforço (AR), é necessário **definir um cenário experimental** a partir da seção anterior.
 
 O processo de ajuste de hiperparâmetros e o treinamento será realizado utilizando a biblioteca [RL Baselines3 Zoo](https://github.com/DLR-RM/rl-baselines3-zoo), que fornece uma interface robusta para experimentação com algoritmos como PPO, DQN, A2C, entre outros.
+
+---
+
+Vou analisar o `requirements_freeze.txt` e atualizar a seção de configuração do RL Baselines3 Zoo com versões fixas e um troubleshooting adequado.
+
+As dependências principais relevantes para o usuário são:
+
+- `torch==2.10.0`
+- `stable_baselines3==2.7.0`
+- `sb3_contrib==2.7.1`
+- `rl_zoo3==2.7.0`
+- `optuna==4.7.0`
+- `gymnasium==1.2.3`
+- `numpy==2.2.6`
+- `huggingface_hub==0.36.2`
+- `huggingface-sb3==3.0`
+- `seaborn==0.13.2`
+- `scipy==1.15.3`
+
+Segue a seção atualizada:
 
 ---
 
@@ -377,26 +339,86 @@ source venv/bin/activate  # No Windows, use: venv\Scripts\activate
 
 ```bash
 python -m pip install -r requirements.txt
-python -m pip install huggingface_hub huggingface_sb3 sb3-contrib optuna rl_zoo3 seaborn scipy
 ```
 
-**5º Passo**: Navegue até o diretório do projeto `food-delivery-gym`:
+**5º Passo**: Instale as dependências adicionais:
+
+```bash
+pip install huggingface_hub huggingface_sb3 sb3-contrib optuna rl_zoo3 seaborn scipy
+```
+
+**6º Passo**: Navegue até o diretório do projeto `food-delivery-gym`:
 
 ```bash
 cd ../food-delivery-gym/
 ```
 
-**6º Passo**: Instale o pacote local:
+**7º Passo**: Instale o pacote local:
 
 ```bash
-python -m pip -e install .
+pip install -e .
 ```
 
-**7º Passo**: Volte para o diretório do `rl-baselines3-zoo`:
+**8º Passo**: Volte para o diretório do `rl-baselines3-zoo`:
 
 ```bash
 cd ../rl-baselines3-zoo/
 ```
+
+> 💡 Se quiser reproduzir o ambiente exato utilizado no desenvolvimento, o arquivo `requirements_freeze.txt` na raiz do repositório contém todas as versões fixadas. Para instalá-las diretamente:
+> ```bash
+> pip install -r requirements_freeze.txt
+> ```
+> Isso é especialmente útil ao depurar problemas de compatibilidade.
+> - ⚠️ O requirements_freeze.txt contém versões compiladas para Linux com CUDA 12.x. Em Windows ou macOS, ou ao usar CPU, algumas entradas (como nvidia-* e triton) podem falhar — nesse caso, instale-as individualmente ignorando os pacotes incompatíveis com sua plataforma.
+
+---
+
+### 🛠️ Troubleshooting — Configuração do RL Baselines3 Zoo
+
+#### ❌ `ModuleNotFoundError: No module named 'pkg_resources'`
+
+Se pacote `pkg_resources` não foi instalado. Verifique se o ambiente está ativado e veja a versão do `setuptools`:
+
+```bash
+pip show setuptools
+```
+
+A partir das versões recentes do `setuptools` (81+), o módulo `pkg_resources` não é mais garantido / pode não vir incluído. Para resolver, instale uma versão anterior do `setuptools`:
+
+```bash
+pip install "setuptools<81"
+```
+
+#### ❌ `ImportError` ou comportamento inesperado envolvendo `stable_baselines3` ou `sb3_contrib`
+
+Versões incompatíveis entre `stable_baselines3`, `sb3_contrib` e `rl_zoo3` são uma causa comum de erros silenciosos ou crashes. Certifique-se de usar as versões validadas em conjunto:
+
+```bash
+pip install stable_baselines3==2.7.0 sb3-contrib==2.7.1 rl_zoo3==2.7.0
+```
+
+#### ❌ Erros relacionados ao `gymnasium` (ex: `API` incompatível, `step()` retornando 4 valores em vez de 5)
+
+O projeto requer `gymnasium==1.2.3`. A API mudou entre versões e wrappers antigos podem quebrar silenciosamente:
+
+```bash
+pip install gymnasium==1.2.3
+```
+
+Evite misturar `gym` (legado) e `gymnasium` no mesmo ambiente virtual.
+
+#### ❌ Erros de CUDA / GPU (ex: `CUDA error`, `device-side assert`, `torch` não reconhece a GPU)
+
+O projeto foi validado com `torch==2.10.0` e CUDA 12.x. Se estiver usando GPU, verifique a compatibilidade com o driver instalado:
+
+```bash
+python -c "import torch; print(torch.__version__); print(torch.cuda.is_available())"
+```
+
+Se `torch.cuda.is_available()` retornar `False`, reinstale o PyTorch com o índice correto para sua versão de CUDA. Consulte o seletor oficial em [pytorch.org/get-started](https://pytorch.org/get-started/locally/).
+
+> Se não tiver GPU, o treinamento funciona normalmente em CPU — apenas mais lento.
 
 ---
 
@@ -436,8 +458,6 @@ python train.py \
   --study-name ppo_medium_obj1
 ```
 
-> ✅ **Dica:** Salve cada cenário/objetivo com um `--study-name` diferente no mesmo banco de dados. Por exemplo: `ppo_medium_obj1`, `ppo_medium_obj2`, `ppo_complex_obj1`, etc.
-
 #### 📋 Parâmetros explicados
 
 | Parâmetro | Descrição |
@@ -452,59 +472,11 @@ python train.py \
 | `--storage` | URI do banco de dados onde o estudo Optuna será persistido. Use `sqlite:///nome_do_arquivo.db` para SQLite local. |
 | `--study-name` | Nome único do estudo no banco de dados. Permite múltiplos estudos no mesmo arquivo `.db` e retomada após interrupção. |
 
-#### 🔹 Exemplos adicionais
-
-```bash
-# Otimização rápida para testes (poucos trials, poucos steps)
-python train.py \
-  --algo ppo \
-  --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
-  --n-timesteps 100000 \
-  --optimize-hyperparameters \
-  --max-total-trials 20 \
-  --n-jobs 1 \
-  --storage sqlite:///optuna_studies.db \
-  --study-name ppo_medium_obj1_quick
-
-# Otimização de cenário complexo com objetivo 2
-python train.py \
-  --algo ppo \
-  --env food_delivery_gym/FoodDelivery-complex-obj2-v0 \
-  --n-timesteps 1000000 \
-  --optimize-hyperparameters \
-  --max-total-trials 200 \
-  --n-jobs 4 \
-  --optimization-log-path logs/hyperparam_opt_ppo_food_delivery_complex_obj2/ \
-  --storage sqlite:///optuna_studies.db \
-  --study-name ppo_complex_obj2
-```
-
 #### 🔍 Inspecionando o banco de dados do Optuna
 
-Você pode visualizar e consultar os estudos salvos diretamente pelo Python:
-
-```python
-import optuna
-
-# Listar todos os estudos no banco
-studies = optuna.get_all_study_names("sqlite:///optuna_studies.db")
-print(studies)
-
-# Carregar e inspecionar um estudo específico
-study = optuna.load_study(
-    study_name="ppo_medium_obj1",
-    storage="sqlite:///optuna_studies.db"
-)
-
-print(f"Número de trials concluídos: {len(study.trials)}")
-print(f"Melhor valor: {study.best_value}")
-print(f"Melhores parâmetros:\n{study.best_params}")
-```
-
-Alternativamente, use o **dashboard do Optuna** para visualização interativa:
+Você pode visualizar e consultar os estudos salvos usando o **dashboard do Optuna** para visualização interativa:
 
 ```bash
-pip install optuna-dashboard
 optuna-dashboard sqlite:///optuna_studies.db
 ```
 
@@ -542,21 +514,21 @@ food_delivery_gym/FoodDelivery-medium-obj1-v0:
 python train.py \
   --algo ppo \
   --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
-  --conf hyperparams/best_params_for_food_delivery_gym/ppo.yml \
+  --conf-file hyperparams/best_params_for_food_delivery_gym/ppo.yml \
   --n-timesteps 18000000 \
   --log-folder logs/training/
 ```
 
 #### 🔁 Retomando um treinamento interrompido
 
-Se o treinamento for interrompido (queda de energia, erro, etc.), localize o último checkpoint salvo na pasta de logs e use `--load-best-trial` ou especifique o modelo diretamente:
+Se o treinamento for interrompido (queda de energia, erro, etc.), especifique o último checkpoint salvo com `--trained-agent`:
 
 ```bash
 # Retomar a partir do checkpoint mais recente salvo em logs/
 python train.py \
   --algo ppo \
   --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
-  --conf hyperparams/best_params_for_food_delivery_gym/ppo.yml \
+  --conf-file hyperparams/best_params_for_food_delivery_gym/ppo.yml \
   --n-timesteps 18000000 \
   --log-folder logs/training/ \
   --trained-agent logs/training/ppo/FoodDelivery-medium-obj1-v0_1/best_model.zip
@@ -568,16 +540,14 @@ python train.py \
 |-----------|-----------|
 | `--algo ppo` | Algoritmo utilizado para o treinamento. |
 | `--env` | ID do ambiente registrado. |
-| `--conf` | Caminho para o arquivo YAML com os hiperparâmetros. |
+| `--conf-file` | Caminho para o arquivo YAML com os hiperparâmetros. |
 | `--n-timesteps` | Total de passos de treinamento. Quanto mais passos, maior o tempo e potencialmente melhor o agente. |
 | `--log-folder` | Diretório onde os logs, checkpoints e o modelo final serão salvos. |
-| `--storage` | Banco de dados SQLite para registro do experimento. |
-| `--study-name` | Nome do estudo para identificar este treinamento no banco. |
 | `--trained-agent` | Caminho para um modelo `.zip` já treinado, para **continuar o treinamento** a partir de um checkpoint. |
-| `--n-eval-episodes` | Número de episódios usados para avaliar o agente durante o treinamento (padrão: 5). |
+| `--eval-episodes` | Número de episódios usados para avaliar o agente durante o treinamento (padrão: 5). |
 | `--eval-freq` | Frequência (em passos) com que o agente é avaliado e um checkpoint é salvo. |
 | `--save-freq` | Frequência (em passos) para salvar checkpoints intermediários. |
-| `--verbose` | Nível de verbosidade: `0` = silencioso, `1` = informações básicas, `2` = detalhado. |
+| `--verbose` | Nível de verbosidade: `0` = silencioso, `1` = INFO. |
 | `--seed` | Seed para reprodutibilidade dos experimentos. |
 
 #### 🔹 Exemplos adicionais de treinamento
@@ -587,10 +557,10 @@ python train.py \
 python train.py \
   --algo ppo \
   --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
-  --conf hyperparams/best_params_for_food_delivery_gym/ppo.yml \
+  --conf-file hyperparams/best_params_for_food_delivery_gym/ppo.yml \
   --n-timesteps 18000000 \
-  --eval-freq 50000 \
-  --n-eval-episodes 10 \
+  --eval-freq 10000 \
+  --eval-episodes 10 \
   --seed 42 \
   --log-folder logs/training/
 
@@ -598,7 +568,7 @@ python train.py \
 python train.py \
   --algo ppo \
   --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
-  --conf hyperparams/best_params_for_food_delivery_gym/ppo.yml \
+  --conf-file hyperparams/best_params_for_food_delivery_gym/ppo.yml \
   --n-timesteps 18000000 \
   --save-freq 500000 \
   --log-folder logs/training/
@@ -744,6 +714,8 @@ python -m scripts.run_batch_eval
 | `--seed` | Seed para reprodutibilidade. | `123456789` |
 | `--model-base-dir` | Diretório base dos modelos PPO treinados. | `./data/ppo_training/.../treinamento` |
 | `--results-base-dir` | Diretório base para salvar resultados. Use `{}` como placeholder para objetivo e cenário. | `./data/runs/execucoes/obj_{}/{}_scenario/` |
+| `--no-individual-plots` | Desativa a geração de gráficos individuais por execução. | — |
+| `--no-plots` | Desativa **todos** os gráficos (equivale a `--no-individual-plots` e desativa o gráfico de médias). | — |
 | `--save-log` | Salva o output em `log.txt` dentro do diretório de resultados. | — |
 
 Os valores possíveis para `--heuristics` são: `random`, `first_driver`, `nearest_driver`, `lowest_route_cost`, `lowest_marginal_route_cost`.
@@ -795,6 +767,9 @@ python -m scripts.run_batch_eval --models 18M_steps 100M_steps
 
 # Execução rápida
 python -m scripts.run_batch_eval --num-runs 5 --seed 42 --scenarios initial --objectives 1
+
+# Desativar gráficos individuais (mais rápido, mantém gráfico de médias)
+python -m scripts.run_batch_eval --no-individual-plots
 
 # Execução completa salvando logs e usando diretórios customizados
 python -m scripts.run_batch_eval \

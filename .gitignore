@@ -27,7 +27,8 @@ share/python-wheels/
 MANIFEST
 
 data/*
-/*.xlsx
+*.xlsx
+*.xlsx#
 *.prof
 
 # PyInstaller
