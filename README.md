@@ -292,6 +292,26 @@ O processo de ajuste de hiperparâmetros e o treinamento será realizado utiliza
 
 ---
 
+Vou analisar o `requirements_freeze.txt` e atualizar a seção de configuração do RL Baselines3 Zoo com versões fixas e um troubleshooting adequado.
+
+As dependências principais relevantes para o usuário são:
+
+- `torch==2.10.0`
+- `stable_baselines3==2.7.0`
+- `sb3_contrib==2.7.1`
+- `rl_zoo3==2.7.0`
+- `optuna==4.7.0`
+- `gymnasium==1.2.3`
+- `numpy==2.2.6`
+- `huggingface_hub==0.36.2`
+- `huggingface-sb3==3.0`
+- `seaborn==0.13.2`
+- `scipy==1.15.3`
+
+Segue a seção atualizada:
+
+---
+
 ### 1️⃣ Configuração do RL Baselines3 Zoo
 
 Siga os passos abaixo para preparar o ambiente de treinamento:
@@ -319,26 +339,86 @@ source venv/bin/activate  # No Windows, use: venv\Scripts\activate
 
 ```bash
 python -m pip install -r requirements.txt
-python -m pip install huggingface_hub huggingface_sb3 sb3-contrib optuna rl_zoo3 seaborn scipy
 ```
 
-**5º Passo**: Navegue até o diretório do projeto `food-delivery-gym`:
+**5º Passo**: Instale as dependências adicionais:
+
+```bash
+pip install huggingface_hub huggingface_sb3 sb3-contrib optuna rl_zoo3 seaborn scipy
+```
+
+**6º Passo**: Navegue até o diretório do projeto `food-delivery-gym`:
 
 ```bash
 cd ../food-delivery-gym/
 ```
 
-**6º Passo**: Instale o pacote local:
+**7º Passo**: Instale o pacote local:
 
 ```bash
-python -m pip -e install .
+pip install -e .
 ```
 
-**7º Passo**: Volte para o diretório do `rl-baselines3-zoo`:
+**8º Passo**: Volte para o diretório do `rl-baselines3-zoo`:
 
 ```bash
 cd ../rl-baselines3-zoo/
 ```
+
+> 💡 Se quiser reproduzir o ambiente exato utilizado no desenvolvimento, o arquivo `requirements_freeze.txt` na raiz do repositório contém todas as versões fixadas. Para instalá-las diretamente:
+> ```bash
+> pip install -r requirements_freeze.txt
+> ```
+> Isso é especialmente útil ao depurar problemas de compatibilidade.
+> - ⚠️ O requirements_freeze.txt contém versões compiladas para Linux com CUDA 12.x. Em Windows ou macOS, ou ao usar CPU, algumas entradas (como nvidia-* e triton) podem falhar — nesse caso, instale-as individualmente ignorando os pacotes incompatíveis com sua plataforma.
+
+---
+
+### 🛠️ Troubleshooting — Configuração do RL Baselines3 Zoo
+
+#### ❌ `ModuleNotFoundError: No module named 'pkg_resources'`
+
+Se pacote `pkg_resources` não foi instalado. Verifique se o ambiente está ativado e veja a versão do `setuptools`:
+
+```bash
+pip show setuptools
+```
+
+A partir das versões recentes do `setuptools` (81+), o módulo `pkg_resources` não é mais garantido / pode não vir incluído. Para resolver, instale uma versão anterior do `setuptools`:
+
+```bash
+pip install "setuptools<81"
+```
+
+#### ❌ `ImportError` ou comportamento inesperado envolvendo `stable_baselines3` ou `sb3_contrib`
+
+Versões incompatíveis entre `stable_baselines3`, `sb3_contrib` e `rl_zoo3` são uma causa comum de erros silenciosos ou crashes. Certifique-se de usar as versões validadas em conjunto:
+
+```bash
+pip install stable_baselines3==2.7.0 sb3-contrib==2.7.1 rl_zoo3==2.7.0
+```
+
+#### ❌ Erros relacionados ao `gymnasium` (ex: `API` incompatível, `step()` retornando 4 valores em vez de 5)
+
+O projeto requer `gymnasium==1.2.3`. A API mudou entre versões e wrappers antigos podem quebrar silenciosamente:
+
+```bash
+pip install gymnasium==1.2.3
+```
+
+Evite misturar `gym` (legado) e `gymnasium` no mesmo ambiente virtual.
+
+#### ❌ Erros de CUDA / GPU (ex: `CUDA error`, `device-side assert`, `torch` não reconhece a GPU)
+
+O projeto foi validado com `torch==2.10.0` e CUDA 12.x. Se estiver usando GPU, verifique a compatibilidade com o driver instalado:
+
+```bash
+python -c "import torch; print(torch.__version__); print(torch.cuda.is_available())"
+```
+
+Se `torch.cuda.is_available()` retornar `False`, reinstale o PyTorch com o índice correto para sua versão de CUDA. Consulte o seletor oficial em [pytorch.org/get-started](https://pytorch.org/get-started/locally/).
+
+> Se não tiver GPU, o treinamento funciona normalmente em CPU — apenas mais lento.
 
 ---
 
@@ -378,8 +458,6 @@ python train.py \
   --study-name ppo_medium_obj1
 ```
 
-> ✅ **Dica:** Salve cada cenário/objetivo com um `--study-name` diferente no mesmo banco de dados. Por exemplo: `ppo_medium_obj1`, `ppo_medium_obj2`, `ppo_complex_obj1`, etc.
-
 #### 📋 Parâmetros explicados
 
 | Parâmetro | Descrição |
@@ -394,59 +472,11 @@ python train.py \
 | `--storage` | URI do banco de dados onde o estudo Optuna será persistido. Use `sqlite:///nome_do_arquivo.db` para SQLite local. |
 | `--study-name` | Nome único do estudo no banco de dados. Permite múltiplos estudos no mesmo arquivo `.db` e retomada após interrupção. |
 
-#### 🔹 Exemplos adicionais
-
-```bash
-# Otimização rápida para testes (poucos trials, poucos steps)
-python train.py \
-  --algo ppo \
-  --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
-  --n-timesteps 100000 \
-  --optimize-hyperparameters \
-  --max-total-trials 20 \
-  --n-jobs 1 \
-  --storage sqlite:///optuna_studies.db \
-  --study-name ppo_medium_obj1_quick
-
-# Otimização de cenário complexo com objetivo 2
-python train.py \
-  --algo ppo \
-  --env food_delivery_gym/FoodDelivery-complex-obj2-v0 \
-  --n-timesteps 1000000 \
-  --optimize-hyperparameters \
-  --max-total-trials 200 \
-  --n-jobs 4 \
-  --optimization-log-path logs/hyperparam_opt_ppo_food_delivery_complex_obj2/ \
-  --storage sqlite:///optuna_studies.db \
-  --study-name ppo_complex_obj2
-```
-
 #### 🔍 Inspecionando o banco de dados do Optuna
 
-Você pode visualizar e consultar os estudos salvos diretamente pelo Python:
-
-```python
-import optuna
-
-# Listar todos os estudos no banco
-studies = optuna.get_all_study_names("sqlite:///optuna_studies.db")
-print(studies)
-
-# Carregar e inspecionar um estudo específico
-study = optuna.load_study(
-    study_name="ppo_medium_obj1",
-    storage="sqlite:///optuna_studies.db"
-)
-
-print(f"Número de trials concluídos: {len(study.trials)}")
-print(f"Melhor valor: {study.best_value}")
-print(f"Melhores parâmetros:\n{study.best_params}")
-```
-
-Alternativamente, use o **dashboard do Optuna** para visualização interativa:
+Você pode visualizar e consultar os estudos salvos usando o **dashboard do Optuna** para visualização interativa:
 
 ```bash
-pip install optuna-dashboard
 optuna-dashboard sqlite:///optuna_studies.db
 ```
 
@@ -484,21 +514,21 @@ food_delivery_gym/FoodDelivery-medium-obj1-v0:
 python train.py \
   --algo ppo \
   --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
-  --conf hyperparams/best_params_for_food_delivery_gym/ppo.yml \
+  --conf-file hyperparams/best_params_for_food_delivery_gym/ppo.yml \
   --n-timesteps 18000000 \
   --log-folder logs/training/
 ```
 
 #### 🔁 Retomando um treinamento interrompido
 
-Se o treinamento for interrompido (queda de energia, erro, etc.), localize o último checkpoint salvo na pasta de logs e use `--load-best-trial` ou especifique o modelo diretamente:
+Se o treinamento for interrompido (queda de energia, erro, etc.), especifique o último checkpoint salvo com `--trained-agent`:
 
 ```bash
 # Retomar a partir do checkpoint mais recente salvo em logs/
 python train.py \
   --algo ppo \
   --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
-  --conf hyperparams/best_params_for_food_delivery_gym/ppo.yml \
+  --conf-file hyperparams/best_params_for_food_delivery_gym/ppo.yml \
   --n-timesteps 18000000 \
   --log-folder logs/training/ \
   --trained-agent logs/training/ppo/FoodDelivery-medium-obj1-v0_1/best_model.zip
@@ -510,16 +540,14 @@ python train.py \
 |-----------|-----------|
 | `--algo ppo` | Algoritmo utilizado para o treinamento. |
 | `--env` | ID do ambiente registrado. |
-| `--conf` | Caminho para o arquivo YAML com os hiperparâmetros. |
+| `--conf-file` | Caminho para o arquivo YAML com os hiperparâmetros. |
 | `--n-timesteps` | Total de passos de treinamento. Quanto mais passos, maior o tempo e potencialmente melhor o agente. |
 | `--log-folder` | Diretório onde os logs, checkpoints e o modelo final serão salvos. |
-| `--storage` | Banco de dados SQLite para registro do experimento. |
-| `--study-name` | Nome do estudo para identificar este treinamento no banco. |
 | `--trained-agent` | Caminho para um modelo `.zip` já treinado, para **continuar o treinamento** a partir de um checkpoint. |
-| `--n-eval-episodes` | Número de episódios usados para avaliar o agente durante o treinamento (padrão: 5). |
+| `--eval-episodes` | Número de episódios usados para avaliar o agente durante o treinamento (padrão: 5). |
 | `--eval-freq` | Frequência (em passos) com que o agente é avaliado e um checkpoint é salvo. |
 | `--save-freq` | Frequência (em passos) para salvar checkpoints intermediários. |
-| `--verbose` | Nível de verbosidade: `0` = silencioso, `1` = informações básicas, `2` = detalhado. |
+| `--verbose` | Nível de verbosidade: `0` = silencioso, `1` = INFO. |
 | `--seed` | Seed para reprodutibilidade dos experimentos. |
 
 #### 🔹 Exemplos adicionais de treinamento
@@ -529,10 +557,10 @@ python train.py \
 python train.py \
   --algo ppo \
   --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
-  --conf hyperparams/best_params_for_food_delivery_gym/ppo.yml \
+  --conf-file hyperparams/best_params_for_food_delivery_gym/ppo.yml \
   --n-timesteps 18000000 \
-  --eval-freq 50000 \
-  --n-eval-episodes 10 \
+  --eval-freq 10000 \
+  --eval-episodes 10 \
   --seed 42 \
   --log-folder logs/training/
 
@@ -540,7 +568,7 @@ python train.py \
 python train.py \
   --algo ppo \
   --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
-  --conf hyperparams/best_params_for_food_delivery_gym/ppo.yml \
+  --conf-file hyperparams/best_params_for_food_delivery_gym/ppo.yml \
   --n-timesteps 18000000 \
   --save-freq 500000 \
   --log-folder logs/training/
@@ -686,6 +714,8 @@ python -m scripts.run_batch_eval
 | `--seed` | Seed para reprodutibilidade. | `123456789` |
 | `--model-base-dir` | Diretório base dos modelos PPO treinados. | `./data/ppo_training/.../treinamento` |
 | `--results-base-dir` | Diretório base para salvar resultados. Use `{}` como placeholder para objetivo e cenário. | `./data/runs/execucoes/obj_{}/{}_scenario/` |
+| `--no-individual-plots` | Desativa a geração de gráficos individuais por execução. | — |
+| `--no-plots` | Desativa **todos** os gráficos (equivale a `--no-individual-plots` e desativa o gráfico de médias). | — |
 | `--save-log` | Salva o output em `log.txt` dentro do diretório de resultados. | — |
 
 Os valores possíveis para `--heuristics` são: `random`, `first_driver`, `nearest_driver`, `lowest_route_cost`, `lowest_marginal_route_cost`.
@@ -737,6 +767,9 @@ python -m scripts.run_batch_eval --models 18M_steps 100M_steps
 
 # Execução rápida
 python -m scripts.run_batch_eval --num-runs 5 --seed 42 --scenarios initial --objectives 1
+
+# Desativar gráficos individuais (mais rápido, mantém gráfico de médias)
+python -m scripts.run_batch_eval --no-individual-plots
 
 # Execução completa salvando logs e usando diretórios customizados
 python -m scripts.run_batch_eval \
