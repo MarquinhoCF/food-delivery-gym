@@ -290,28 +290,6 @@ Antes de iniciar o treinamento de agentes de Aprendizado por Reforço (AR), é n
 
 O processo de ajuste de hiperparâmetros e o treinamento será realizado utilizando a biblioteca [RL Baselines3 Zoo](https://github.com/DLR-RM/rl-baselines3-zoo), que fornece uma interface robusta para experimentação com algoritmos como PPO, DQN, A2C, entre outros.
 
----
-
-Vou analisar o `requirements_freeze.txt` e atualizar a seção de configuração do RL Baselines3 Zoo com versões fixas e um troubleshooting adequado.
-
-As dependências principais relevantes para o usuário são:
-
-- `torch==2.10.0`
-- `stable_baselines3==2.7.0`
-- `sb3_contrib==2.7.1`
-- `rl_zoo3==2.7.0`
-- `optuna==4.7.0`
-- `gymnasium==1.2.3`
-- `numpy==2.2.6`
-- `huggingface_hub==0.36.2`
-- `huggingface-sb3==3.0`
-- `seaborn==0.13.2`
-- `scipy==1.15.3`
-
-Segue a seção atualizada:
-
----
-
 ### 1️⃣ Configuração do RL Baselines3 Zoo
 
 Siga os passos abaixo para preparar o ambiente de treinamento:
