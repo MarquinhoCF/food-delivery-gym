@@ -69,7 +69,6 @@ source venv/bin/activate
 python -m scripts.test_runner --mode auto --scenario medium.json --render
 ```
 - Executa automaticamente com ações aleatórias
-- Útil para testes rápidos
 
 #### 2. **Modo Interativo** (Recomendado para desenvolvimento)
 ```shell
@@ -84,100 +83,28 @@ python -m scripts.test_runner --mode interactive --scenario medium.json --render
 
 #### 3. **Modo com Agente PPO** (Requer modelo treinado)
 ```shell
-python -m scripts.test_runner --mode agent --scenario medium.json --model-path models/ppo_food_delivery --render
+python -m scripts.test_runner --mode auto --optimizer rl --model-path models/ppo_food_delivery/best_model.zip --render
 ```
+- Usa `--optimizer rl` combinado com `--mode auto`
+- O `vecnormalize.pkl` é carregado automaticamente se encontrado no mesmo diretório do modelo
 
 ### ⚙️ Opções de Configuração
 
 | Opção | Descrição | Exemplo |
 |-------|-----------|---------|
-| `--mode` | Modo de execução: `interactive`, `auto`, `agent` | `--mode interactive` |
+| `--mode` | Modo de execução: `interactive`, `auto` | `--mode interactive` |
 | `--scenario` | Arquivo de cenário JSON | `--scenario medium.json` |
 | `--optimizer` | Otimizador: `random`, `first`, `nearest`, `lowest`, `rl` | `--optimizer lowest` |
-| `--objective` | Objetivo de recompensa do ambiente (1-10) | `--objective 1` |
+| `--objective` | Objetivo de recompensa do ambiente (1-13) | `--objective 1` |
 | `--cost-function` | Função de custo usada pelo `lowest`: `route`, `marginal_route` | `--cost-function route` |
+| `--model-path` | Caminho para o `best_model.zip` do PPO (obrigatório com `--optimizer rl`) | `--model-path models/ppo_model/best_model.zip` |
 | `--render` | Ativa visualização gráfica | `--render` |
 | `--seed` | Seed para reproducibilidade | `--seed 42` |
 | `--max-steps` | Limite máximo de passos | `--max-steps 1000` |
 | `--save-log` | Salva output em arquivo log.txt | `--save-log` |
-| `--model-path` | Caminho para modelo PPO (modo agent) | `--model-path models/ppo_model` |
 
-> A opção `--cost-function` é utilizada apenas quando `--optimizer lowest` está selecionado.
-
-#### Exemplos:
-
-##### Gerais:
-
-```shell
-# Execução automática simples (padrão: optimizer=random)
-python -m scripts.test_runner --mode auto --max-steps 100
-
-# Execução interativa com renderização
-python -m scripts.test_runner --mode interactive --render
-
-# Execução com seed fixa (reprodutibilidade)
-python -m scripts.test_runner --mode auto --seed 123
-
-# Executar com cenário específico
-python -m scripts.test_runner --scenario medium.json --mode auto --render
-
-# Executar salvando logs
-python -m scripts.test_runner --mode auto --save-log
-
-# Execução longa sem render
-python -m scripts.test_runner --mode auto --max-steps 10000
-```
-
-##### Otimizadores:
-
-```shell
-# Otimizador aleatório
-python -m scripts.test_runner --optimizer random --render
-
-# Primeiro motorista disponível
-python -m scripts.test_runner --optimizer first --render
-
-# Motorista mais próximo
-python -m scripts.test_runner --optimizer nearest --render
-
-# Lowest cost com custo baseado na rota
-python -m scripts.test_runner --optimizer lowest --cost-function route --render
-
-# Lowest cost com custo marginal de rota
-python -m scripts.test_runner --optimizer lowest --cost-function marginal_route --render
-```
-
-##### Objetivos de Recompensa:
-
-```shell
-# Objetivo baseado em tempo
-python -m scripts.test_runner --optimizer lowest --objective 1 --render
-
-# Objetivo baseado em distância
-python -m scripts.test_runner --optimizer lowest --objective 2 --render
-```
-
-##### Combinações completas:
-
-```shell
-# Execução completa com todos parâmetros
-python -m scripts.test_runner \
-    --scenario medium.json \
-    --mode auto \
-    --optimizer lowest \
-    --cost-function marginal_route \
-    --objective 2 \
-    --seed 42 \
-    --max-steps 5000 \
-    --save-log
-
-# Debug interativo com lowest cost
-python -m scripts.test_runner \
-    --mode interactive \
-    --optimizer lowest \
-    --cost-function route \
-    --render
-```
+> A opção `--cost-function` é obrigatória quando `--optimizer lowest` está selecionado, e inválida nos demais casos.
+> A opção `--model-path` é obrigatória quando `--optimizer rl` está selecionado.
 
 ## 🎯 Configuração dos Cenários Experimentais
 
@@ -201,20 +128,21 @@ A seguir são apresentadas as principais constantes e parâmetros utilizados na 
 A criação de novos pedidos é controlada por um gerador configurável no campo `order_generator`.
 Atualmente, o ambiente suporta dois tipos de geradores:
 
-| Tipo                        | Classe Interna                                                                                   | Descrição                                                                     |
-| --------------------------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
-| `"poisson"`                 | `PoissonOrderGenerator` | Gera pedidos de forma homogênea com taxa constante λ.                         |
-| `"non_homogeneous_poisson"` | `NonHomogeneousPoissonOrderGenerator` | Gera pedidos de forma não homogênea com taxa variável no tempo (função λ(t)). |
+| Tipo                        | Classe Interna                           | Descrição                                                                     |
+| --------------------------- | ---------------------------------------- | ----------------------------------------------------------------------------- |
+| `"poisson"`                 | `PoissonOrderGenerator`                  | Gera pedidos de forma homogênea com taxa constante λ.                         |
+| `"non_homogeneous_poisson"` | `NonHomogeneousPoissonOrderGenerator`    | Gera pedidos de forma não homogênea com taxa variável no tempo (função λ(t)). |
 
 #### 🔹 Parâmetros Disponíveis
 
-| Campo           | Descrição                                                                                                |
-| --------------- | -------------------------------------------------------------------------------------------------------- |
-| `type`          | Define o tipo de processo (`"poisson"` ou `"non_homogeneous_poisson"`).                                  |
-| `time_window`   | Janela total de tempo da geração de pedidos (em minutos).                                                |
-| `lambda_rate`   | Taxa média de chegada (λ) — usada apenas no gerador `"poisson"`. Não é necessária, caso não seja passado o sistema definirá a taxa como `num_orders/time_window`.  |
-| `rate_function` | Função lambda que define a taxa variável de chegada λ(t) — usada no gerador `"non_homogeneous_poisson"`. |
-| `max_rate`      | Taxa máxima usada para o método de *thinning* (necessária no gerador `"non_homogeneous_poisson"`).       |
+| Campo                   | Obrigatório | Descrição                                                                                                |
+| ----------------------- | ----------- | -------------------------------------------------------------------------------------------------------- |
+| `type`                  | ✅          | Define o tipo de processo: `"poisson"` ou `"non_homogeneous_poisson"`.                                   |
+| `estimated_num_orders`  | ✅          | Número inteiro positivo com o total estimado de pedidos a serem gerados.                                 |
+| `time_window`           | ✅          | Janela total de tempo da geração de pedidos (em minutos). Deve ser um valor positivo.                    |
+| `lambda_rate`           | ❌          | Taxa média de chegada (λ) — usada apenas no gerador `"poisson"`. Se omitida, o sistema calcula como `estimated_num_orders / time_window`. |
+| `rate_function`         | ✅ (não homogêneo) | Função lambda que define a taxa variável de chegada λ(t) — obrigatória no gerador `"non_homogeneous_poisson"`. |
+| `max_rate`              | ❌          | Taxa máxima usada para o método de *thinning* — usada no gerador `"non_homogeneous_poisson"`. Se omitida, é calculada automaticamente. |
 
 #### 🔸 Exemplo — Processo de Poisson Homogêneo
 
@@ -240,7 +168,7 @@ Nesse exemplo, pedidos são gerados de acordo com um **processo de Poisson homog
 }
 ```
 
-Neste caso, a taxa de geração de pedidos **varia ao longo do tempo** de forma senoidal, simulando períodos de alta e baixa demanda (por exemplo, picos no horário de almoço e jantar).
+Neste caso, a taxa de geração de pedidos **varia ao longo do tempo**, simulando períodos de alta e baixa demanda (por exemplo, picos no horário de almoço e jantar).
 
 #### 🛠️ Poisson Tuner — Ferramenta Visual para Criação da Função de Taxa
 
@@ -260,34 +188,36 @@ Criar e calibrar a `rate_function` manualmente pode ser trabalhoso. Para facilit
 
 ### 🚗 Configurações dos Motoristas
 
-| Variável      | Descrição                                                                     |
-| ------------- | ----------------------------------------------------------------------------- |
-| `vel_drivers` | Lista com `[mínimo, máximo]` de velocidade dos motoristas. Exemplo: `[3, 5]`. |
+| Variável                | Obrigatório | Descrição                                                                                  |
+| ----------------------- | ----------- | ------------------------------------------------------------------------------------------ |
+| `num`                   | ✅          | Número inteiro positivo com o total de motoristas.                                         |
+| `vel`                   | ✅          | Lista `[mínimo, máximo]` de velocidade dos motoristas. Exemplo: `[3, 5]`.                  |
+| `tolerance_percentage`  | ✅          | Percentual (≥ 0) de tolerância de piora no tempo de entrega ao reordenar rotas.            |
+| `max_capacity`          | ✅          | Número máximo inteiro positivo de pedidos simultâneos que um motorista pode carregar.       |
 
 ---
 
 ### 🏪 Configurações dos Estabelecimentos
 
-| Variável              | Descrição                                                                       |
-| --------------------- | ------------------------------------------------------------------------------- |
-| `prepare_time`        | Tempo de preparo dos pedidos `[mínimo, máximo]` (em minutos).                   |
-| `operating_radius`    | Raio de operação dos estabelecimentos `[mínimo, máximo]` (em unidades do grid). |
-| `production_capacity` | Capacidade de produção (número de cozinheiros) `[mínimo, máximo]`.              |
+| Variável                        | Obrigatório | Descrição                                                                                        |
+| ------------------------------- | ----------- | ------------------------------------------------------------------------------------------------ |
+| `num`                           | ✅          | Número inteiro positivo com o total de estabelecimentos.                                         |
+| `prepare_time`                  | ✅          | Tempo de preparo dos pedidos `[mínimo, máximo]` (em minutos). Deve estar em ordem crescente.    |
+| `operating_radius`              | ✅          | Raio de operação `[mínimo, máximo]` (em unidades do grid). Deve estar em ordem crescente.       |
+| `production_capacity`           | ✅          | Capacidade de produção (número de cozinheiros) `[mínimo, máximo]`. Deve estar em ordem crescente.|
+| `percentage_allocation_driver`  | ✅          | Fração de conclusão do preparo (entre `0` e `1`) para acionar a alocação do motorista.          |
 
 ---
 
 ### 🎛️ Alocação
 
-| Variável                       | Descrição                                                                               |
-| ------------------------------ | --------------------------------------------------------------------------------------- |
-| `percentage_allocation_driver` | Percentual de preparo necessário para acionar a alocação do motorista (exemplo: `0.7`). |
+O parâmetro `percentage_allocation_driver`, definido dentro da seção `establishments`, controla o percentual de preparo necessário para acionar a alocação do motorista — por exemplo, `0.7` significa que o motorista é chamado quando 70% do preparo estiver concluído.
 
 ---
 
 ### 💾 Exemplo de Cenário Experimental
 
-O cenário é configurado por um arquivo JSON dentro de
-`food_delivery_gym/main/scenarios/`, como mostrado a seguir:
+O cenário é configurado por um arquivo JSON dentro de `food_delivery_gym/main/scenarios/`, como mostrado a seguir:
 
 ```json
 {
@@ -324,22 +254,34 @@ Esse cenário define:
 * 288 pedidos ao longo de 1440 minutos e tempo limite de 2880 minutos;
 * geração de pedidos por **processo de Poisson homogêneo**.
 
-
 ### 📝 Registro do Cenário Experimental
 
-Para registrar o cenário ambiental criado deve ser acessado o arquivo `food_delivery_gym/__init__.py`. No arquivo o cenário criado deve ser incluído seguindo o padrão observado, passando o nome do arquivo JSON criado anteriormente e definindo o objetivo de recompensas (como as recompensas serão calculadas):
+O registro dos cenários é feito automaticamente no arquivo `food_delivery_gym/__init__.py`. Para cada combinação de cenário e objetivo de recompensa, um ambiente Gymnasium é registrado no formato:
 
-Obs: Os valores possíveis dos `reward objectives` vão de 1 a 10. As descrições de cada objetivo estão disponíveis no arquivo `food_delivery_gym/main/scenarios/reward_objectives.txt`:
+```
+food_delivery_gym/FoodDelivery-{cenário}-obj{N}-v0
+```
+
+Os **cenários disponíveis** são: `initial`, `medium`, `complex`.
+
+Os **objetivos de recompensa disponíveis** são: `1, 2, 3, 4, 7, 8, 11, 12, 13`. As descrições de cada objetivo estão no arquivo `food_delivery_gym/main/scenarios/reward_objectives.txt`.
+
+Para registrar um novo cenário, adicione o arquivo JSON correspondente em `food_delivery_gym/main/scenarios/` e inclua o novo cenário na lista `SCENARIOS` (e/ou novos objetivos em `OBJECTIVES`) no `__init__.py`, seguindo o padrão existente:
 
 ```python
-register(
-    id='food_delivery_gym/FoodDelivery-medium-obj1-v0',
-    entry_point='food_delivery_gym.main.environment.food_delivery_gym_env:FoodDeliveryGymEnv',
-    kwargs={
-        "scenario_json_file_path": get_scenario_path("medium.json"),
-        "reward_objective": 1
-    }
-)
+SCENARIOS = ["initial", "medium", "complex", "meu_cenario"]
+OBJECTIVES = [1, 2, 3, 4, 7, 8, 11, 12, 13]
+
+for _scenario in SCENARIOS:
+    for _obj in OBJECTIVES:
+        register(
+            id=f"food_delivery_gym/FoodDelivery-{_scenario}-obj{_obj}-v0",
+            entry_point="food_delivery_gym:_make_env",
+            kwargs={
+                "scenario_json_file_path": get_scenario_path(f"{_scenario}.json"),
+                "reward_objective": _obj,
+            },
+        )
 ```
 
 ## 🤖 Treinamento de Agentes de Aprendizado por Reforço

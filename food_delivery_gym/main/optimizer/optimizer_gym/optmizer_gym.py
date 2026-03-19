@@ -334,7 +334,7 @@ class OptimizerGym(Optimizer, ABC):
         Aceita listas com None — os Nones são ignorados.
         Retorna None se não houver valores válidos.
         """
-        clean = [v for v in values if v is not None]
+        clean = [float(v) for v in values if v is not None]
         if not clean:
             return None
 

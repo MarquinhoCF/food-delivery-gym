@@ -17,6 +17,15 @@ class RouteCostFunction(CostFunction):
         self.objective = objective
         self.MAX_PENALTY = float('inf')
 
+    @classmethod
+    def get_cost_objective(cls, objective: int) -> int:
+        if objective in [1, 3, 5, 7, 9, 10, 11, 12, 13]:
+            return 1  # baseado em tempo de entrega
+        elif objective in [2, 4, 6, 8]:
+            return 2  # baseado em custo de operação (distância)
+        else:
+            raise ValueError(f"Objetivo {objective} não reconhecido.")
+
     def penalty(self, route_segment: RouteSegment):
         if route_segment.is_pickup() and (
             route_segment.order.status <= OrderStatus.DRIVER_ACCEPTED

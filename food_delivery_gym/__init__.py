@@ -10,14 +10,7 @@ def get_scenario_path(filename: str) -> str:
 
 
 def _make_env(scenario_json_file_path: str, reward_objective: int) -> FoodDeliveryGymEnv:
-    """Entry point genérico usado pelo gymnasium.register.
-
-    O gymnasium instancia o ambiente chamando o entry_point com os kwargs
-    definidos no register. Como o construtor de FoodDeliveryGymEnv espera um
-    dict já parseado, esta wrapper faz a leitura do arquivo e delega para
-    FoodDeliveryGymEnv.from_file, mantendo o construtor livre de I/O.
-    """
-    return FoodDeliveryGymEnv.from_file(scenario_json_file_path, reward_objective)
+    return FoodDeliveryGymEnv(scenario_json_file_path=scenario_json_file_path, reward_objective=reward_objective)
 
 
 SCENARIOS = ["initial", "medium", "complex"]
