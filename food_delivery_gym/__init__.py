@@ -3,6 +3,7 @@ __path__ = __import__('pkgutil').extend_path(__path__, __name__)
 from gymnasium.envs.registration import register
 from importlib.resources import files
 from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
+from food_delivery_gym.main.scenarios import get_all_scenarios
 
 
 def get_scenario_path(filename: str) -> str:
@@ -13,8 +14,8 @@ def _make_env(scenario_json_file_path: str, reward_objective: int) -> FoodDelive
     return FoodDeliveryGymEnv(scenario_json_file_path=scenario_json_file_path, reward_objective=reward_objective)
 
 
-SCENARIOS = ["initial", "medium", "complex"]
-OBJECTIVES = [1, 2, 3, 4, 7, 8, 11, 12, 13]
+SCENARIOS = get_all_scenarios()
+OBJECTIVES = FoodDeliveryGymEnv.REWARD_OBJECTIVES
 
 for _scenario in SCENARIOS:
     for _obj in OBJECTIVES:

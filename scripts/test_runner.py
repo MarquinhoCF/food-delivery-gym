@@ -18,12 +18,13 @@ from food_delivery_gym.main.optimizer.optimizer_gym.lowest_cost_driver_optimizer
 from food_delivery_gym.main.optimizer.optimizer_gym.random_driver_optimizer_gym import RandomDriverOptimizerGym
 from food_delivery_gym.main.optimizer.optimizer_gym.nearest_driver_optimizer_gym import NearestDriverOptimizerGym
 from food_delivery_gym.main.optimizer.optimizer_gym.rl_model_optimizer_gym import RLModelOptimizerGym
+from food_delivery_gym.main.scenarios import get_all_scenarios
 
 # --- Config padrão ---
 DEFAULT_SEED = 5434
 DEFAULT_OBJECTIVE = 1
-ALL_SCENARIOS = ["initial", "medium", "complex"]
-ALL_OBJECTIVES = list(range(1, 14))
+ALL_SCENARIOS = get_all_scenarios()
+ALL_OBJECTIVES = FoodDeliveryGymEnv.REWARD_OBJECTIVES
 
 # Carrega variáveis de ambiente do .env
 load_dotenv()

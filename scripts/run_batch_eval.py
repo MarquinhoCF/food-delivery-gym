@@ -16,9 +16,11 @@ from food_delivery_gym.main.optimizer.optimizer_gym.lowest_cost_driver_optimizer
 from food_delivery_gym.main.optimizer.optimizer_gym.nearest_driver_optimizer_gym import NearestDriverOptimizerGym
 from food_delivery_gym.main.optimizer.optimizer_gym.random_driver_optimizer_gym import RandomDriverOptimizerGym
 from food_delivery_gym.main.optimizer.optimizer_gym.rl_model_optimizer_gym import RLModelOptimizerGym
+from food_delivery_gym.main.scenarios import get_all_scenarios, get_defaults_scenarios
 
-ALL_SCENARIOS = ["initial", "medium", "complex"]
-ALL_OBJECTIVES = list(range(1, 14))
+ALL_SCENARIOS = get_all_scenarios()
+DEFAULT_SCENARIOS = get_defaults_scenarios()
+ALL_OBJECTIVES = FoodDeliveryGymEnv.REWARD_OBJECTIVES
 
 # Chave = identificador do argumento --heuristics
 #   "dir"   = subdiretório de saída (results_dir/<dir>/)
@@ -71,12 +73,12 @@ def parse_args():
         "--scenarios", "-s",
         nargs="+",
         choices=ALL_SCENARIOS,
-        default=ALL_SCENARIOS,
+        default=DEFAULT_SCENARIOS,
         metavar="SCENARIO",
         help=(
             "Cenários a executar. Aceita múltiplos valores.\n"
             f"Opções: {ALL_SCENARIOS}\n"
-            "Padrão: todos\n"
+            f"Padrão: {DEFAULT_SCENARIOS}\n"
             "Exemplo: --scenarios initial medium"
         ),
     )

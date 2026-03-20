@@ -257,32 +257,15 @@ Esse cenário define:
 ### 📝 Registro do Cenário Experimental
 
 O registro dos cenários é feito automaticamente no arquivo `food_delivery_gym/__init__.py`. Para cada combinação de cenário e objetivo de recompensa, um ambiente Gymnasium é registrado no formato:
-
 ```
 food_delivery_gym/FoodDelivery-{cenário}-obj{N}-v0
 ```
 
-Os **cenários disponíveis** são: `initial`, `medium`, `complex`.
+Os **cenários disponíveis** são descobertos automaticamente a partir dos arquivos `.json` presentes em `food_delivery_gym/main/scenarios/`.
 
-Os **objetivos de recompensa disponíveis** são: `1, 2, 3, 4, 7, 8, 11, 12, 13`. As descrições de cada objetivo estão no arquivo `food_delivery_gym/main/scenarios/reward_objectives.txt`.
+Os **objetivos de recompensa disponíveis** são lidos diretamente de `FoodDeliveryGymEnv.REWARD_OBJECTIVES`. As descrições de cada objetivo estão no arquivo `food_delivery_gym/main/scenarios/reward_objectives.txt`.
 
-Para registrar um novo cenário, adicione o arquivo JSON correspondente em `food_delivery_gym/main/scenarios/` e inclua o novo cenário na lista `SCENARIOS` (e/ou novos objetivos em `OBJECTIVES`) no `__init__.py`, seguindo o padrão existente:
-
-```python
-SCENARIOS = ["initial", "medium", "complex", "meu_cenario"]
-OBJECTIVES = [1, 2, 3, 4, 7, 8, 11, 12, 13]
-
-for _scenario in SCENARIOS:
-    for _obj in OBJECTIVES:
-        register(
-            id=f"food_delivery_gym/FoodDelivery-{_scenario}-obj{_obj}-v0",
-            entry_point="food_delivery_gym:_make_env",
-            kwargs={
-                "scenario_json_file_path": get_scenario_path(f"{_scenario}.json"),
-                "reward_objective": _obj,
-            },
-        )
-```
+Para registrar um novo cenário, basta adicionar o arquivo JSON correspondente em `food_delivery_gym/main/scenarios/` ele será detectado automaticamente. Para adicionar um novo objetivo de recompensa, atualize `REWARD_OBJECTIVES` em `FoodDeliveryGymEnv` e implemente a lógica correspondente no método `_calculate_reward`.
 
 ## 🤖 Treinamento de Agentes de Aprendizado por Reforço
 

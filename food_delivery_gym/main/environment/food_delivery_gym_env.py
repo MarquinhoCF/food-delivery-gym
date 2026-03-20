@@ -38,6 +38,7 @@ from food_delivery_gym.main.view.grid_view_pygame import GridViewPygame
 
 class FoodDeliveryGymEnv(Env):
 
+    REWARD_OBJECTIVES = list(range(1, 14))
     SCENARIO: dict | None = None
 
     @classmethod
@@ -56,9 +57,8 @@ class FoodDeliveryGymEnv(Env):
             cls.SCENARIO = json.load(f)
     
     def set_reward_objective(self, reward_objective: int):
-        valid_objectives = range(1, 14)
-        if reward_objective not in valid_objectives:
-            raise ValueError(f"reward_objective deve ser um valor entre {valid_objectives}.")
+        if reward_objective not in self.REWARD_OBJECTIVES:
+            raise ValueError(f"reward_objective deve ser um valor entre {self.REWARD_OBJECTIVES}.")
         self.reward_objective = reward_objective
 
     def set_mode(self, mode: EnvMode):
