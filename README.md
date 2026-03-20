@@ -445,7 +445,47 @@ Acesse no navegador: `http://localhost:8080`
 
 ---
 
-### 3️⃣ Treinamento do Modelo
+### 3️⃣ Extração dos Melhores Hiperparâmetros
+
+Após a otimização, use o script `extract_best_trial` para identificar o melhor trial e gerar automaticamente o bloco de hiperparâmetros no arquivo `ppo.yml`.
+
+O script suporta dois modos:
+
+**Sem SQLite** (apenas arquivos locais das pastas `trial_N`):
+```bash
+python scripts/extract_best_trial.py \
+  --trials-dir logs/hyperparam_opt_ppo_food_delivery_medium_obj1 \
+  --env food_delivery_gym/FoodDelivery-medium-obj1-v0
+```
+
+**Com SQLite** (banco do Optuna disponível):
+```bash
+python scripts/extract_best_trial.py \
+  --storage sqlite:///optuna_studies.db \
+  --study-name ppo_medium_obj1 \
+  --env food_delivery_gym/FoodDelivery-medium-obj1-v0
+```
+
+#### ⚙️ Opções de Configuração
+
+| Opção | Descrição | Padrão |
+|-------|-----------|--------|
+| `--storage` / `-s` | URI do banco Optuna (ex: `sqlite:///optuna_studies.db`). Obrigatório no modo SQLite. | — |
+| `--study-name` | Nome do estudo no banco Optuna. Obrigatório no modo SQLite. | — |
+| `--trials-dir` / `-t` | Diretório com as pastas `trial_N`. Obrigatório no modo local; opcional no modo SQLite (para ler o `best_model.zip`). | — |
+| `--env` | ID completo do ambiente Gymnasium (ex: `food_delivery_gym/FoodDelivery-medium-obj1-v0`). Sempre obrigatório. | — |
+| `--n-timesteps` | Timesteps para o treinamento final registrado no YAML. | `18000000` |
+| `--n-envs` | Número de ambientes paralelos registrado no YAML. | `4` |
+| `--normalize` | Adiciona `normalize: true` no YAML gerado. | — |
+| `--output-dir` | Diretório base de saída. O subdiretório de versão do pacote é criado automaticamente. | `hyperparams/best_params_for_food_delivery_gym` |
+
+O script identifica o melhor trial, exibe um resumo completo no terminal e **adiciona** o bloco de hiperparâmetros ao arquivo `ppo.yml` sem sobrescrever entradas anteriores. O subdiretório de saída é determinado automaticamente pela versão instalada do `food_delivery_gym` (ex: `v1.2.x`).
+
+> No modo SQLite o melhor trial é determinado pelo Optuna (`study.best_trial`). No modo local, o script varre todos os `trial_N/evaluations.npz` e seleciona o trial com maior recompensa média no último checkpoint de avaliação — critério idêntico ao usado pelo Optuna internamente.
+
+---
+
+### 4️⃣ Treinamento do Modelo
 
 Com os hiperparâmetros definidos (via ajuste ou valores padrão), prossiga com o treinamento.
 
@@ -550,7 +590,7 @@ python scripts/plot_train.py -a ppo -e FoodDelivery-medium-obj1-v0 -f logs/train
 
 ---
 
-### 4️⃣ Dicas Gerais de Uso do RL Baselines3 Zoo
+### 5️⃣ Dicas Gerais de Uso do RL Baselines3 Zoo
 
 - **Organize os estudos por nome**: Use nomes descritivos como `ppo_medium_obj1_run1` para facilitar a rastreabilidade entre múltiplos experimentos.
 - **Use o mesmo banco SQLite para tudo**: Centralizar todos os estudos (tuning e treinamento) em um único `optuna_studies.db` facilita comparações e consultas.
