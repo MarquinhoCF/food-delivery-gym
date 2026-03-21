@@ -258,7 +258,7 @@ Esse cenário define:
 
 O registro dos cenários é feito automaticamente no arquivo `food_delivery_gym/__init__.py`. Para cada combinação de cenário e objetivo de recompensa, um ambiente Gymnasium é registrado no formato:
 ```
-food_delivery_gym/FoodDelivery-{cenário}-obj{N}-v0
+FoodDelivery-{cenário}-obj{N}-v1
 ```
 
 Os **cenários disponíveis** são descobertos automaticamente a partir dos arquivos `.json` presentes em `food_delivery_gym/main/scenarios/`.
@@ -394,39 +394,37 @@ Se `torch.cuda.is_available()` retornar `False`, reinstale o PyTorch com o índi
 O ajuste de hiperparâmetros usa o [Optuna](https://optuna.org/) para encontrar automaticamente a melhor configuração para o seu agente. Os resultados podem ser **salvos em um banco de dados SQLite**, permitindo que você **retome o estudo de onde parou** caso a execução seja interrompida.
 
 #### 🔹 Comando básico com SQLite (recomendado)
-
+ 
 ```bash
 python train.py \
   --algo ppo \
-  --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
+  --env FoodDelivery-medium-obj1-v1 \
   --n-timesteps 1000000 \
   --optimize-hyperparameters \
   --max-total-trials 200 \
   --n-jobs 2 \
-  --optimization-log-path logs/hyperparam_opt_ppo_food_delivery_medium_obj1/ \
   --storage sqlite:///optuna_studies.db \
   --study-name ppo_medium_obj1
 ```
-
+ 
 #### 🔹 Retomando um estudo existente
-
+ 
 Caso o processo seja interrompido, basta rodar o **mesmo comando novamente** com o mesmo `--storage` e `--study-name`. O Optuna detectará automaticamente o estudo salvo e continuará de onde parou, sem repetir trials já concluídos:
-
+ 
 ```bash
 python train.py \
   --algo ppo \
-  --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
+  --env FoodDelivery-medium-obj1-v1 \
   --n-timesteps 1000000 \
   --optimize-hyperparameters \
   --max-total-trials 200 \
   --n-jobs 2 \
-  --optimization-log-path logs/hyperparam_opt_ppo_food_delivery_medium_obj1/ \
   --storage sqlite:///optuna_studies.db \
   --study-name ppo_medium_obj1
 ```
-
+ 
 #### 📋 Parâmetros explicados
-
+ 
 | Parâmetro | Descrição |
 |-----------|-----------|
 | `--algo ppo` | Algoritmo de AR a ser usado. Outros suportados: `a2c`, `dqn`, `sac`, `td3`. |
@@ -435,9 +433,11 @@ python train.py \
 | `--optimize-hyperparameters` | Ativa o modo de busca automática de hiperparâmetros via Optuna. |
 | `--max-total-trials` | Número máximo de tentativas (trials) que o Optuna vai explorar. Mais trials = melhor resultado, porém mais tempo. |
 | `--n-jobs` | Número de trials executados em paralelo. Depende dos núcleos disponíveis na sua máquina. |
-| `--optimization-log-path` | Diretório onde serão salvos os logs e checkpoints dos modelos avaliados durante a otimização. |
+| `--optimization-log-path` | Diretório onde serão salvos os logs e checkpoints dos modelos avaliados durante a otimização. Se omitido, é criado automaticamente em `<log-folder>/<algo>/<env>_<id>/optimization/`. |
 | `--storage` | URI do banco de dados onde o estudo Optuna será persistido. Use `sqlite:///nome_do_arquivo.db` para SQLite local. |
 | `--study-name` | Nome único do estudo no banco de dados. Permite múltiplos estudos no mesmo arquivo `.db` e retomada após interrupção. |
+ 
+> 💡 **Recomendação:** Não informe `--optimization-log-path` e deixe o valor padrão ser usado. Assim, os trials ficam sempre dentro de `<exp-dir>/optimization/`, que é exatamente a estrutura esperada pelo script `extract_best_trial.py` sem nenhuma configuração adicional.
 
 #### 🔍 Inspecionando o banco de dados do Optuna
 
@@ -461,10 +461,10 @@ Acesse no navegador: `http://localhost:8080`
 python scripts/update_ppo_envs.py
 ```
 
-**Opção 2:** Se você realizou o tuning de hiperparâmetros usando o Optuna. Utilize o script `extract_best_trial` para identificar o melhor trial e gerar automaticamente o bloco de hiperparâmetros num arquivo `ppo.yml` separado. Esse script gera um bloco de hiperparâmetros no formato YAML como esse:
-
+***Opção 2:** Se você realizou o tuning de hiperparâmetros usando o Optuna. Utilize o script `extract_best_trial` para identificar o melhor trial e gerar automaticamente o bloco de hiperparâmetros num arquivo `ppo.yml` separado. Esse script gera um bloco de hiperparâmetros no formato YAML como esse:
+ 
 ```yml
-food_delivery_gym/FoodDelivery-medium-obj1-v0:
+FoodDelivery-medium-obj1-v1:
   n_timesteps: 18000000
   policy: 'MultiInputPolicy'
   n_envs: 4
@@ -480,40 +480,33 @@ food_delivery_gym/FoodDelivery-medium-obj1-v0:
   policy_kwargs: "dict(net_arch=dict(pi=[64], vf=[64]), activation_fn=nn.Tanh)"
   normalize: true
 ```
-
-O script suporta dois modos:
-
-**Sem SQLite** (apenas arquivos locais das pastas `trial_N`):
+ 
+Passe o diretório do experimento gerado pelo RL Baselines3 Zoo (formato `<log-folder>/<algo>/<env>_<id>`):
+ 
 ```bash
 python scripts/extract_best_trial.py \
-  --trials-dir logs/hyperparam_opt_ppo_food_delivery_medium_obj1 \
-  --env food_delivery_gym/FoodDelivery-medium-obj1-v0
-```
+  --exp-dir logs/ppo/FoodDelivery-medium-obj1-v1_1
 
-**Com SQLite** (banco do Optuna disponível):
-```bash
+#   O ambiente é inferido automaticamente a partir do diretório, mas pode ser 
+# informado explicitamente se necessário
 python scripts/extract_best_trial.py \
-  --storage sqlite:///optuna_studies.db \
-  --study-name ppo_medium_obj1 \
-  --env food_delivery_gym/FoodDelivery-medium-obj1-v0
+  --exp-dir logs/ppo/FoodDelivery-medium-obj1-v1_1 \
+  --env FoodDelivery-medium-obj1-v1
 ```
-
+ 
 Opções de configuração do script `extract_best_trial.py`:
-
+ 
 | Opção | Descrição | Padrão |
 |-------|-----------|--------|
-| `--storage` / `-s` | URI do banco Optuna (ex: `sqlite:///optuna_studies.db`). Obrigatório no modo SQLite. | — |
-| `--study-name` | Nome do estudo no banco Optuna. Obrigatório no modo SQLite. | — |
-| `--trials-dir` / `-t` | Diretório com as pastas `trial_N`. Obrigatório no modo local; opcional no modo SQLite (para ler o `best_model.zip`). | — |
-| `--env` | ID completo do ambiente Gymnasium (ex: `food_delivery_gym/FoodDelivery-medium-obj1-v0`). Sempre obrigatório. | — |
+| `--exp-dir` / `-e` | Diretório do experimento gerado pelo RL Baselines3 Zoo (ex: `logs/ppo/FoodDelivery-medium-obj1-v1_1`). A pasta `optimization/` é localizada automaticamente dentro dele. Sempre obrigatório. | — |
+| `--env` | ID completo do ambiente Gymnasium (ex: `FoodDelivery-medium-obj1-v1`). Se omitido, é inferido a partir do nome do `--exp-dir`. | inferido |
 | `--n-timesteps` | Timesteps para o treinamento final registrado no YAML. | `18000000` |
 | `--n-envs` | Número de ambientes paralelos registrado no YAML. | `4` |
-| `--normalize` | Adiciona `normalize: true` no YAML gerado. | — |
 | `--output-dir` | Diretório base de saída. O subdiretório de versão do pacote é criado automaticamente. | `hyperparams/best_params_for_food_delivery_gym` |
-
-O script identifica o melhor trial, exibe um resumo completo no terminal e **adiciona** o bloco de hiperparâmetros ao arquivo `ppo.yml` sem sobrescrever entradas anteriores. O subdiretório de saída é determinado automaticamente pela versão instalada do `food_delivery_gym` (ex: `v1.2.x`).
-
-> No modo SQLite o melhor trial é determinado pelo Optuna (`study.best_trial`). No modo local, o script varre todos os `trial_N/evaluations.npz` e seleciona o trial com maior recompensa média no último checkpoint de avaliação — critério idêntico ao usado pelo Optuna internamente.
+ 
+O script identifica o melhor trial varrendo todos os `trial_N/evaluations.npz` dentro de `optimization/` e selecionando o trial com maior recompensa média no último checkpoint de avaliação (o mesmo critério ao usado pelo Optuna internamente). A normalização é detectada automaticamente pela presença do arquivo `report_*.pkl` na raiz do `--exp-dir`, gerado pelo Zoo ao final da otimização.
+ 
+O script exibe um resumo completo no terminal e **adiciona** o bloco de hiperparâmetros ao arquivo `ppo.yml` sem sobrescrever entradas anteriores. O subdiretório de saída é determinado automaticamente pela versão instalada do `food_delivery_gym` (ex: `v1.2.x`).
 
 #### 2º Passo: Execute o treinamento
 
@@ -523,14 +516,14 @@ Utilize os comando abaixos para iniciar o treinamento do agente PPO utilizando o
 # Caso queira treinar com os hiperparâmetros padrão do PPO (sem arquivo YAML)
 python train.py \
   --algo ppo \
-  --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
+  --env FoodDelivery-medium-obj1-v1 \
   --n-timesteps 18000000 \
   --log-folder logs/training/
 
 # Treinar com os melhores hiperparâmetros extraídos (certifique-se de que o caminho do conf-file está correto)
 python train.py \
   --algo ppo \
-  --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
+  --env FoodDelivery-medium-obj1-v1 \
   --conf-file hyperparams/best_params_for_food_delivery_gym/v1.2.x/ppo.yml \
   --n-timesteps 18000000 \
   --log-folder logs/training/
@@ -548,11 +541,11 @@ Se o treinamento for interrompido (queda de energia, erro, etc.), especifique o 
 # Retomar a partir do checkpoint mais recente salvo em logs/
 python train.py \
   --algo ppo \
-  --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
-  --conf-file hyperparams/best_params_for_food_delivery_gym/ppo.yml \
+  --env FoodDelivery-medium-obj1-v1 \
+  --conf-file hyperparams/best_params_for_food_delivery_gym/v1.2.x/ppo.yml \
   --n-timesteps 18000000 \
   --log-folder logs/training/ \
-  --trained-agent logs/training/ppo/FoodDelivery-medium-obj1-v0_1/best_model.zip
+  --trained-agent logs/training/ppo/FoodDelivery-medium-obj1-v1_1/best_model.zip
 ``` -->
 
 ##### 📋 Parâmetros de treinamento explicados
@@ -577,7 +570,7 @@ python train.py \
 # Treinamento com avaliação frequente e seed fixo (reprodutibilidade)
 python train.py \
   --algo ppo \
-  --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
+  --env FoodDelivery-medium-obj1-v1 \
   --conf-file hyperparams/best_params_for_food_delivery_gym/v1.2.x/ppo.yml \
   --n-timesteps 18000000 \
   --eval-freq 10000 \
@@ -588,7 +581,7 @@ python train.py \
 # Treinamento com salvamento frequente de checkpoints
 python train.py \
   --algo ppo \
-  --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
+  --env FoodDelivery-medium-obj1-v1 \
   --conf-file hyperparams/best_params_for_food_delivery_gym/v1.2.x/ppo.yml \
   --n-timesteps 18000000 \
   --save-freq 500000 \
@@ -598,7 +591,7 @@ python train.py \
 #### 3º Passo: Visualize a curva de aprendizado após o treinamento:
 
 ```bash
-python scripts/plot_train.py -a ppo -e FoodDelivery-medium-obj1-v0 -f logs/training/
+python scripts/plot_train.py -a ppo -e FoodDelivery-medium-obj1-v1 -f logs/training/
 ```
 
 <!-- 
@@ -745,11 +738,11 @@ O script descobre automaticamente os modelos disponíveis varrendo `--model-base
 └── obj_1/
 │   ├── 18M_steps/
 │   │   ├── best_model.zip
-│   │   └── food_delivery_gym-FoodDelivery-medium-obj1-v0/
+│   │   └── FoodDelivery-medium-obj11/
 │   │       └── vecnormalize.pkl
 │   └── outro_experimento/
 │       ├── best_model.zip
-│       └── food_delivery_gym-FoodDelivery-medium-obj1-v0/
+│       └── FoodDelivery-medium-obj1-v1/
 │           └── vecnormalize.pkl
 └── obj_2/
     └── ...
@@ -759,7 +752,7 @@ As regras são:
 
 * Cada objetivo deve ter seu próprio subdiretório `obj_N/` dentro de `--model-base-dir`
 * Dentro de `obj_N/`, qualquer subdiretório que contenha `best_model.zip` na raiz é detectado como um modelo — o nome do subdiretório se torna o identificador do modelo nos resultados
-* O `vecnormalize.pkl` deve estar no caminho `<modelo>/food_delivery_gym-FoodDelivery-medium-obj{N}-v0/vecnormalize.pkl`. Se um vecnormalize.pkl for encontrado em qualquer subdiretório do modelo, ele é carregado automaticamente. Caso contrário, o modelo é executado sem normalização. 
+* O `vecnormalize.pkl` deve estar no caminho `<modelo>/FoodDelivery-medium-obj{N}-v1/vecnormalize.pkl`. Se um vecnormalize.pkl for encontrado em qualquer subdiretório do modelo, ele é carregado automaticamente. Caso contrário, o modelo é executado sem normalização. 
 
 > **Observação:** se os modelos foram treinados com o RL Baselines3 Zoo sem mover os arquivos gerados, a estrutura já estará no formato correto automaticamente. Use `--models` apenas para restringir a execução a modelos específicos dentro de `obj_N/`.
 
