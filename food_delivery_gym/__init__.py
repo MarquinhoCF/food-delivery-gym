@@ -20,7 +20,7 @@ OBJECTIVES = FoodDeliveryGymEnv.REWARD_OBJECTIVES
 for _scenario in SCENARIOS:
     for _obj in OBJECTIVES:
         register(
-            id=f"food_delivery_gym/FoodDelivery-{_scenario}-obj{_obj}-v0",
+            id=f"FoodDelivery-{_scenario}-obj{_obj}-v1",
             entry_point="food_delivery_gym:_make_env",
             kwargs={
                 "scenario_json_file_path": get_scenario_path(f"{_scenario}.json"),
