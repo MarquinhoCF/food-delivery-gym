@@ -613,7 +613,7 @@ Acesse em: `http://localhost:6006` -->
 
 ## 🧩 Criação de Agentes Otimizadores com `OptimizerGym`
 
-O pacote `food_delivery_gym` permite a criação de agentes otimizadores personalizados, baseados em heurísticas simples ou modelos treinados com Aprendizado por Reforço (AR), por meio da classe abstrata `OptimizerGym`.
+O pacote `food_delivery_gym` permite a criação de agentes otimizadores personalizados, baseados em heurísticas ou modelos treinados com Aprendizado por Reforço (AR), por meio da classe abstrata `OptimizerGym`.
 
 Essa abordagem é útil para avaliar o desempenho de algoritmos customizados no ambiente de entrega de última milha e comparar com agentes baseados em AR.
 
@@ -647,24 +647,35 @@ class NearestDriverOptimizerGym(OptimizerGym):
 Se você já treinou um modelo com o RL Baselines3 Zoo (como mostrado na seção anterior), pode integrá-lo diretamente:
 
 ```python
-from stable_baselines3 import PPO
-from food_delivery_gym.main.optimizer.optimizer_gym.optmizer_gym import OptimizerGym
-from food_delivery_gym.main.route.route import Route
-from food_delivery_gym.main.driver.driver import Driver
-from typing import List, Union
-import numpy as np
-
 class RLModelOptimizerGym(OptimizerGym):
-    def __init__(self, environment, model: PPO):
+
+    def __init__(self, environment: Union[FoodDeliveryGymEnv, VecEnv], model: BaseAlgorithm):
         super().__init__(environment)
         self.model = model
+        
+        model_env = model.get_env()
+        if model_env is not None:
+            print(f"Ambiente do modelo: {type(model_env).__name__}")
+            print(f"Ambiente fornecido: {type(environment).__name__}")
+            
+            if type(model_env) != type(environment):
+                print("AVISO: O ambiente fornecido é diferente do ambiente do modelo!")
+                print("Isso pode causar problemas de normalização ou formato de observação.")
 
     def get_title(self):
         return "Otimizador por Aprendizado por Reforço"
 
     def select_driver(self, obs: dict, drivers: List[Driver], route: Route):
-        action, _ = self.model.predict(obs, deterministic=True)
-        return int(action) if isinstance(action, (int, np.integer)) else action.item()
+        if self.is_vectorized:
+            action, _states = self.model.predict(obs, deterministic=True)
+            if isinstance(action, np.ndarray):
+                action = action[0] if len(action.shape) > 0 else action.item()
+        else:
+            action, _states = self.model.predict(obs, deterministic=True)
+            if isinstance(action, np.ndarray):
+                action = action.item() if action.size == 1 else action
+            
+        return action
 ```
 
 ### ▶️ Executando Simulações com o Otimizador
@@ -697,7 +708,7 @@ Esse script automatiza a execução de diferentes agentes otimizadores em combin
   * `NearestDriverOptimizerGym`
   * `LowestCostDriverOptimizerGym` (com custo de rota)
   * `LowestCostDriverOptimizerGym` (com custo marginal de rota)
-* Executa modelos PPO (`RLModelOptimizerGym`), com **descoberta automática** dos modelos disponíveis em `--model-base-dir`
+* Executa modelos de algoritmos RL (`RLModelOptimizerGym`), com **descoberta automática** dos modelos disponíveis em `--model-base-dir`
 * Gera arquivos `.txt` com os resultados das execuções
 * Gera arquivos `.npz` contendo as métricas agregadas para análise
 
@@ -738,7 +749,7 @@ O script descobre automaticamente os modelos disponíveis varrendo `--model-base
 └── obj_1/
 │   ├── 18M_steps/
 │   │   ├── best_model.zip
-│   │   └── FoodDelivery-medium-obj11/
+│   │   └── FoodDelivery-medium-obj1-v1/
 │   │       └── vecnormalize.pkl
 │   └── outro_experimento/
 │       ├── best_model.zip

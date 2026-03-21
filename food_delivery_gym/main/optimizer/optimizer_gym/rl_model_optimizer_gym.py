@@ -1,7 +1,7 @@
 from typing import List, Union
 import numpy as np
 
-from stable_baselines3 import PPO
+from stable_baselines3.common.base_class import BaseAlgorithm
 from stable_baselines3.common.vec_env import VecEnv
 
 from food_delivery_gym.main.driver.driver import Driver
@@ -12,7 +12,7 @@ from food_delivery_gym.main.route.route import Route
 
 class RLModelOptimizerGym(OptimizerGym):
 
-    def __init__(self, environment: Union[FoodDeliveryGymEnv, VecEnv], model: PPO):
+    def __init__(self, environment: Union[FoodDeliveryGymEnv, VecEnv], model: BaseAlgorithm):
         super().__init__(environment)
         self.model = model
         
@@ -32,7 +32,7 @@ class RLModelOptimizerGym(OptimizerGym):
 
     def select_driver(self, obs: dict, drivers: List[Driver], route: Route):
         """
-        Seleciona o driver usando o modelo PPO treinado.
+        Seleciona o driver usando o modelo do algoritmo treinado.
         
         Args:
             obs: Observação do ambiente
