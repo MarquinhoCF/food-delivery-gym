@@ -22,9 +22,10 @@ class NonHomogeneousPoissonOrderGenerator(PoissonOrderGenerator):
                  rate_function: callable, max_rate: float = None):
         self.rate_function = rate_function
         if max_rate is None:
-            time_samples = np.linspace(0, time_window, 1000)
+            n_samples = max(500, int(time_window * 20))
+            time_samples = np.linspace(0, time_window, n_samples)
             rates = [rate_function(t) for t in time_samples]
-            self.max_rate = max(rates) * 1.1  # margem de segurança
+            self.max_rate = max(rates)
         else:
             self.max_rate = max_rate
 
