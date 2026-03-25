@@ -24,6 +24,7 @@ from food_delivery_gym.main.statistic.metrics.order_flow_metric import OrderFlow
 from food_delivery_gym.main.statistic.metrics.order_pipeline_metric import OrderPipelineStatusMetric
 from food_delivery_gym.main.statistic.metrics.poisson_order_generation_metric import PoissonOrderGenerationMetric
 from food_delivery_gym.main.statistic.metrics.route_reordering_metric import RouteReorderingMetric
+from food_delivery_gym.main.statistic.simulation_stats import SimulationStats
 from food_delivery_gym.main.statistic.statistcs_view.summarized_data_board import SummarizedDataBoard
 from food_delivery_gym.main.statistic.metrics.driver_orders_delivered_metric import DriverOrdersDeliveredMetric
 from food_delivery_gym.main.statistic.metrics.driver_total_distance_metric import DriverTotalDistanceMetric
@@ -81,7 +82,6 @@ class FoodDeliveryGymEnv(Env):
 
         self.simpy_env = None # Ambiente de simulação será criado no reset
         self._last_decision_time = None # Último passo de tempo em que o agente tomou uma decisão
-        self.last_simpy_env = None # Ambiente de simulação da execução anterior -> para fins de computação de estatísticas
         self.orders_generated = None # Número de pedidos que o gerador de pedidos vai gerar
 
         # Definindo o objetivo da recompensa
@@ -545,10 +545,6 @@ class FoodDeliveryGymEnv(Env):
             reward = self._calculate_reward(terminated, truncated)
             # print(f"reward: {reward}")
 
-            if (self.env_mode != EnvMode.TRAINING) and (terminated or truncated):
-                self.register_statistic_data()
-                self.last_simpy_env = self.simpy_env
-
             return observation, reward, terminated, truncated, info
         
         except ValueError as e:
@@ -566,26 +562,14 @@ class FoodDeliveryGymEnv(Env):
             print(traceback.format_exc())
             raise
 
-    def show_statistics_board(self, sum_reward = None, dir_path = None):
-        if self.env_mode != EnvMode.TRAINING:
-            if self.last_simpy_env == None:
-                raise ValueError(
-                    "Dados de simulação indisponíveis. Certifique-se de que o ambiente foi executado ao menos uma vez "
-                    "e que o método 'reset_last_simpy_env' não foi chamado antes da coleta ou exibição das estatísticas."
-                )
-            simpy_env = self.last_simpy_env
-        else:
-            simpy_env = self.simpy_env
-
-        if sum_reward is None and dir_path is None:
-            save_figs = False
-        else:
-            save_figs = True
-        
+    def show_statistics_board(self, sum_reward=None, dir_path=None):
+        """Exibe o board de estatísticas do episódio atual (usa simpy_env diretamente)."""
+        simpy_env  = self.simpy_env
+        save_figs  = sum_reward is not None or dir_path is not None
+ 
         custom_board = SummarizedDataBoard(metrics=[
             PoissonOrderGenerationMetric(simpy_env),
             OrderFlowMetric(simpy_env),
-            #OrderPipelineStatusMetric(simpy_env),
             RouteReorderingMetric(simpy_env),
             EstablishmentOrdersFulfilledMetric(simpy_env),
             EstablishmentMaxOrdersInQueueMetric(simpy_env),
@@ -594,7 +578,7 @@ class FoodDeliveryGymEnv(Env):
             DriverOrdersDeliveredMetric(simpy_env),
             DriverTotalDistanceMetric(simpy_env),
             DriverIdleTimeMetric(simpy_env),
-            DriverTimeWaitingForOrderMetric(simpy_env)
+            DriverTimeWaitingForOrderMetric(simpy_env),
         ],
             num_drivers=self.num_drivers,
             num_establishments=self.num_establishments,
@@ -603,25 +587,33 @@ class FoodDeliveryGymEnv(Env):
             dir_path=dir_path
         )
         custom_board.view()
-    
-    def show_total_mean_statistics_board(self, sum_rewards_mean = None, dir_path= None):
-        if sum_rewards_mean is None and dir_path is None:
-            save_figs = False
-        else:
-            save_figs = True
-        
-        statistics = self.get_statistics()
-
+ 
+    def show_total_mean_statistics_board(
+        self,
+        sim_stats: SimulationStats,
+        sum_rewards_mean: float | None = None,
+        dir_path: str | None = None,
+    ) -> None:
+        """
+        Exibe o board de médias usando um SimulationStats já finalizado.
+ 
+        Args:
+            sim_stats:        Instância de SimulationStats após finalize().
+            sum_rewards_mean: Recompensa média para exibição.
+            dir_path:         Diretório para salvar as figuras (None = não salva).
+        """
+        save_figs = sum_rewards_mean is not None or dir_path is not None
+ 
         custom_board = SummarizedTotalMeanDataBoard(metrics=[
-            RouteReorderingMetric(self.simpy_env, drivers_statistics=statistics["drivers"]),
-            EstablishmentOrdersFulfilledMetric(self.simpy_env, establishments_statistics=statistics["establishments"]),
-            EstablishmentMaxOrdersInQueueMetric(self.simpy_env, establishments_statistics=statistics["establishments"]),
-            EstablishmentActiveTimeMetric(self.simpy_env, establishments_statistics=statistics["establishments"]),
-            DriverTimeSpentOnDelivery(self.simpy_env, drivers_statistics=statistics["drivers"]),
-            DriverOrdersDeliveredMetric(self.simpy_env, drivers_statistics=statistics["drivers"]),
-            DriverTotalDistanceMetric(self.simpy_env, drivers_statistics=statistics["drivers"]),
-            DriverIdleTimeMetric(self.simpy_env, drivers_statistics=statistics["drivers"]),
-            DriverTimeWaitingForOrderMetric(self.simpy_env, drivers_statistics=statistics["drivers"])
+            RouteReorderingMetric(self.simpy_env, drivers_statistics=sim_stats.drivers),
+            EstablishmentOrdersFulfilledMetric(self.simpy_env, establishments_statistics=sim_stats.establishments),
+            EstablishmentMaxOrdersInQueueMetric(self.simpy_env, establishments_statistics=sim_stats.establishments),
+            EstablishmentActiveTimeMetric(self.simpy_env, establishments_statistics=sim_stats.establishments),
+            DriverTimeSpentOnDelivery(self.simpy_env, drivers_statistics=sim_stats.drivers),
+            DriverOrdersDeliveredMetric(self.simpy_env, drivers_statistics=sim_stats.drivers),
+            DriverTotalDistanceMetric(self.simpy_env, drivers_statistics=sim_stats.drivers),
+            DriverIdleTimeMetric(self.simpy_env, drivers_statistics=sim_stats.drivers),
+            DriverTimeWaitingForOrderMetric(self.simpy_env, drivers_statistics=sim_stats.drivers),
         ],
             num_drivers=self.num_drivers,
             num_establishments=self.num_establishments,
@@ -646,29 +638,6 @@ class FoodDeliveryGymEnv(Env):
     
     def get_num_orders_generated(self):
         return self.orders_generated
-    
-    def register_statistic_data(self):
-        self.simpy_env.register_statistic_data()
-
-    def get_statistics_data(self):
-        return self.simpy_env.get_statistics_data()
-    
-    def reset_last_simpy_env(self):
-        """
-        Limpa o último estado da simulação (last_simpy_env).
-
-        Observação:
-        - Quando o ambiente está envolto com VecNormalize, o reset ocorre automaticamente ao fim de um episódio.
-        - Este método garante que o último ambiente SimPy, que foi armazenado para estatísticas, seja descartado.
-        """
-        self.last_simpy_env = None
-    
-    def reset_statistics(self):
-        self.simpy_env.reset_statistics()
-        self.reset_last_simpy_env()
-    
-    def get_statistics(self):
-        return self.simpy_env.compute_statistics()
     
     def get_reward_objective(self):
         return self.reward_objective

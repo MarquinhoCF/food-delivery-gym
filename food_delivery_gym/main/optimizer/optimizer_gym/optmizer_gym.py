@@ -105,11 +105,6 @@ class OptimizerGym(Optimizer, ABC):
     #     Funções para execução do otimizador e coleta de estatísticas
     # =======================================================================
 
-    def initialize(self, seed: int | None = None):
-        self.reset_env(seed=seed)
-        self._call_env_method('reset_statistics')
-        SummarizedDataBoard.reset_image_counter()
-
     def reset_env(self, seed: int | None = None):
         if self.is_vectorized:
             self.state = self.wrapped_env.reset()
@@ -125,9 +120,7 @@ class OptimizerGym(Optimizer, ABC):
         segment_pickup = PickupRouteSegment(order)
         segment_delivery = DeliveryRouteSegment(order)
         route = Route(self.gym_env.get_simpy_env(), [segment_pickup, segment_delivery])
-
         drivers = self.gym_env.get_drivers()
-
         return self.select_driver(obs, drivers, route)
     
     def run(self):
@@ -183,18 +176,14 @@ class OptimizerGym(Optimizer, ABC):
         save_mean_plots: bool = True,
         metrics_fmt: str = "npz",
     ):
-        self.initialize(seed=seed)
-        self.set_gym_env_mode(EnvMode.EVALUATING)
+        self.reset_env(seed=seed)
+        self._call_env_method("set_mode", EnvMode.EVALUATING)
+        SummarizedDataBoard.reset_image_counter()
 
         os.makedirs(dir_path, exist_ok=True)
-        self._current_dir_path = dir_path
         file_path = os.path.join(dir_path, "results.txt")
 
-        total_rewards:         list = []
-        episode_lengths:       list = []
-        simpy_last_time_steps: list = []
-        num_orders_generated:  list = []
-        truncated_runs:        list = []
+        stats = SimulationStats()
 
         with open(file_path, "w", encoding="utf-8") as results_file:
             self._write_run_header(results_file, num_runs, seed)
@@ -202,126 +191,78 @@ class OptimizerGym(Optimizer, ABC):
             for i in range(num_runs):
                 print(f"-> Execução {i + 1} de {num_runs}...")
 
-                run_ok = False
-                sum_reward = was_truncated = 0
-                ep_length  = 0
-                simpy_t    = None
+                sum_reward    = 0.0
+                ep_length     = 0
                 was_truncated = True   # pessimista: se falhar, trata como truncada
+                run_ok        = False
 
                 try:
                     resultado     = self.run()
                     sum_reward    = resultado["sum_reward"]
                     ep_length     = resultado["steps"]
                     was_truncated = resultado["truncated"]
-                    info          = resultado.get("info", {})
-
-                    if isinstance(info, list):
-                        info = info[0] if info else {}
-
-                    simpy_t = info.get("simpy_time_step", None)
-                    run_ok  = True
-
+                    run_ok        = True
+ 
                 except Exception as e:
                     print(f"  ✗ Erro na execução {i + 1}: {e}")
                     traceback.print_exc()
                     results_file.write(f"Execução {i + 1}: ERRO - {e}\n")
-
-                total_rewards.append(sum_reward)
-                episode_lengths.append(ep_length)
-                simpy_last_time_steps.append(simpy_t)
-                truncated_runs.append(was_truncated)
-                num_orders_generated.append(
-                    self._call_env_method('get_num_orders_generated') if run_ok else 0
-                )
-
+ 
                 if run_ok:
+                    # ── Registro centralizado ─────────────────────────
+                    simpy_env        = self.gym_env.get_simpy_env()
+                    orders_generated = self._call_env_method("get_num_orders_generated")
+ 
+                    stats.register_episode(
+                        simpy_env=simpy_env,
+                        reward=sum_reward,
+                        length=ep_length,
+                        truncated=was_truncated,
+                        orders_generated=orders_generated,
+                    )
+ 
                     results_file.write(
                         f"Execução {i + 1}: Retorno = {sum_reward:.4f} | "
-                        f"Passos = {ep_length} | SimPy t = {simpy_t} | "
+                        f"Passos = {ep_length} | SimPy t = {simpy_env.now} | "
                         f"Truncada = {was_truncated}\n"
                     )
+ 
                     if save_individual_plots:
                         try:
-                            self._call_env_method('show_statistics_board',
+                            self._call_env_method("show_statistics_board",
                                                   sum_reward=sum_reward, dir_path=dir_path)
                         except Exception as e:
                             print(f"  ⚠  show_statistics_board falhou: {e}")
-
+ 
                 self.reset_env()
-
-            # ── Resumo estatístico ─────────────────────────────────────
+ 
+            # ── Agregação e relatório ─────────────────────────────────
             results_file.write("\n" + "=" * 60 + "\n")
             results_file.write("RESUMO ESTATÍSTICO\n")
             results_file.write("=" * 60 + "\n")
-
-            stats = self._build_simulation_stats(
-                num_runs, total_rewards, episode_lengths,
-                simpy_last_time_steps, num_orders_generated,
-                truncated_runs, results_file, save_mean_plots,
-            )
-
+ 
+            stats.finalize()
+            num_truncated = sum(stats.episodes.get("truncated", []))
+            stats.write_report(results_file, num_truncated=num_truncated)
+ 
+            # Board de médias
+            if save_mean_plots:
+                try:
+                    avg_reward = (
+                        stats.aggregate["rewards"]["avg"]
+                        if stats.aggregate.get("rewards") else 0.0
+                    )
+                    self._call_env_method(
+                        "show_total_mean_statistics_board",
+                        sim_stats=stats,
+                        sum_rewards_mean=avg_reward,
+                        dir_path=dir_path,
+                    )
+                except Exception as e:
+                    results_file.write(f"\n⚠  Erro ao mostrar board de médias: {e}\n")
+ 
         stats.save(dir_path=dir_path, fmt=metrics_fmt)
         print(f"Resultados salvos em {dir_path}")
-
-    def _build_simulation_stats(
-        self,
-        num_runs: int,
-        total_rewards: list,
-        episode_lengths: list,
-        simpy_last_time_steps: list,
-        num_orders_generated: list,
-        truncated_runs: list,
-        results_file,
-        save_mean_plots: bool,
-    ) -> SimulationStats:
-        """
-        Coleta as métricas brutas do ambiente, constrói um SimulationStats,
-        escreve o relatório e aciona o board de médias.
-        """
-        # Coleta métricas brutas dos agentes
-        establishment_metrics_raw, driver_metrics_raw = {}, {}
-        try:
-            establishment_metrics_raw, driver_metrics_raw = \
-                self._call_env_method('get_statistics_data')
-        except Exception as e:
-            results_file.write(f"\n⚠  Não foi possível obter get_statistics_data: {e}\n")
-            traceback.print_exc()
-
-        # Coleta estatísticas gerais (para mean board e texto final)
-        geral_statistics = None
-        try:
-            geral_statistics = self._call_env_method('get_statistics')
-        except Exception as e:
-            results_file.write(f"\n⚠  Erro ao obter estatísticas gerais: {e}\n")
-            traceback.print_exc()
-
-        # Constrói e escreve relatório
-        stats = SimulationStats(
-            num_runs=num_runs,
-            rewards=total_rewards,
-            lengths=episode_lengths,
-            simpy_times=simpy_last_time_steps,
-            orders_generated=num_orders_generated,
-            truncated=truncated_runs,
-            driver_metrics_raw=driver_metrics_raw,
-            establishment_metrics_raw=establishment_metrics_raw,
-            geral_statistics=geral_statistics,
-        )
-        stats.write_report(results_file, num_truncated=sum(truncated_runs))
-
-        # Board de médias
-        if save_mean_plots:
-            try:
-                avg_reward = stats.aggregate["rewards"]["avg"] \
-                    if stats.aggregate["rewards"] else 0.0
-                self._call_env_method(
-                    'show_total_mean_statistics_board',
-                    sum_rewards_mean=avg_reward,
-                    dir_path=self._current_dir_path,
-                )
-            except Exception as e:
-                results_file.write(f"\n⚠  Erro ao mostrar board de médias: {e}\n")
-
         return stats
     
     # ========================================================
@@ -351,9 +292,6 @@ class OptimizerGym(Optimizer, ABC):
 
     def show_statistics_board(self):
         self._call_env_method('show_statistics_board')
-
-    def show_mean_statistic_board(self):
-        self._call_env_method('show_total_mean_statistics_board')
     
     # =====================================================================
     #     Execução interativa / automática

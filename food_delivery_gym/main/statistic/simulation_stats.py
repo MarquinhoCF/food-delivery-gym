@@ -1,56 +1,51 @@
 """
 Utilitário de estatísticas para simulações do food-delivery-gym.
 
+Uso básico
+──────────
+    stats = SimulationStats()
+
+    for i in range(num_runs):
+        ... rodar episódio ...
+        stats.register_episode(simpy_env, reward=r, length=l,
+                               truncated=t, orders_generated=n)
+
+    stats.finalize()
+    stats.save(dir_path="resultados/", fmt="json")
+
 Formato de armazenamento padrão: NPZ comprimido (np.savez_compressed)
 ──────────────────────────────────────────────────────────────────────
 Estrutura de chaves — separador '__', tudo float64, None → NaN:
 
   Séries por episódio (arrays de tamanho N):
-    ep__rewards
-    ep__lengths
-    ep__simpy_times
-    ep__truncated
-    ep__orders_generated
-    ep__delivery_time
-    ep__distance
+    ep__rewards / ep__lengths / ep__simpy_times / ep__truncated
+    ep__orders_generated / ep__delivery_time / ep__distance
 
   Métricas por agente (arrays de tamanho N):
     driver__<id>__<metric>
     establishment__<id>__<metric>
 
   Estatísticas agregadas (arrays de tamanho 1):
-    agg__<metric>__avg
-    agg__<metric>__std_dev
-    agg__<metric>__median
-    agg__<metric>__n          ← int64
+    agg__<metric>__avg / __std_dev / __median / __n
 
 Formato JSON (conversão via npz_to_json / json_to_npz)
 ────────────────────────────────────────────────────────
-Estrutura orientada por simulação — fácil de inspecionar:
 {
   "sim": [
     {
-      "reward": 42.0,
-      "episode_length": 100,
-      "simpy_final_time": 3600.0,
-      "truncated": false,
-      "orders_generated": 50,
-      "delivery_time": 1200.0,
-      "distance": 300.0,
+      "reward": 42.0, "episode_length": 100, ...
       "driver":        { "0": { "idle_time": 600.0, ... } },
       "establishment": { "0": { "orders_fulfilled": 48, ... } }
-    },
-    ...
+    }, ...
   ],
   "aggregate": {
-    "rewards": { "avg": 40.0, "std_dev": 2.0, "median": 41.0, "mode": null, "n": 20 },
-    ...
+    "rewards": { "avg": 40.0, "std_dev": 2.0, "median": 41.0, "n": 20 }, ...
   }
 }
 
-Funções utilitárias de conversão (módulo-nível):
-    npz_to_json(npz_path, json_path)   – converte NPZ → JSON intuitivo
-    json_to_npz(json_path, npz_path)   – converte JSON → NPZ comprimido
+Funções de conversão NPZ ↔ JSON (módulo-nível):
+    npz_to_json(npz_path, json_path)
+    json_to_npz(json_path, npz_path)
 """
 
 from __future__ import annotations
@@ -58,8 +53,8 @@ from __future__ import annotations
 import json
 import math
 import os
-import traceback
 import statistics as stt
+import traceback
 from typing import IO, Literal
 
 import numpy as np
@@ -70,39 +65,24 @@ import numpy as np
 # ════════════════════════════════════════════════════════════════════════
 
 def npz_to_json(npz_path: str, json_path: str) -> None:
-    """
-    Converte um arquivo NPZ salvo por SimulationStats.save() para JSON
-    com a estrutura intuitiva orientada por simulação.
-
-    Exemplo:
-        npz_to_json("results/metrics_data.npz", "results/metrics_data.json")
-    """
     stats = SimulationStats.load(npz_path)
     _write_json(stats, json_path)
     print(f"Convertido: {npz_path} → {json_path}")
 
 
 def json_to_npz(json_path: str, npz_path: str) -> None:
-    """
-    Converte um JSON com estrutura intuitiva de volta para NPZ comprimido.
-
-    Exemplo:
-        json_to_npz("results/metrics_data.json", "results/metrics_data.npz")
-    """
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
-
     arrays = _json_data_to_npz_arrays(data)
     np.savez_compressed(npz_path, **arrays)
     print(f"Convertido: {json_path} → {npz_path}")
 
 
 # ════════════════════════════════════════════════════════════════════════
-#  Helpers internos de conversão
+#  Helpers internos
 # ════════════════════════════════════════════════════════════════════════
 
 def _to_f64(values) -> np.ndarray:
-    """Lista (com possíveis None/NaN) → float64, None/NaN → np.nan."""
     if values is None:
         return np.array([], dtype=np.float64)
     return np.array(
@@ -113,7 +93,6 @@ def _to_f64(values) -> np.ndarray:
 
 
 def _json_default(obj):
-    """Serializa tipos NumPy e NaN para JSON."""
     if isinstance(obj, float) and math.isnan(obj):
         return None
     if isinstance(obj, (np.floating, np.integer)):
@@ -126,21 +105,17 @@ def _json_default(obj):
 
 
 def _write_json(stats: SimulationStats, path: str) -> None:
-    """Serializa SimulationStats para o JSON intuitivo."""
     data = {"sim": stats.sim, "aggregate": stats.aggregate}
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, default=_json_default)
 
 
 def _json_data_to_npz_arrays(data: dict) -> dict[str, np.ndarray]:
-    """Reconstrói o dicionário de arrays NPZ a partir do JSON intuitivo."""
     sim_list  = data.get("sim", [])
     aggregate = data.get("aggregate", {})
     n         = len(sim_list)
-
     arrays: dict[str, np.ndarray] = {}
 
-    # Séries de episódio
     _EP_KEYS = [
         ("reward",           "ep__rewards"),
         ("episode_length",   "ep__lengths"),
@@ -153,7 +128,6 @@ def _json_data_to_npz_arrays(data: dict) -> dict[str, np.ndarray]:
     for sim_key, npz_key in _EP_KEYS:
         arrays[npz_key] = _to_f64([ep.get(sim_key) for ep in sim_list])
 
-    # Métricas por driver e establishment
     if n > 0:
         for did, metrics in sim_list[0].get("driver", {}).items():
             for metric in metrics:
@@ -166,7 +140,6 @@ def _json_data_to_npz_arrays(data: dict) -> dict[str, np.ndarray]:
                     [ep["establishment"][eid].get(metric) for ep in sim_list]
                 )
 
-    # Agregados
     for metric, stats in aggregate.items():
         if not stats:
             continue
@@ -188,84 +161,160 @@ def _json_data_to_npz_arrays(data: dict) -> dict[str, np.ndarray]:
 
 class SimulationStats:
     """
-    Agrega e organiza todas as estatísticas de um conjunto de simulações.
+    Ponto único de coleta, agregação e persistência de estatísticas.
 
-    Atributos públicos após construção
-    ────────────────────────────────────
-    episodes : dict
-        Séries brutas como listas, uma por métrica de episódio.
+    Ciclo de vida
+    ─────────────
+    1. stats = SimulationStats()
+    2. for each episode:  stats.register_episode(simpy_env, reward, ...)
+    3. stats.finalize()          ← computa agregados
+    4. stats.save(dir_path)      ← persiste NPZ ou JSON
+    5. stats.write_report(file)  ← relatório em texto
 
-    drivers : dict
-        driver_id → {metric → list[float | None]}
-
-    establishments : dict
-        est_id → {metric → list[float | None]}
-
-    aggregate : dict
-        Estatísticas resumidas (avg / std_dev / median / mode / n).
-
-    sim : list[dict]  (property, lazy)
-        Visão orientada por simulação. Construída na primeira chamada.
-        stats.sim[4]["reward"]
-        stats.sim[4]["driver"]["0"]["distance"]
+    Após finalize(), acesso:
+        stats.episodes["rewards"]            # lista de N recompensas
+        stats.drivers["0"]["distance"]       # lista de N distâncias do driver 0
+        stats.aggregate["rewards"]["avg"]
+        stats.sim[i]["reward"]               # visão por episódio (lazy)
+        stats.sim[i]["driver"]["0"]["distance"]
     """
 
-    _DRIVER_KEY_MAP: dict[str, str] = {
-        "orders_delivered":       "orders_delivered",
-        "time_spent_on_delivery": "time_spent_delivery",
-        "idle_time":              "idle_time",
-        "time_waiting_for_order": "time_waiting_order",
-        "total_distance":         "distance",
-    }
-    _EST_KEY_MAP: dict[str, str] = {
-        "orders_fulfilled":    "orders_fulfilled",
-        "idle_time":           "idle_time",
-        "active_time":         "active_time",
-        "max_orders_in_queue": "max_orders_queue",
-    }
+    def __init__(self) -> None:
+        self._raw_episodes: list[dict] = []
 
-    # ════════════════════════════════════════════════════════════════════
-    #  Construção
-    # ════════════════════════════════════════════════════════════════════
-
-    def __init__(
-        self,
-        num_runs: int,
-        rewards: list[float],
-        lengths: list[int],
-        simpy_times: list[float | None],
-        orders_generated: list[int],
-        truncated: list[bool],
-        driver_metrics_raw: dict,
-        establishment_metrics_raw: dict,
-        geral_statistics: dict | None = None,
-    ) -> None:
-        self._num_runs         = num_runs
-        self._geral_statistics = geral_statistics
+        # Populados por finalize()
+        self.episodes: dict       = {}
+        self.drivers: dict        = {}
+        self.establishments: dict = {}
+        self.aggregate: dict      = {}
+        self._num_runs: int       = 0
         self._sim: list[dict] | None = None
 
-        # 1. Normaliza métricas por agente
-        self.drivers        = self._parse_driver_metrics(driver_metrics_raw)
-        self.establishments = self._parse_establishment_metrics(establishment_metrics_raw)
+    # ════════════════════════════════════════════════════════════════════
+    #  API principal
+    # ════════════════════════════════════════════════════════════════════
 
-        # 2. Séries derivadas por episódio
-        delivery_time = self._sum_per_episode(num_runs, self.drivers, "time_spent_delivery")
-        distance      = self._sum_per_episode(
-            num_runs, self.drivers, "distance", mask_truncated=truncated,
-        )
+    def register_episode(
+        self,
+        simpy_env,
+        reward: float,
+        length: int,
+        truncated: bool,
+        orders_generated: int,
+    ) -> None:
+        """
+        Registra os dados de um episódio completo.
 
-        self.episodes: dict = {
-            "rewards":          list(rewards),
-            "lengths":          list(lengths),
-            "simpy_times":      list(simpy_times),
+        Chame uma vez por episódio, antes de reset(). Extrai os dados
+        diretamente dos drivers e establishments via get_episode_stats().
+        """
+        ep: dict = {
+            "reward":           float(reward),
+            "length":           int(length),
+            "simpy_time":       float(simpy_env.now),
+            "truncated":        bool(truncated),
+            "orders_generated": int(orders_generated),
+            "drivers": {
+                str(d.driver_id): d.get_episode_stats()
+                for d in simpy_env.state.drivers
+            },
+            "establishments": {
+                str(e.establishment_id): e.get_episode_stats()
+                for e in simpy_env.state.establishments
+            },
+        }
+        self._raw_episodes.append(ep)
+        self._sim = None  # invalida cache lazy
+
+    def finalize(self) -> "SimulationStats":
+        """
+        Processa todos os episódios registrados e computa os agregados.
+
+        Chame após todos os register_episode() e antes de save() ou
+        write_report(). Retorna self para encadeamento.
+        """
+        eps = self._raw_episodes
+        n   = len(eps)
+        self._num_runs = n
+        self._sim      = None
+
+        if n == 0:
+            return self
+
+        # ── Séries de episódio ────────────────────────────────────────
+        rewards          = [ep["reward"]           for ep in eps]
+        lengths          = [ep["length"]           for ep in eps]
+        simpy_times      = [ep["simpy_time"]       for ep in eps]
+        truncated        = [ep["truncated"]        for ep in eps]
+        orders_generated = [ep["orders_generated"] for ep in eps]
+
+        # ── Métricas por driver ───────────────────────────────────────
+        self.drivers = {}
+        driver_ids = list(eps[0]["drivers"].keys())
+
+        for did in driver_ids:
+            self.drivers[did] = {}
+            sample = eps[0]["drivers"].get(did, {})
+
+            for metric, val in sample.items():
+                if isinstance(val, dict):
+                    # Métrica aninhada (ex.: reordering stats do DynamicRouteDriver)
+                    for sub_key in val:
+                        col = f"{metric}_{sub_key}"
+                        self.drivers[did][col] = [
+                            ep["drivers"].get(did, {}).get(metric, {}).get(sub_key)
+                            for ep in eps
+                        ]
+                else:
+                    self.drivers[did][metric] = [
+                        ep["drivers"].get(did, {}).get(metric)
+                        for ep in eps
+                    ]
+
+        # ── Métricas por estabelecimento ──────────────────────────────
+        self.establishments = {}
+        est_ids = list(eps[0]["establishments"].keys())
+
+        for eid in est_ids:
+            self.establishments[eid] = {}
+            sample = eps[0]["establishments"].get(eid, {})
+            for metric in sample:
+                self.establishments[eid][metric] = [
+                    ep["establishments"].get(eid, {}).get(metric)
+                    for ep in eps
+                ]
+
+        # ── Séries derivadas ─────────────────────────────────────────
+        delivery_time = [
+            sum(
+                ep["drivers"].get(did, {}).get("time_spent_on_delivery", 0) or 0
+                for did in driver_ids
+            )
+            for ep in eps
+        ]
+
+        # Distância exclui episódios truncados (métrica inválida nesses casos)
+        distance = [
+            None if ep["truncated"] else
+            sum(
+                ep["drivers"].get(did, {}).get("total_distance", 0) or 0
+                for did in driver_ids
+            )
+            for ep in eps
+        ]
+
+        self.episodes = {
+            "rewards":          rewards,
+            "lengths":          lengths,
+            "simpy_times":      simpy_times,
             "truncated":        [bool(t) for t in truncated],
-            "orders_generated": list(orders_generated),
+            "orders_generated": orders_generated,
             "delivery_time":    delivery_time,
             "distance":         distance,
         }
 
-        # 3. Estatísticas agregadas
-        self.aggregate: dict = {
+        # ── Agregados ─────────────────────────────────────────────────
+        self.aggregate = {
             "rewards":       self._safe_stats(rewards),
             "lengths":       self._safe_stats(lengths),
             "simpy_times":   self._safe_stats([v for v in simpy_times if v is not None]),
@@ -274,8 +323,10 @@ class SimulationStats:
             "distance":      self._safe_stats([v for v in distance if v is not None]),
         }
 
+        return self
+
     # ════════════════════════════════════════════════════════════════════
-    #  Visão orientada por simulação (lazy)
+    #  Visão por episódio (lazy)
     # ════════════════════════════════════════════════════════════════════
 
     @property
@@ -310,7 +361,7 @@ class SimulationStats:
         ]
 
     # ════════════════════════════════════════════════════════════════════
-    #  Interface pública — save / load
+    #  Persistência — save / load
     # ════════════════════════════════════════════════════════════════════
 
     def save(
@@ -319,18 +370,10 @@ class SimulationStats:
         fmt: Literal["npz", "json"] = "npz",
         file_name: str | None = None,
     ) -> None:
-        """
-        Salva as estatísticas em disco.
-
-        Args:
-            dir_path:  Diretório de destino.
-            fmt:       "npz" (padrão, comprimido) ou "json" (legível).
-            file_name: Nome do arquivo. Se None, usa "metrics_data.npz"
-                       ou "metrics_data.json" conforme o formato.
-        """
         if fmt not in ("npz", "json"):
             raise ValueError(f"Formato desconhecido: '{fmt}'. Use 'npz' ou 'json'.")
 
+        os.makedirs(dir_path, exist_ok=True)
         name = file_name or f"metrics_data.{fmt}"
         path = os.path.join(dir_path, name)
 
@@ -346,22 +389,11 @@ class SimulationStats:
             traceback.print_exc()
 
     @staticmethod
-    def load(file_path: str) -> SimulationStats:
-        """
-        Carrega um NPZ salvo por save() e reconstrói a instância.
-
-        Exemplos de acesso:
-            stats = SimulationStats.load("results/metrics_data.npz")
-            stats.episodes["rewards"]             # array de N recompensas
-            stats.drivers["0"]["distance"]        # array de N distâncias
-            stats.aggregate["rewards"]["avg"]
-            stats.sim[4]["reward"]                # visão por simulação (lazy)
-            stats.sim[4]["driver"]["0"]["distance"]
-        """
+    def load(file_path: str) -> "SimulationStats":
         raw    = np.load(file_path, allow_pickle=False)
         result = SimulationStats.__new__(SimulationStats)
-        result._geral_statistics = None
         result._sim              = None
+        result._raw_episodes     = []
         result.episodes          = {}
         result.drivers           = {}
         result.establishments    = {}
@@ -383,13 +415,10 @@ class SimulationStats:
 
             if key in _EP_MAP:
                 result.episodes[_EP_MAP[key]] = arr
-
             elif parts[0] == "driver" and len(parts) == 3:
                 result.drivers.setdefault(parts[1], {})[parts[2]] = arr
-
             elif parts[0] == "establishment" and len(parts) == 3:
                 result.establishments.setdefault(parts[1], {})[parts[2]] = arr
-
             elif parts[0] == "agg" and len(parts) == 3:
                 metric, stat = parts[1], parts[2]
                 result.aggregate.setdefault(metric, {})[stat] = (
@@ -403,19 +432,18 @@ class SimulationStats:
         return result
 
     # ════════════════════════════════════════════════════════════════════
-    #  Interface pública — relatório
+    #  Relatório em texto
     # ════════════════════════════════════════════════════════════════════
 
     def write_report(self, results_file: IO, num_truncated: int = 0) -> None:
-        """Escreve o relatório completo de estatísticas no arquivo aberto."""
         self._write_block(results_file, "Estatísticas das Recompensas",
-                          self.aggregate["rewards"])
+                          self.aggregate.get("rewards"))
         self._write_block(results_file, "Estatísticas do Tamanho dos Episódios (passos)",
-                          self.aggregate["lengths"])
+                          self.aggregate.get("lengths"))
         self._write_block(results_file, "Estatísticas do Tempo de Simulação SimPy (último passo)",
-                          self.aggregate["simpy_times"])
+                          self.aggregate.get("simpy_times"))
         self._write_block(results_file, "Estatísticas do Tempo Gasto com Entregas",
-                          self.aggregate["delivery_time"])
+                          self.aggregate.get("delivery_time"))
 
         num_valid = self._num_runs - num_truncated
         results_file.write(
@@ -426,69 +454,12 @@ class SimulationStats:
                 f"* {num_truncated} execução(ões) truncada(s) excluída(s) das métricas de distância\n"
             )
         self._write_block(results_file, "Estatísticas da Distância Percorrida",
-                          self.aggregate["distance"])
+                          self.aggregate.get("distance"))
         self._write_block(results_file, "Estatísticas do Número de Pedidos Gerados",
-                          self.aggregate["orders"])
-
-        if self._geral_statistics:
-            results_file.write("\n---> Estatísticas Finais:\n")
-            results_file.write(self._format_geral_statistics(self._geral_statistics))
+                          self.aggregate.get("orders"))
 
     # ════════════════════════════════════════════════════════════════════
-    #  Parsing de métricas brutas
-    # ════════════════════════════════════════════════════════════════════
-
-    def _parse_driver_metrics(self, raw: dict) -> dict:
-        drivers = {}
-        for driver_id, metrics in raw.items():
-            data = {}
-            for raw_key, values in metrics.items():
-                if not values:
-                    continue
-                clean_key = self._DRIVER_KEY_MAP.get(raw_key, raw_key)
-                if isinstance(values[0], dict):
-                    for field in values[0].keys():
-                        data[f"{clean_key}_{field}"] = [v.get(field) for v in values]
-                else:
-                    data[clean_key] = list(values)
-            drivers[driver_id] = data
-        return drivers
-
-    def _parse_establishment_metrics(self, raw: dict) -> dict:
-        return {
-            est_id: {
-                self._EST_KEY_MAP.get(key, key): list(values)
-                for key, values in metrics.items()
-            }
-            for est_id, metrics in raw.items()
-        }
-
-    # ════════════════════════════════════════════════════════════════════
-    #  Cálculos por episódio
-    # ════════════════════════════════════════════════════════════════════
-
-    def _sum_per_episode(
-        self,
-        num_runs: int,
-        agents: dict,
-        metric: str,
-        mask_truncated: list[bool] | None = None,
-    ) -> list[float | None]:
-        totals = []
-        for i in range(num_runs):
-            if mask_truncated and mask_truncated[i]:
-                totals.append(None)
-                continue
-            total = sum(
-                agent[metric][i]
-                for agent in agents.values()
-                if i < len(agent.get(metric, []))
-            )
-            totals.append(total)
-        return totals
-
-    # ════════════════════════════════════════════════════════════════════
-    #  Estatísticas descritivas
+    #  Helpers
     # ════════════════════════════════════════════════════════════════════
 
     @staticmethod
@@ -509,10 +480,6 @@ class SimulationStats:
             stats["mode"] = "Sem moda única"
         return stats
 
-    # ════════════════════════════════════════════════════════════════════
-    #  Escrita de relatório
-    # ════════════════════════════════════════════════════════════════════
-
     @staticmethod
     def _write_block(results_file: IO, title: str, stats: dict | None) -> None:
         results_file.write(f"\n---> {title}:\n")
@@ -524,27 +491,6 @@ class SimulationStats:
         results_file.write(f"* Desvio Padrão: {stats['std_dev']:.4f}\n")
         results_file.write(f"* Mediana:       {stats['median']:.4f}\n")
         results_file.write(f"* Moda:          {stats['mode']}\n")
-
-    @staticmethod
-    def _format_geral_statistics(statistics: dict) -> str:
-        lines = []
-        for section in ("establishments", "drivers"):
-            if section not in statistics:
-                continue
-            lines.append(f"{section.title()}:")
-            for agent_id, stats in statistics[section].items():
-                label = "Establishment" if section == "establishments" else "Driver"
-                lines.append(f"  {label} {agent_id}:")
-                for key, value in stats.items():
-                    lines.append(f"    {key.replace('_', ' ').title()}:")
-                    for stat, stat_value in value.items():
-                        lines.append(f"      {stat.title()}: {stat_value}")
-                lines.append("")
-        return "\n".join(lines)
-
-    # ════════════════════════════════════════════════════════════════════
-    #  Serialização NPZ
-    # ════════════════════════════════════════════════════════════════════
 
     def _build_npz_arrays(self) -> dict[str, np.ndarray]:
         arrays: dict[str, np.ndarray] = {}
