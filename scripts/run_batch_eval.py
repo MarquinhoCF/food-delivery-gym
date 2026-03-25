@@ -166,22 +166,18 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--save-log",
-        action="store_true",
-        help="Salva o log de saída em arquivo (log.txt) dentro do diretório de resultados.",
+        "--metrics-fmt",
+        choices=["npz", "json"],
+        default="npz",
+        help=(
+            "Formato do arquivo de métricas gerado por simulação.\n"
+            "  npz  – comprimido, menor tamanho em disco (padrão)\n"
+            "  json – legível, estrutura orientada por simulação\n"
+            "Exemplo: --metrics-fmt json"
+        ),
     )
 
     return parser.parse_args()
-
-
-def setup_logging(results_dir: str):
-    os.makedirs(results_dir, exist_ok=True)
-    log_path = os.path.join(results_dir, "log.txt")
-    log_file = open(log_path, "w", encoding="utf-8")
-    sys.stdout = log_file
-    sys.stderr = log_file
-    return log_file
-
 
 def create_environment(reward_objective: int, scenario_name: str):
     if reward_objective not in range(1, 14):
@@ -273,8 +269,8 @@ def run_heuristics(
     base_env, scenario: str, heuristics: list, objective: int,
     results_dir: str, num_runs: int, seed: int,
     save_individual_plots: bool, save_mean_plots: bool,
+    metrics_fmt: str,
 ):
-
     for key in heuristics:
         meta = ALL_HEURISTICS[key]
         output_dir = os.path.join(results_dir, meta["dir"]) + "/"
@@ -283,6 +279,7 @@ def run_heuristics(
             num_runs, output_dir, seed=seed,
             save_individual_plots=save_individual_plots,
             save_mean_plots=save_mean_plots,
+            metrics_fmt=metrics_fmt,
         )
 
 
@@ -290,6 +287,7 @@ def run_rl_models(
     objective: int, scenario: str, models: list, model_base_dir: str,
     results_dir: str, num_runs: int, seed: int,
     save_individual_plots: bool, save_mean_plots: bool,
+    metrics_fmt: str,
 ):
     print("\n=== Tentando executar modelos de Aprendizado por Reforço ===")
 
@@ -319,6 +317,7 @@ def run_rl_models(
                 seed=seed,
                 save_individual_plots=save_individual_plots,
                 save_mean_plots=save_mean_plots,
+                metrics_fmt=metrics_fmt,
             )
         except Exception as e:
             print(f"Erro ao executar PPO — objetivo {objective}, cenário '{scenario}', modelo '{model_name}': {e}")
@@ -346,14 +345,11 @@ def main():
     print(f"  Results base : {args.results_base_dir}")
     print(f"  Plots indiv. : {'desativados' if not save_individual_plots else 'ativados'}")
     print(f"  Plot médias  : {'desativado' if not save_mean_plots else 'ativado'}")
+    print(f"  Formato métr.: {args.metrics_fmt}")
 
     for objective in args.objectives:
         for scenario in args.scenarios:
             results_dir = args.results_base_dir.format(objective, scenario)
-
-            log_file = None
-            if args.save_log:
-                log_file = setup_logging(results_dir)
 
             print(f"\n\n=== Iniciando avaliações para Objetivo {objective} no cenário '{scenario}' ===")
             base_env = create_environment(reward_objective=objective, scenario_name=scenario)
@@ -365,6 +361,7 @@ def main():
                     args.num_runs, args.seed,
                     save_individual_plots=save_individual_plots,
                     save_mean_plots=save_mean_plots,
+                    metrics_fmt=args.metrics_fmt,
                 )
 
             if not args.no_rl:
@@ -374,10 +371,8 @@ def main():
                     args.num_runs, args.seed,
                     save_individual_plots=save_individual_plots,
                     save_mean_plots=save_mean_plots,
+                    metrics_fmt=args.metrics_fmt,
                 )
-
-            if log_file:
-                log_file.close()
 
     print("\n=== Avaliação concluída ===")
 

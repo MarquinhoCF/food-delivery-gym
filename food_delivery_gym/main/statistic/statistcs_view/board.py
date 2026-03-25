@@ -1,7 +1,7 @@
 from abc import abstractmethod
 from typing import List
 
-from food_delivery_gym.main.statistic.metric import Metric
+from food_delivery_gym.main.statistic.metrics.metric import Metric
 
 
 class Board:

@@ -2,21 +2,22 @@ from typing import List
 
 from matplotlib.ticker import FuncFormatter
 from food_delivery_gym.main.environment.food_delivery_simpy_env import FoodDeliverySimpyEnv
-from food_delivery_gym.main.statistic.metric import Metric
+from food_delivery_gym.main.statistic.metrics.metric import Metric
 
 
-class EstablishmentMaxOrdersInQueueMetric(Metric):
+class EstablishmentOrdersFulfilledMetric(Metric):
     def __init__(self, environment: FoodDeliverySimpyEnv, establishments_statistics=None):
         super().__init__(environment)
         self.establishments_statistics = establishments_statistics
 
     def view(self, ax) -> None:
+
         if self.establishments_statistics is not None:
             est_ids = list(self.establishments_statistics.keys())
-            means = [self.establishments_statistics[e]['max_orders_in_queue']['mean'] for e in est_ids]
-            medians = [self.establishments_statistics[e]['max_orders_in_queue']['median'] for e in est_ids]
-            modes = [self.establishments_statistics[e]['max_orders_in_queue']['mode'] for e in est_ids]
-            std_devs = [self.establishments_statistics[e]['max_orders_in_queue']['std_dev'] for e in est_ids]
+            means = [self.establishments_statistics[e]['orders_fulfilled']['mean'] for e in est_ids]
+            medians = [self.establishments_statistics[e]['orders_fulfilled']['median'] for e in est_ids]
+            modes = [self.establishments_statistics[e]['orders_fulfilled']['mode'] for e in est_ids]
+            std_devs = [self.establishments_statistics[e]['orders_fulfilled']['std_dev'] for e in est_ids]
 
             # Criando o gráfico
             ax.errorbar(est_ids, means, yerr=std_devs, fmt='o', label='Média', capsize=5)
@@ -25,25 +26,26 @@ class EstablishmentMaxOrdersInQueueMetric(Metric):
 
             # Adicionando títulos e legendas
             ax.set_xlabel('Estabelecimento', fontsize=11, fontweight='bold')
-            ax.set_ylabel('Máximo de Pedidos na Fila', fontsize=11, fontweight='bold')
-            ax.set_title('Estatísticas do Máximo de Pedidos na Fila por Estabelecimento', fontsize=12, fontweight='bold', pad=15)
+            ax.set_ylabel('Pedidos Atendidos', fontsize=11, fontweight='bold')
+            ax.set_title('Estatísticas dos Pedidos Atendidos por Estabelecimento', fontsize=12, fontweight='bold', pad=15)
             ax.legend()
             ax.grid(True)
+
         else:
             establishments = self.environment.state.establishments
 
             # Usa os valores pontuais da simulação atual
             ids = [establishment.establishment_id for establishment in establishments]
-            max_orders_in_queue: List[int] = [int(establishment.max_orders_in_queue) for establishment in establishments]
-            title = 'Max Orders in Queue per Establishment'
-            # print("\nMáximo de Pedidos na Fila por Estabelecimento:")
+            orders_fulfilled = [int(establishment.orders_fulfilled) for establishment in establishments]
+            title = 'Orders Fulfilled per Establishment'
+            # print("\nPedidos Atendidos por Estabelecimento:")
 
             # # TODO: Logs
-            # for est_id, max_queue in zip(ids, max_orders_in_queue):
-            #     print(f"Estabelecimento {est_id}: {max_queue} pedidos na fila")
+            # for est_id, count in zip(ids, orders_fulfilled):
+            #     print(f"Estabelecimento {est_id}: {count} pedidos atendidos")
 
-            ax.barh(ids, max_orders_in_queue, color='orange')
-            ax.set_xlabel('Max Orders in Queue', fontsize=11, fontweight='bold')
+            ax.barh(ids, orders_fulfilled, color='skyblue')
+            ax.set_xlabel('Orders Fulfilled', fontsize=11, fontweight='bold')
             ax.set_ylabel('Establishments', fontsize=11, fontweight='bold')
             ax.set_title(title, fontsize=12, fontweight='bold', pad=15)
 
@@ -52,3 +54,4 @@ class EstablishmentMaxOrdersInQueueMetric(Metric):
 
             ax.xaxis.set_major_formatter(FuncFormatter(lambda x, _: f'{int(x)}'))
 
+        

@@ -1,6 +1,6 @@
 import numpy as np
 from food_delivery_gym.main.environment.food_delivery_simpy_env import FoodDeliverySimpyEnv
-from food_delivery_gym.main.statistic.metric import Metric
+from food_delivery_gym.main.statistic.metrics.metric import Metric
 
 
 class RouteReorderingMetric(Metric):

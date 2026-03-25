@@ -5,9 +5,9 @@ from typing import List
 import matplotlib
 from matplotlib import pyplot as plt
 
-from food_delivery_gym.main.statistic.board import Board
-from food_delivery_gym.main.statistic.metric import Metric
-from food_delivery_gym.main.statistic.route_reordering_metric import RouteReorderingMetric
+from food_delivery_gym.main.statistic.statistcs_view.board import Board
+from food_delivery_gym.main.statistic.metrics.metric import Metric
+from food_delivery_gym.main.statistic.metrics.route_reordering_metric import RouteReorderingMetric
 
 class SummarizedTotalMeanDataBoard(Board):
     image_counter = 0
