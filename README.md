@@ -690,11 +690,11 @@ optimizer = RLModelOptimizerGym(env, trained_model)
 optimizer.run_simulations(num_runs=10, dir_path="./resultados/", seed=42)
 ```
 
-Isso executará múltiplas simulações, coletará estatísticas (recompensa, tempo de entrega, distância percorrida, etc.) e salvará os resultados em um arquivo `.txt` e `.npz`.
+Isso executará múltiplas simulações, coletará estatísticas (recompensa, tempo de entrega, distância percorrida, etc.) e salvará os resultados em um relatório (`.txt`) e um arquivo de métricas e um arquivo `.npz` ou `.json`.
 
 ## 🧪 Scripts Utilitários
 
-O projeto fornece quatro scripts utilitários para execução massiva de simulações, geração de gráficos, conversão de métricas e consolidação de resultados em planilhas Excel.
+O projeto fornece quatro scripts utilitários para execução de simulações em lote, geração de gráficos, conversão de métricas e consolidação de resultados em planilhas Excel.
 
 ---
 
@@ -853,20 +853,6 @@ python -m scripts.generate_plots --results-dir ./data/runs/execucoes --only-batc
 | `--only-episode` | Gera somente os gráficos de episódios individuais. Mutuamente exclusivo com `--only-batch`. | — |
 | `--only-batch` | Gera somente os gráficos agregados de lote. Mutuamente exclusivo com `--only-episode`. | — |
 
-#### 🔹 Exemplos
-
-```bash
-# Apenas objetivos e cenários específicos
-python -m scripts.generate_plots -r ./data/runs/execucoes -o 1 3 11 -s initial medium
-
-# Regenerar somente os gráficos de lote de um resultado específico
-python -m scripts.generate_plots \
-    --results-dir ./data/runs/execucoes \
-    --objectives 1 \
-    --scenarios medium \
-    --only-batch
-```
-
 ---
 
 ### 🔄 Script `convert_metrics`: Conversão entre NPZ e JSON
@@ -902,17 +888,6 @@ python -m scripts.convert_metrics ./data/runs/execucoes --dry-run
 | `path` | Arquivo `.npz` / `.json` ou diretório a processar. | — |
 | `--name` | Nome-base dos arquivos buscados em modo diretório. | `metrics_data` |
 | `--dry-run` | Exibe o que seria convertido sem gravar nenhum arquivo. | — |
-
-#### 🔹 Exemplos
-
-```bash
-# Converter toda a pasta de resultados de NPZ para JSON (inspecionar antes)
-python -m scripts.convert_metrics ./data/runs/execucoes --dry-run
-python -m scripts.convert_metrics ./data/runs/execucoes
-
-# Buscar por um nome-base diferente do padrão
-python -m scripts.convert_metrics ./resultados --name meu_arquivo_de_metricas
-```
 
 ---
 

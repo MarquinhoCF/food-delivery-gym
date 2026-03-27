@@ -123,7 +123,6 @@
         "type": "python",
         "request": "launch",
         "module": "scripts.run_batch_eval",
-        "args": ["--objectives", "3", "--heuristics", "lowest_route_cost", "--models", "18M_steps_otimizado", "--results-base-dir", "./data/teste/runs/execucoes/obj_{}/{}_scenario/"],
         "console": "integratedTerminal",
         "justMyCode": true
     }
