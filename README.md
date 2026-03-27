@@ -692,13 +692,15 @@ optimizer.run_simulations(num_runs=10, dir_path="./resultados/", seed=42)
 
 Isso executará múltiplas simulações, coletará estatísticas (recompensa, tempo de entrega, distância percorrida, etc.) e salvará os resultados em um arquivo `.txt` e `.npz`.
 
-## 🧪 Execução em Lote de Otimizadores e Geração de Tabelas
+## 🧪 Scripts Utilitários
 
-Para facilitar a execução massiva de simulações e a geração de tabelas com os resultados dos agentes otimizadores (heurísticos e baseados em AR), o projeto fornece dois scripts utilitários:
+O projeto fornece quatro scripts utilitários para execução massiva de simulações, geração de gráficos, conversão de métricas e consolidação de resultados em planilhas Excel.
+
+---
 
 ### 🚀 Script `run_batch_eval`: Execução de Múltiplos Otimizadores
 
-Esse script automatiza a execução de diferentes agentes otimizadores em combinações de cenários experimentais e objetivos de recompensa.
+Automatiza a execução de diferentes agentes otimizadores em combinações de cenários experimentais e objetivos de recompensa.
 
 #### ✅ O que ele faz:
 
@@ -710,13 +712,12 @@ Esse script automatiza a execução de diferentes agentes otimizadores em combin
   * `LowestCostDriverOptimizerGym` (com custo marginal de rota)
 * Executa modelos de algoritmos RL (`RLModelOptimizerGym`), com **descoberta automática** dos modelos disponíveis em `--model-base-dir`
 * Gera arquivos `.txt` com os resultados das execuções
-* Gera arquivos `.npz` contendo as métricas agregadas para análise
+* Gera arquivos `.npz` ou `.json` contendo as métricas agregadas para análise
 
 #### 📦 Como usar:
 
-Execução padrão (todos os objetivos, cenários, heurísticas e modelos disponíveis):
-
 ```bash
+# Execução padrão (todos os objetivos, cenários, heurísticas e modelos disponíveis)
 python -m scripts.run_batch_eval
 ```
 
@@ -727,18 +728,20 @@ python -m scripts.run_batch_eval
 | `--objectives` / `-o` | Objetivos de recompensa a executar (1–13). Aceita múltiplos valores. | todos (1–13) |
 | `--scenarios` / `-s` | Cenários a executar: `initial`, `medium`, `complex`. Aceita múltiplos valores. | todos |
 | `--heuristics` | Heurísticas a executar. Aceita múltiplos valores. | todas |
-| `--models` / `-m` | Nomes dos modelos RL (subdiretórios de `obj_N/` com `best_model.zip`). Ver estrutura de diretórios abaixo. | descoberta automática |
+| `--models` / `-m` | Nomes dos modelos RL (subdiretórios de `obj_N/` com `best_model.zip`). | descoberta automática |
 | `--no-heuristics` | Desativa a execução de todas as heurísticas. | — |
 | `--no-rl` | Desativa a execução dos modelos PPO. | — |
 | `--num-runs` / `-n` | Número de simulações por agente. | `20` |
 | `--seed` | Seed para reprodutibilidade. | `123456789` |
-| `--model-base-dir` | Diretório base dos modelos PPO treinados. | `./data/ppo_training/.../treinamento` |
+| `--model-base-dir` | Diretório base dos modelos PPO treinados. | `./data/ppo_training/medium/treinamento` |
 | `--results-base-dir` | Diretório base para salvar resultados. Use `{}` como placeholder para objetivo e cenário. | `./data/runs/execucoes/obj_{}/{}_scenario/` |
-| `--no-individual-plots` | Desativa a geração de gráficos individuais por execução. | — |
-| `--no-plots` | Desativa **todos** os gráficos (equivale a `--no-individual-plots` e desativa o gráfico de médias). | — |
-| `--save-log` | Salva o output em `log.txt` dentro do diretório de resultados. | — |
+| `--batch-plots` | Ativa a geração de gráficos agregados (lote) ao final de cada agente. | — |
+| `--all-plots` | Ativa todos os gráficos: equivale a `--batch-plots` mais gráficos individuais por episódio. | — |
+| `--metrics-fmt` | Formato do arquivo de métricas: `npz` (comprimido) ou `json` (legível). | `npz` |
 
 Os valores possíveis para `--heuristics` são: `random`, `first_driver`, `nearest_driver`, `lowest_route_cost`, `lowest_marginal_route_cost`.
+
+> 💡 **Dica:** Para gerar gráficos de execuções anteriores sem re-executar as simulações, use o script `generate_plots` descrito abaixo.
 
 #### 📁 Estrutura de diretórios para modelos RL
 
@@ -763,7 +766,7 @@ As regras são:
 
 * Cada objetivo deve ter seu próprio subdiretório `obj_N/` dentro de `--model-base-dir`
 * Dentro de `obj_N/`, qualquer subdiretório que contenha `best_model.zip` na raiz é detectado como um modelo — o nome do subdiretório se torna o identificador do modelo nos resultados
-* O `vecnormalize.pkl` deve estar no caminho `<modelo>/FoodDelivery-medium-obj{N}-v1/vecnormalize.pkl`. Se um vecnormalize.pkl for encontrado em qualquer subdiretório do modelo, ele é carregado automaticamente. Caso contrário, o modelo é executado sem normalização. 
+* O `vecnormalize.pkl` é carregado automaticamente se encontrado em qualquer subdiretório do modelo. Caso contrário, o modelo é executado sem normalização
 
 > **Observação:** se os modelos foram treinados com o RL Baselines3 Zoo sem mover os arquivos gerados, a estrutura já estará no formato correto automaticamente. Use `--models` apenas para restringir a execução a modelos específicos dentro de `obj_N/`.
 
@@ -785,24 +788,137 @@ python -m scripts.run_batch_eval --heuristics random nearest_driver
 # Forçar modelos RL específicos (sem descoberta automática)
 python -m scripts.run_batch_eval --models 18M_steps 100M_steps
 
-# Execução rápida
+# Execução rápida para testes
 python -m scripts.run_batch_eval --num-runs 5 --seed 42 --scenarios initial --objectives 1
 
-# Desativar gráficos individuais (mais rápido, mantém gráfico de médias)
-python -m scripts.run_batch_eval --no-individual-plots
+# Gerar gráficos de lote ao final de cada agente
+python -m scripts.run_batch_eval --batch-plots
 
-# Execução completa salvando logs e usando diretórios customizados
+# Gerar todos os gráficos (individuais + lote)
+python -m scripts.run_batch_eval --all-plots
+
+# Salvar métricas em JSON (legível) em vez de NPZ
+python -m scripts.run_batch_eval --metrics-fmt json
+
+# Execução completa com diretórios customizados
 python -m scripts.run_batch_eval \
     --model-base-dir ./meus_modelos \
-    --results-base-dir ./resultados/obj_{}/{}_scenario/ \
-    --save-log
+    --results-base-dir ./resultados/obj_{}/{}_scenario/
+```
+
+---
+
+### 📈 Script `generate_plots`: Geração de Gráficos a partir de Métricas
+
+Gera gráficos de episódios individuais e/ou agregados (lote) a partir dos arquivos de métricas produzidos pelo `run_batch_eval`, sem precisar re-executar as simulações.
+
+#### ✅ O que ele faz:
+
+* Varre os diretórios de cada agente procurando por arquivos de métricas, priorizando `metrics_data.npz` e usando `metrics_data.json` como fallback
+* Gera os gráficos dentro do diretório `figs/` de cada agente, replicando exatamente a estrutura do `run_batch_eval`:
+
+```
+<results_dir>/obj_N/<scenario>_scenario/<agent>/
+    figs/
+        run_1_results_<reward>/               ← episódios individuais
+            order_generation.png
+            route_reordering.png
+            driver_establishment_metrics.png
+        run_2_results_<reward>/
+            ...
+        mean_results_<avg_reward>_route_reordering.png   ← lote
+        mean_results_<avg_reward>_other_metrics.png      ← lote
+```
+
+#### 📦 Como usar:
+
+```bash
+# Gerar todos os gráficos (padrão)
+python -m scripts.generate_plots --results-dir ./data/runs/execucoes
+
+# Somente gráficos de episódios individuais
+python -m scripts.generate_plots --results-dir ./data/runs/execucoes --only-episode
+
+# Somente gráficos agregados de lote
+python -m scripts.generate_plots --results-dir ./data/runs/execucoes --only-batch
+```
+
+#### ⚙️ Opções de Configuração
+
+| Opção | Descrição | Padrão |
+|-------|-----------|--------|
+| `--results-dir` / `-r` | Diretório raiz com os resultados (`obj_N/`). | `./data/runs/execucoes` |
+| `--objectives` / `-o` | Objetivos a processar (1–13). Aceita múltiplos valores. | todos (1–13) |
+| `--scenarios` / `-s` | Cenários a processar. Aceita múltiplos valores. | todos |
+| `--only-episode` | Gera somente os gráficos de episódios individuais. Mutuamente exclusivo com `--only-batch`. | — |
+| `--only-batch` | Gera somente os gráficos agregados de lote. Mutuamente exclusivo com `--only-episode`. | — |
+
+#### 🔹 Exemplos
+
+```bash
+# Apenas objetivos e cenários específicos
+python -m scripts.generate_plots -r ./data/runs/execucoes -o 1 3 11 -s initial medium
+
+# Regenerar somente os gráficos de lote de um resultado específico
+python -m scripts.generate_plots \
+    --results-dir ./data/runs/execucoes \
+    --objectives 1 \
+    --scenarios medium \
+    --only-batch
+```
+
+---
+
+### 🔄 Script `convert_metrics`: Conversão entre NPZ e JSON
+
+Converte arquivos de métricas entre os formatos NPZ (comprimido) e JSON (legível), tanto para arquivos individuais quanto para diretórios inteiros de forma recursiva.
+
+#### ✅ O que ele faz:
+
+* Converte um único arquivo `.npz` → `.json` ou `.json` → `.npz`
+* Quando recebe um diretório, varre recursivamente procurando por todos os arquivos com o nome-base configurado (padrão: `metrics_data`) e converte cada um no mesmo diretório onde foi encontrado
+* Suporta `--dry-run` para inspecionar o que seria convertido sem gravar nada
+
+#### 📦 Como usar:
+
+```bash
+# Converter um arquivo NPZ individual para JSON
+python -m scripts.convert_metrics ./data/runs/execucoes/obj_1/initial_scenario/random/metrics_data.npz
+
+# Converter um arquivo JSON individual para NPZ
+python -m scripts.convert_metrics ./data/runs/execucoes/obj_1/initial_scenario/random/metrics_data.json
+
+# Converter todos os arquivos metrics_data.npz e metrics_data.json em um diretório (recursivo)
+python -m scripts.convert_metrics ./data/runs/execucoes
+
+# Verificar o que seria convertido sem gravar nada
+python -m scripts.convert_metrics ./data/runs/execucoes --dry-run
+```
+
+#### ⚙️ Opções de Configuração
+
+| Opção | Descrição | Padrão |
+|-------|-----------|--------|
+| `path` | Arquivo `.npz` / `.json` ou diretório a processar. | — |
+| `--name` | Nome-base dos arquivos buscados em modo diretório. | `metrics_data` |
+| `--dry-run` | Exibe o que seria convertido sem gravar nenhum arquivo. | — |
+
+#### 🔹 Exemplos
+
+```bash
+# Converter toda a pasta de resultados de NPZ para JSON (inspecionar antes)
+python -m scripts.convert_metrics ./data/runs/execucoes --dry-run
+python -m scripts.convert_metrics ./data/runs/execucoes
+
+# Buscar por um nome-base diferente do padrão
+python -m scripts.convert_metrics ./resultados --name meu_arquivo_de_metricas
 ```
 
 ---
 
 ### 📊 Script `generate_table`: Geração de Planilhas Excel com Métricas
 
-Esse script consolida os resultados gerados pelo `run_batch_eval` e gera automaticamente a planilha Excel com as métricas estatísticas de todos os agentes.
+Consolida os resultados gerados pelo `run_batch_eval` e gera automaticamente uma planilha Excel com as métricas estatísticas de todos os agentes. Suporta métricas em NPZ ou JSON, priorizando NPZ quando ambos estiverem disponíveis.
 
 #### ✅ O que ele faz:
 
@@ -814,13 +930,12 @@ Esse script consolida os resultados gerados pelo `run_batch_eval` e gera automat
   * **Tempo Efetivo Gasto**
   * **Distância Percorrida**
 * Destaca em negrito o melhor agente por cenário/objetivo em cada aba (maior média em Recompensas; menor nas demais)
-* Gera um novo arquivo: `objective_table.xlsx`
+* Cria automaticamente os diretórios de saída caso não existam
 
 #### 📦 Como usar:
 
-Garanta que o script `run_batch_eval` já foi executado e os arquivos `metrics_data.npz` foram gerados, então execute:
-
 ```bash
+# Padrão — gera tabela com todos os dados disponíveis
 python -m scripts.generate_table
 ```
 
@@ -829,20 +944,17 @@ python -m scripts.generate_table
 | Opção | Descrição | Padrão |
 |-------|-----------|--------|
 | `--results-dir` / `-r` | Diretório raiz com os resultados (`obj_N/`). | `./data/runs/execucoes` |
-| `--output` / `-out` | Caminho do arquivo Excel de saída. | `objective_table.xlsx` |
+| `--output` / `-out` | Caminho do arquivo Excel de saída. Diretórios intermediários são criados automaticamente. | `objective_table.xlsx` |
 | `--objectives` / `-o` | Objetivos a incluir (1–13). Aceita múltiplos valores. | todos (1–13) |
 | `--scenarios` / `-s` | Cenários a incluir: `initial`, `medium`, `complex`. Aceita múltiplos valores. | todos |
 
 #### 🔹 Exemplos
 
 ```bash
-# Padrão — gera tabela com todos os dados disponíveis
-python -m scripts.generate_table
-
 # Diretório e arquivo de saída customizados
 python -m scripts.generate_table \
     --results-dir ./data/runs/execucoes \
-    --output ./resultados/minha_tabela.xlsx
+    --output ./data/tabelas/objective_table.xlsx
 
 # Apenas objetivos e cenários específicos
 python -m scripts.generate_table --objectives 1 3 5 --scenarios initial medium
