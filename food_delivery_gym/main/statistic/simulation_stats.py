@@ -13,6 +13,18 @@ Uso básico
     stats.finalize()
     stats.save(dir_path="resultados/", fmt="json")
 
+Acesso aos boards
+─────────────────
+    # Board de episódio individual (não precisa de finalize())
+    board = stats.get_episode_board(episode_idx=0)
+    board.view()                # exibe na tela
+    board.save("resultados/")   # salva em resultados/figs/run_1_results_42.0/
+
+    # Board de lote (requer finalize())
+    board = stats.get_batch_board()
+    board.view()
+    board.save("resultados/")   # salva em resultados/figs/
+
 Formato de armazenamento padrão: NPZ comprimido (np.savez_compressed)
 ──────────────────────────────────────────────────────────────────────
 Estrutura de chaves — separador '__', tudo float64, None → NaN:
@@ -61,6 +73,9 @@ import traceback
 from typing import IO, Literal
 
 import numpy as np
+
+from food_delivery_gym.main.statistic.statistcs_view.batch_stats_board import BatchStatsBoard
+from food_delivery_gym.main.statistic.statistcs_view.episode_stats_board import EpisodeStatsBoard
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -191,7 +206,6 @@ def _json_data_to_npz_arrays(data: dict) -> dict[str, np.ndarray]:
     for sim_key, npz_key in _EP_KEYS:
         arrays[npz_key] = _to_f64([ep.get(sim_key) for ep in sim_list])
 
-    # Eventos
     events_per_ep = [ep.get("events", []) for ep in sim_list]
     arrays.update(_events_to_flat_arrays(events_per_ep))
 
@@ -251,19 +265,47 @@ class SimulationStats:
         stats.get_episode_sim(idx)           # dados achatados de _raw_episodes[idx]
         stats.get_drivers_computed_stats()   # agregados por driver
         stats.get_establishments_computed_stats()
+
+    Boards de visualização
+    ──────────────────────
+        # Não requer finalize():
+        board = stats.get_episode_board(episode_idx=0, num_drivers=3,
+                                        num_establishments=2, sum_reward=42.0)
+        board.view()
+        board.save("resultados/")
+
+        # Requer finalize():
+        board = stats.get_batch_board(num_drivers=3, num_establishments=2,
+                                      sum_reward=40.5)
+        board.view()
+        board.save("resultados/")
     """
 
     def __init__(self) -> None:
         self._raw_episodes: list[dict] = []
 
         # Populados por finalize()
-        self.episodes: dict       = {}
-        self.drivers: dict        = {}
-        self.establishments: dict = {}
-        self.aggregate: dict      = {}
-        self._num_runs: int       = 0
-        self._sim: list[dict] | None = None
+        self.episodes: dict                 = {}
+        self.drivers: dict                  = {}
+        self.establishments: dict           = {}
+        self.aggregate: dict                = {}
+        self._num_runs: int                 = 0
+        self._sim: list[dict] | None        = None
 
+        # Populado por register_episode()
+        self.num_drivers: int | None        = 0
+        self.num_establishments: int | None = 0
+
+    def get_num_drivers(self) -> int:
+        if self.num_drivers is not None:
+            return self.num_drivers
+        raise ValueError("Número de motoristas não registrado. Chame register_episode() primeiro.")
+    
+    def get_num_establishments(self) -> int:
+        if self.num_establishments is not None:
+            return self.num_establishments
+        raise ValueError("Número de estabelecimentos não registrado. Chame register_episode() primeiro.")
+    
     # ════════════════════════════════════════════════════════════════════
     #  API principal
     # ════════════════════════════════════════════════════════════════════
@@ -296,13 +338,15 @@ class SimulationStats:
                 str(e.establishment_id): e.get_episode_stats()
                 for e in simpy_env.state.establishments
             },
-            # Captura todos os eventos do ambiente para métricas de geração de pedidos
             "events": [
                 {"type": event.event_type.name, "time": float(event.time)}
                 for event in simpy_env.events
             ],
         }
         self._raw_episodes.append(ep)
+        if self.num_drivers is None and self.num_establishments is None:
+            self.num_drivers = len(ep["drivers"])
+            self.num_establishments = len(ep["establishments"])
         self._sim = None  # invalida cache lazy
 
     def finalize(self) -> "SimulationStats":
@@ -404,6 +448,26 @@ class SimulationStats:
         return self
 
     # ════════════════════════════════════════════════════════════════════
+    #  Fábrica de boards  (importação lazy para evitar import circular)
+    # ════════════════════════════════════════════════════════════════════
+
+    def get_episode_board(self, episode_idx: int,) -> "EpisodeStatsBoard":
+        # Importação lazy — evita ciclo de imports entre stats ↔ boards
+        from food_delivery_gym.main.statistic.statistcs_view.episode_stats_board import (
+            EpisodeStatsBoard,
+        )
+        return EpisodeStatsBoard(sim_stats=self, episode_idx=episode_idx)
+
+    def get_batch_board(self) -> "BatchStatsBoard":
+        if self.aggregate is None:
+            raise ValueError("Agregados não computados. Chame finalize() antes de obter o batch board.")
+        # Importação lazy — evita ciclo de imports entre stats ↔ boards
+        from food_delivery_gym.main.statistic.statistcs_view.batch_stats_board import (
+            BatchStatsBoard,
+        )
+        return BatchStatsBoard(sim_stats=self)
+
+    # ════════════════════════════════════════════════════════════════════
     #  Acesso a dados sem finalize() — uso em tempo real (por episódio)
     # ════════════════════════════════════════════════════════════════════
 
@@ -413,8 +477,6 @@ class SimulationStats:
 
         Funciona sem chamar finalize(). Dicionários aninhados de driver
         (ex.: reordering stats) são achatados com '__' como separador.
-
-        Exemplo de chave achatada: 'reordering_total_reorderings'
         """
         ep = self._raw_episodes[idx]
 
@@ -444,6 +506,15 @@ class SimulationStats:
                 for eid, data in ep["establishments"].items()
             },
         }
+    
+    def get_aggregated_sim(self) -> dict:
+        """
+        Retorna dicionário de estatísticas agregadas (médias, desvios, etc).
+
+        Funciona sem finalize() (lê de self.aggregate).
+        Após finalize(), disponível também via stats.aggregate.
+        """
+        return self.aggregate
 
     # ════════════════════════════════════════════════════════════════════
     #  Estatísticas agregadas computadas (por driver / estabelecimento)
@@ -595,9 +666,7 @@ class SimulationStats:
                     int(arr[0]) if stat == "n" else float(arr[0])
                 )
 
-        # Reconstrói eventos a partir dos arrays flat
         result.episodes["events"] = _flat_arrays_to_events(raw)
-
         result._num_runs = (
             len(next(iter(result.episodes.values())))
             if result.episodes else 0
@@ -680,7 +749,6 @@ class SimulationStats:
         for ep_key, npz_key in _EP_KEYS:
             arrays[npz_key] = _to_f64(self.episodes.get(ep_key, []))
 
-        # Eventos (flat arrays + offsets)
         events_per_ep = self.episodes.get("events", [])
         arrays.update(_events_to_flat_arrays(events_per_ep))
 

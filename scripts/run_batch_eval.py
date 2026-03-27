@@ -154,15 +154,15 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--no-individual-plots",
+        "--batch-plots",
         action="store_true",
-        help="Desativa a geração de gráficos individuais por execução.",
+        help="Ativa a geração de gráficos agregados.",
     )
 
     parser.add_argument(
-        "--no-plots",
+        "--all-plots",
         action="store_true",
-        help="Desativa todos os gráficos (equivale a --no-individual-plots e desativa o gráfico de médias).",
+        help="Ativa todos os gráficos (equivale a --batch-plots e ativa a geração de gráficos por episódio).",
     )
 
     parser.add_argument(
@@ -327,12 +327,13 @@ def run_rl_models(
 def main():
     args = parse_args()
 
-    # --no-plots ativa os dois flags de uma vez
-    if args.no_plots:
-        args.no_individual_plots = True
+    if args.all_plots:
+        args.batch_plots = True
+        save_individual_plots = True
+    else:
+        save_individual_plots = False
 
-    save_individual_plots = not args.no_individual_plots
-    save_mean_plots       = not args.no_plots
+    save_mean_plots       = args.batch_plots
 
     print("=== Avaliando Agentes no Ambiente de Entrega de Última Milha ===")
     print(f"  Objetivos    : {args.objectives}")

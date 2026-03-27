@@ -17,8 +17,7 @@ from food_delivery_gym.main.route.delivery_route_segment import DeliveryRouteSeg
 from food_delivery_gym.main.route.pickup_route_segment import PickupRouteSegment
 from food_delivery_gym.main.route.route import Route
 from food_delivery_gym.main.statistic.simulation_stats import SimulationStats
-from food_delivery_gym.main.statistic.statistcs_view.batch_stats_board import BatchStatsBoard
-from food_delivery_gym.main.statistic.statistcs_view.episode_stats_board import EpisodeStatsBoard
+from food_delivery_gym.main.statistic.statistcs_view.board import Board
 
 
 class OptimizerGym(Optimizer, ABC):
@@ -184,7 +183,6 @@ class OptimizerGym(Optimizer, ABC):
     ):
         self.reset_env(seed=seed)
         self._call_env_method("set_mode", EnvMode.EVALUATING)
-        EpisodeStatsBoard.reset_image_counter()
 
         os.makedirs(dir_path, exist_ok=True)
         file_path = os.path.join(dir_path, "results.txt")
@@ -239,7 +237,8 @@ class OptimizerGym(Optimizer, ABC):
                     # ── Gráficos do episódio individual ───────────────────
                     if save_individual_plots:
                         try:
-                            self.generate_episode_stats_board(stats, episode_idx, sum_reward, dir_path)
+                            board: Board = stats.get_episode_board(episode_idx=episode_idx)
+                            board.save(dir_path)
                         except Exception as e:
                             print(f"  ⚠  generate_episode_stats_board falhou: {e}")
  
@@ -256,44 +255,14 @@ class OptimizerGym(Optimizer, ABC):
             # ── Board de médias (usa SimulationStats já finalizado) ───────
             if save_mean_plots:
                 try:
-                    avg_reward = (
-                        stats.aggregate["rewards"]["avg"]
-                        if stats.aggregate.get("rewards") else 0.0
-                    )
-                    self.generate_batch_stats_board(stats, avg_reward, dir_path)
+                    board: Board = stats.get_batch_board()
+                    board.save(dir_path)
                 except Exception as e:
                     results_file.write(f"\n⚠  Erro ao mostrar board de médias: {e}\n")
  
         stats.save(dir_path=dir_path, fmt=metrics_fmt)
         print(f"Resultados salvos em {dir_path}")
         return stats
-    
-    # ========================================================
-    #     Geração de gráficos
-    # ========================================================
-
-    def generate_episode_stats_board(self, sim_stats: SimulationStats, episode_idx: int, sum_reward: float, dir_path: str):
-        board = EpisodeStatsBoard(
-            sim_stats=sim_stats,
-            episode_idx=episode_idx,
-            num_drivers=len(self._call_env_method("get_drivers")),
-            num_establishments=len(self._call_env_method("get_establishments")),
-            sum_reward=sum_reward,
-            save_figs=True,
-            dir_path=dir_path,
-        )
-        board.view()
-        
-    def generate_batch_stats_board(self, sim_stats: SimulationStats, sum_rewards_mean: float, dir_path: str):
-        board = BatchStatsBoard(
-            sim_stats=sim_stats,
-            num_drivers=len(self._call_env_method("get_drivers")),
-            num_establishments=len(self._call_env_method("get_establishments")),
-            sum_reward=sum_rewards_mean,
-            save_figs=True,
-            dir_path=dir_path,
-        )
-        board.view()
     
     # ========================================================
     #     Escrita do cabeçalho do relatório

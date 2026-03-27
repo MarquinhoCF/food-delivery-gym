@@ -12,3 +12,7 @@ class Board:
     @abstractmethod
     def view(self) -> None:
         pass
+
+    @abstractmethod
+    def save(self, dir_path: str) -> None:
+        pass
