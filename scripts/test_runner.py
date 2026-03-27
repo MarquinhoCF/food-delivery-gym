@@ -19,6 +19,7 @@ from food_delivery_gym.main.optimizer.optimizer_gym.random_driver_optimizer_gym 
 from food_delivery_gym.main.optimizer.optimizer_gym.nearest_driver_optimizer_gym import NearestDriverOptimizerGym
 from food_delivery_gym.main.optimizer.optimizer_gym.rl_model_optimizer_gym import RLModelOptimizerGym
 from food_delivery_gym.main.scenarios import get_all_scenarios
+from food_delivery_gym.main.statistic.statistcs_view.board import Board
 
 # --- Config padrão ---
 DEFAULT_SEED = 5434
@@ -212,12 +213,13 @@ def main():
         print("Iniciando...\n")
 
         # Executa baseado no modo
+        board: Board = None
         if args.mode in ("auto", "agent"):
             if args.mode == "agent" and args.optimizer != "rl":
                 print("AVISO: Modo 'agent' funciona melhor com --optimizer rl")
-            optimizer.run_auto(max_steps=args.max_steps)
+            board = optimizer.run_auto(max_steps=args.max_steps)
         elif args.mode == "interactive":
-            optimizer.run_interactive(max_steps=args.max_steps)
+            board = optimizer.run_interactive(max_steps=args.max_steps)
 
         # Mostra estatísticas finais
         print("\n== FIM DA EXECUÇÃO ==")
@@ -226,7 +228,8 @@ def main():
             print(f"Observação final: {env.get_observation()}")
             print(f"Quantidade de rotas criadas = {env.simpy_env.state.get_length_orders()}")
             print(f"Quantidade de rotas entregues = {env.simpy_env.state.get_orders_delivered()}")
-            optimizer.show_statistics_board()
+            if board:
+                board.view()
         except Exception as e:
             print(f"Erro ao mostrar estatísticas: {e}")
             import traceback

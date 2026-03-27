@@ -358,7 +358,7 @@ class OptimizerGym(Optimizer, ABC):
         
         return obs, reward, terminated, truncated, info
     
-    def run_auto(self, max_steps: int = 10000):
+    def run_auto(self, max_steps: int = 10000) -> Board:
         """
         Executa o ambiente automaticamente com feedback visual.
         
@@ -396,7 +396,9 @@ class OptimizerGym(Optimizer, ABC):
         print(f"\nExecução finalizada em {step} passos")
         print(f"Recompensa total: {sum_reward:.2f}")
 
-    def run_interactive(self, max_steps: int = 10000):
+        return self._generate_episode_stats_board(sum_reward=sum_reward, step=step)
+
+    def run_interactive(self, max_steps: int = 10000) -> Board:
         """
         Executa o ambiente em modo interativo.
         O usuário controla quando executar cada passo.
@@ -540,3 +542,28 @@ class OptimizerGym(Optimizer, ABC):
         print(f"Total de passos: {step}")
         print(f"Recompensa total: {sum_reward:.2f}")
         print(f"Terminado: {self.done}, Truncado: {self.truncated}")
+
+        return self._generate_episode_board(sum_reward=sum_reward, length=step)
+    
+    # evite a replicação de código entre run_auto e run_interactive, mas mantenha a estrutura clara para cada modo
+    def _generate_episode_board(self, sum_reward: float, length: int):
+        simpy_env        = self.gym_env.get_simpy_env()
+        orders_generated = self._call_env_method("get_num_orders_generated")
+
+        stats = SimulationStats()
+
+        stats.register_episode(
+            simpy_env=simpy_env,
+            reward=sum_reward,
+            length=length,
+            truncated=self.truncated,
+            orders_generated=orders_generated,
+        )
+
+        board: Board = None
+        try:
+            board = stats.get_episode_board(episode_idx=0)
+        except Exception as e:
+            print(f"  ⚠ Geração de gráfico falhou: {e}")
+        
+        return board
