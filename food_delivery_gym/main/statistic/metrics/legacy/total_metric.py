@@ -1,8 +1,8 @@
 from food_delivery_gym.main.environment.food_delivery_simpy_env import FoodDeliverySimpyEnv
-from food_delivery_gym.main.statistic.metrics.metric import Metric
+from food_delivery_gym.main.statistic.metrics.legacy.metric_env_data import MetricEnvData
 
 
-class TotalMetric(Metric):
+class TotalMetric(MetricEnvData):
 
     def __init__(self, environment: FoodDeliverySimpyEnv, table=False):
         super().__init__(environment)

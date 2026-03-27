@@ -76,6 +76,8 @@ class DynamicRouteDriver(Driver):
         base = super().get_episode_stats()
         base["reordering"] = {
             "total_reorderings":    self.total_reorderings,
+            "successful_reorderings": self.successful_reorderings,
+            "failed_reorderings":     self.failed_reorderings,
             "net_time_impact":      self.total_time_saved - self.total_time_lost,
             "net_distance_impact":  self.total_distance_saved - self.total_distance_increased,
             "success_rate": (

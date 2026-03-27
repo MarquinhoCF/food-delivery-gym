@@ -25,6 +25,12 @@ Estrutura de chaves — separador '__', tudo float64, None → NaN:
     driver__<id>__<metric>
     establishment__<id>__<metric>
 
+  Eventos (flat arrays + offsets para reconstrução por episódio):
+    events__times       → todos os timestamps concatenados (float64)
+    events__types       → código inteiro de cada evento (int64)
+    events__ep_starts   → índice de início de cada episódio (int64)
+    events__ep_ends     → índice de fim de cada episódio (int64)
+
   Estatísticas agregadas (arrays de tamanho 1):
     agg__<metric>__avg / __std_dev / __median / __n
 
@@ -34,6 +40,7 @@ Formato JSON (conversão via npz_to_json / json_to_npz)
   "sim": [
     {
       "reward": 42.0, "episode_length": 100, ...
+      "events": [{"type": "CUSTOMER_PLACED_ORDER", "time": 5.2}, ...],
       "driver":        { "0": { "idle_time": 600.0, ... } },
       "establishment": { "0": { "orders_fulfilled": 48, ... } }
     }, ...
@@ -42,10 +49,6 @@ Formato JSON (conversão via npz_to_json / json_to_npz)
     "rewards": { "avg": 40.0, "std_dev": 2.0, "median": 41.0, "n": 20 }, ...
   }
 }
-
-Funções de conversão NPZ ↔ JSON (módulo-nível):
-    npz_to_json(npz_path, json_path)
-    json_to_npz(json_path, npz_path)
 """
 
 from __future__ import annotations
@@ -58,6 +61,19 @@ import traceback
 from typing import IO, Literal
 
 import numpy as np
+
+
+# ════════════════════════════════════════════════════════════════════════
+#  Mapeamento de EventType → código inteiro (para serialização NPZ)
+# ════════════════════════════════════════════════════════════════════════
+
+EVENT_TYPE_CODES: dict[str, int] = {
+    "CUSTOMER_PLACED_ORDER":          1,
+    "ESTABLISHMENT_FINISHED_ORDER":   2,
+    "DRIVER_PICKED_UP_ORDER":         3,
+    "DRIVER_DELIVERED_ORDER":         4,
+}
+EVENT_CODE_TO_TYPE: dict[int, str] = {v: k for k, v in EVENT_TYPE_CODES.items()}
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -104,10 +120,57 @@ def _json_default(obj):
     raise TypeError(f"Tipo não serializável: {type(obj)}")
 
 
-def _write_json(stats: SimulationStats, path: str) -> None:
+def _write_json(stats: "SimulationStats", path: str) -> None:
     data = {"sim": stats.sim, "aggregate": stats.aggregate}
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, default=_json_default)
+
+
+def _events_to_flat_arrays(events_per_ep: list[list[dict]]) -> dict[str, np.ndarray]:
+    """Converte lista de listas de eventos para arrays flat + offsets (formato NPZ)."""
+    all_times: list[float] = []
+    all_types: list[int]   = []
+    ep_starts: list[int]   = []
+    ep_ends: list[int]     = []
+    offset = 0
+
+    for ep_events in events_per_ep:
+        ep_starts.append(offset)
+        for ev in ep_events:
+            all_times.append(float(ev["time"]))
+            all_types.append(int(EVENT_TYPE_CODES.get(ev["type"], 0)))
+        offset += len(ep_events)
+        ep_ends.append(offset)
+
+    return {
+        "events__times":     np.array(all_times, dtype=np.float64),
+        "events__types":     np.array(all_types, dtype=np.int64),
+        "events__ep_starts": np.array(ep_starts, dtype=np.int64),
+        "events__ep_ends":   np.array(ep_ends,   dtype=np.int64),
+    }
+
+
+def _flat_arrays_to_events(raw) -> list[list[dict]]:
+    """Reconstrói lista de listas de eventos a partir de arrays flat + offsets (NPZ)."""
+    if "events__times" not in raw.files:
+        return []
+
+    times   = raw["events__times"]
+    types   = raw["events__types"]
+    starts  = raw["events__ep_starts"]
+    ends    = raw["events__ep_ends"]
+
+    result = []
+    for s, e in zip(starts, ends):
+        ep_events = [
+            {
+                "type": EVENT_CODE_TO_TYPE.get(int(t), "UNKNOWN"),
+                "time": float(tm),
+            }
+            for tm, t in zip(times[s:e], types[s:e])
+        ]
+        result.append(ep_events)
+    return result
 
 
 def _json_data_to_npz_arrays(data: dict) -> dict[str, np.ndarray]:
@@ -127,6 +190,10 @@ def _json_data_to_npz_arrays(data: dict) -> dict[str, np.ndarray]:
     ]
     for sim_key, npz_key in _EP_KEYS:
         arrays[npz_key] = _to_f64([ep.get(sim_key) for ep in sim_list])
+
+    # Eventos
+    events_per_ep = [ep.get("events", []) for ep in sim_list]
+    arrays.update(_events_to_flat_arrays(events_per_ep))
 
     if n > 0:
         for did, metrics in sim_list[0].get("driver", {}).items():
@@ -173,10 +240,17 @@ class SimulationStats:
 
     Após finalize(), acesso:
         stats.episodes["rewards"]            # lista de N recompensas
+        stats.episodes["events"]             # lista de N listas de eventos
         stats.drivers["0"]["distance"]       # lista de N distâncias do driver 0
         stats.aggregate["rewards"]["avg"]
         stats.sim[i]["reward"]               # visão por episódio (lazy)
+        stats.sim[i]["events"]               # eventos do episódio i
         stats.sim[i]["driver"]["0"]["distance"]
+
+    Sem finalize() (uso em tempo real):
+        stats.get_episode_sim(idx)           # dados achatados de _raw_episodes[idx]
+        stats.get_drivers_computed_stats()   # agregados por driver
+        stats.get_establishments_computed_stats()
     """
 
     def __init__(self) -> None:
@@ -206,7 +280,7 @@ class SimulationStats:
         Registra os dados de um episódio completo.
 
         Chame uma vez por episódio, antes de reset(). Extrai os dados
-        diretamente dos drivers e establishments via get_episode_stats().
+        diretamente dos drivers, establishments e eventos via simpy_env.
         """
         ep: dict = {
             "reward":           float(reward),
@@ -222,6 +296,11 @@ class SimulationStats:
                 str(e.establishment_id): e.get_episode_stats()
                 for e in simpy_env.state.establishments
             },
+            # Captura todos os eventos do ambiente para métricas de geração de pedidos
+            "events": [
+                {"type": event.event_type.name, "time": float(event.time)}
+                for event in simpy_env.events
+            ],
         }
         self._raw_episodes.append(ep)
         self._sim = None  # invalida cache lazy
@@ -229,9 +308,6 @@ class SimulationStats:
     def finalize(self) -> "SimulationStats":
         """
         Processa todos os episódios registrados e computa os agregados.
-
-        Chame após todos os register_episode() e antes de save() ou
-        write_report(). Retorna self para encadeamento.
         """
         eps = self._raw_episodes
         n   = len(eps)
@@ -258,7 +334,6 @@ class SimulationStats:
 
             for metric, val in sample.items():
                 if isinstance(val, dict):
-                    # Métrica aninhada (ex.: reordering stats do DynamicRouteDriver)
                     for sub_key in val:
                         col = f"{metric}_{sub_key}"
                         self.drivers[did][col] = [
@@ -284,6 +359,9 @@ class SimulationStats:
                     for ep in eps
                 ]
 
+        # ── Eventos por episódio ──────────────────────────────────────
+        events_per_ep = [ep.get("events", []) for ep in eps]
+
         # ── Séries derivadas ─────────────────────────────────────────
         delivery_time = [
             sum(
@@ -293,7 +371,6 @@ class SimulationStats:
             for ep in eps
         ]
 
-        # Distância exclui episódios truncados (métrica inválida nesses casos)
         distance = [
             None if ep["truncated"] else
             sum(
@@ -311,6 +388,7 @@ class SimulationStats:
             "orders_generated": orders_generated,
             "delivery_time":    delivery_time,
             "distance":         distance,
+            "events":           events_per_ep,
         }
 
         # ── Agregados ─────────────────────────────────────────────────
@@ -326,7 +404,96 @@ class SimulationStats:
         return self
 
     # ════════════════════════════════════════════════════════════════════
-    #  Visão por episódio (lazy)
+    #  Acesso a dados sem finalize() — uso em tempo real (por episódio)
+    # ════════════════════════════════════════════════════════════════════
+
+    def get_episode_sim(self, idx: int) -> dict:
+        """
+        Retorna dados achatados de um episódio a partir de _raw_episodes.
+
+        Funciona sem chamar finalize(). Dicionários aninhados de driver
+        (ex.: reordering stats) são achatados com '__' como separador.
+
+        Exemplo de chave achatada: 'reordering_total_reorderings'
+        """
+        ep = self._raw_episodes[idx]
+
+        def _flatten(d: dict, prefix: str = "") -> dict:
+            flat: dict = {}
+            for k, v in d.items():
+                full_key = f"{prefix}_{k}" if prefix else k
+                if isinstance(v, dict):
+                    flat.update(_flatten(v, full_key))
+                else:
+                    flat[full_key] = v
+            return flat
+
+        return {
+            "reward":           ep["reward"],
+            "episode_length":   ep["length"],
+            "simpy_final_time": ep["simpy_time"],
+            "truncated":        ep["truncated"],
+            "orders_generated": ep["orders_generated"],
+            "events":           ep.get("events", []),
+            "driver": {
+                did: _flatten(data)
+                for did, data in ep["drivers"].items()
+            },
+            "establishment": {
+                eid: dict(data)
+                for eid, data in ep["establishments"].items()
+            },
+        }
+
+    # ════════════════════════════════════════════════════════════════════
+    #  Estatísticas agregadas computadas (por driver / estabelecimento)
+    # ════════════════════════════════════════════════════════════════════
+
+    def get_drivers_computed_stats(self) -> dict:
+        """
+        Retorna estatísticas agregadas por driver.
+
+        Estrutura: { driver_id: { metric: { avg, std_dev, median, mode, n } } }
+
+        Requer finalize() prévio.
+        """
+        return {
+            did: {
+                metric: self._safe_stats([v for v in values if v is not None])
+                for metric, values in metrics.items()
+            }
+            for did, metrics in self.drivers.items()
+        }
+
+    def get_establishments_computed_stats(self) -> dict:
+        """
+        Retorna estatísticas agregadas por estabelecimento.
+
+        Estrutura: { est_id: { metric: { avg, std_dev, median, mode, n } } }
+
+        Requer finalize() prévio.
+        """
+        return {
+            eid: {
+                metric: self._safe_stats([v for v in values if v is not None])
+                for metric, values in metrics.items()
+            }
+            for eid, metrics in self.establishments.items()
+        }
+
+    def get_all_episodes_events(self) -> list[list[dict]]:
+        """
+        Retorna lista de listas de eventos, uma por episódio.
+
+        Funciona sem finalize() (lê de _raw_episodes).
+        Após finalize(), disponível também via stats.episodes['events'].
+        """
+        if "events" in self.episodes:
+            return self.episodes["events"]
+        return [ep.get("events", []) for ep in self._raw_episodes]
+
+    # ════════════════════════════════════════════════════════════════════
+    #  Visão por episódio (lazy) — requer finalize()
     # ════════════════════════════════════════════════════════════════════
 
     @property
@@ -336,7 +503,9 @@ class SimulationStats:
         return self._sim
 
     def _build_sim_list(self) -> list[dict]:
-        ep = self.episodes
+        ep           = self.episodes
+        events_list  = ep.get("events", [[] for _ in range(self._num_runs)])
+
         return [
             {
                 "reward":           ep["rewards"][i],
@@ -346,6 +515,7 @@ class SimulationStats:
                 "orders_generated": ep["orders_generated"][i],
                 "delivery_time":    ep["delivery_time"][i],
                 "distance":         ep["distance"][i],
+                "events":           events_list[i] if i < len(events_list) else [],
                 "driver": {
                     did: {m: vals[i] if i < len(vals) else None
                           for m, vals in metrics.items()}
@@ -424,6 +594,9 @@ class SimulationStats:
                 result.aggregate.setdefault(metric, {})[stat] = (
                     int(arr[0]) if stat == "n" else float(arr[0])
                 )
+
+        # Reconstrói eventos a partir dos arrays flat
+        result.episodes["events"] = _flat_arrays_to_events(raw)
 
         result._num_runs = (
             len(next(iter(result.episodes.values())))
@@ -506,6 +679,10 @@ class SimulationStats:
         ]
         for ep_key, npz_key in _EP_KEYS:
             arrays[npz_key] = _to_f64(self.episodes.get(ep_key, []))
+
+        # Eventos (flat arrays + offsets)
+        events_per_ep = self.episodes.get("events", [])
+        arrays.update(_events_to_flat_arrays(events_per_ep))
 
         for driver_id, metrics in self.drivers.items():
             for metric, values in metrics.items():

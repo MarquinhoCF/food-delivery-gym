@@ -65,6 +65,9 @@ class FoodDeliverySimpyEnv(Environment):
     
     def get_drivers(self):
         return self._state.drivers
+    
+    def get_establishments(self):
+        return self._state.establishments
 
     def add_ready_order(self, order, event):
         self._state.orders_awaiting_delivery.append(order)

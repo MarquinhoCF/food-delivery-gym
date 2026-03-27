@@ -17,7 +17,8 @@ from food_delivery_gym.main.route.delivery_route_segment import DeliveryRouteSeg
 from food_delivery_gym.main.route.pickup_route_segment import PickupRouteSegment
 from food_delivery_gym.main.route.route import Route
 from food_delivery_gym.main.statistic.simulation_stats import SimulationStats
-from food_delivery_gym.main.statistic.statistcs_view.summarized_data_board import SummarizedDataBoard
+from food_delivery_gym.main.statistic.statistcs_view.batch_stats_board import BatchStatsBoard
+from food_delivery_gym.main.statistic.statistcs_view.episode_stats_board import EpisodeStatsBoard
 
 
 class OptimizerGym(Optimizer, ABC):
@@ -107,12 +108,17 @@ class OptimizerGym(Optimizer, ABC):
 
     def reset_env(self, seed: int | None = None):
         if self.is_vectorized:
+            # env_method despacha reset_environment para cada sub-ambiente,
+            # limpando last_simpy_env antes do próximo episódio
+            self._call_env_method("reset_environment", seed=seed)
+
+            # Obtém a observação normalizada atualizada pelo VecNormalize
             self.state = self.wrapped_env.reset()
             if hasattr(self.wrapped_env, 'seed'):
                 self.wrapped_env.seed(seed)
         else:
-            self.state, info = self.wrapped_env.reset(seed=seed)
-        
+            self.state, _ = self.wrapped_env.reset_environment(seed=seed)
+
         self.done = False
         self.truncated = False
 
@@ -178,7 +184,7 @@ class OptimizerGym(Optimizer, ABC):
     ):
         self.reset_env(seed=seed)
         self._call_env_method("set_mode", EnvMode.EVALUATING)
-        SummarizedDataBoard.reset_image_counter()
+        EpisodeStatsBoard.reset_image_counter()
 
         os.makedirs(dir_path, exist_ok=True)
         file_path = os.path.join(dir_path, "results.txt")
@@ -209,7 +215,7 @@ class OptimizerGym(Optimizer, ABC):
                     results_file.write(f"Execução {i + 1}: ERRO - {e}\n")
  
                 if run_ok:
-                    # ── Registro centralizado ─────────────────────────
+                    # ── Registro centralizado em SimulationStats ──────────
                     simpy_env        = self.gym_env.get_simpy_env()
                     orders_generated = self._call_env_method("get_num_orders_generated")
  
@@ -221,22 +227,24 @@ class OptimizerGym(Optimizer, ABC):
                         orders_generated=orders_generated,
                     )
  
+                    # Índice do episódio recém-registrado
+                    episode_idx = len(stats._raw_episodes) - 1
+ 
                     results_file.write(
                         f"Execução {i + 1}: Retorno = {sum_reward:.4f} | "
                         f"Passos = {ep_length} | SimPy t = {simpy_env.now} | "
-                        f"Truncada = {was_truncated}\n"
+                        f"Truncada = {was_truncated}\\n"
                     )
  
+                    # ── Gráficos do episódio individual ───────────────────
                     if save_individual_plots:
                         try:
-                            self._call_env_method("show_statistics_board",
-                                                  sum_reward=sum_reward, dir_path=dir_path)
+                            self.generate_episode_stats_board(stats, episode_idx, sum_reward, dir_path)
                         except Exception as e:
-                            print(f"  ⚠  show_statistics_board falhou: {e}")
+                            print(f"  ⚠  generate_episode_stats_board falhou: {e}")
  
                 self.reset_env()
  
-            # ── Agregação e relatório ─────────────────────────────────
             results_file.write("\n" + "=" * 60 + "\n")
             results_file.write("RESUMO ESTATÍSTICO\n")
             results_file.write("=" * 60 + "\n")
@@ -245,25 +253,47 @@ class OptimizerGym(Optimizer, ABC):
             num_truncated = sum(stats.episodes.get("truncated", []))
             stats.write_report(results_file, num_truncated=num_truncated)
  
-            # Board de médias
+            # ── Board de médias (usa SimulationStats já finalizado) ───────
             if save_mean_plots:
                 try:
                     avg_reward = (
                         stats.aggregate["rewards"]["avg"]
                         if stats.aggregate.get("rewards") else 0.0
                     )
-                    self._call_env_method(
-                        "show_total_mean_statistics_board",
-                        sim_stats=stats,
-                        sum_rewards_mean=avg_reward,
-                        dir_path=dir_path,
-                    )
+                    self.generate_batch_stats_board(stats, avg_reward, dir_path)
                 except Exception as e:
                     results_file.write(f"\n⚠  Erro ao mostrar board de médias: {e}\n")
  
         stats.save(dir_path=dir_path, fmt=metrics_fmt)
         print(f"Resultados salvos em {dir_path}")
         return stats
+    
+    # ========================================================
+    #     Geração de gráficos
+    # ========================================================
+
+    def generate_episode_stats_board(self, sim_stats: SimulationStats, episode_idx: int, sum_reward: float, dir_path: str):
+        board = EpisodeStatsBoard(
+            sim_stats=sim_stats,
+            episode_idx=episode_idx,
+            num_drivers=len(self._call_env_method("get_drivers")),
+            num_establishments=len(self._call_env_method("get_establishments")),
+            sum_reward=sum_reward,
+            save_figs=True,
+            dir_path=dir_path,
+        )
+        board.view()
+        
+    def generate_batch_stats_board(self, sim_stats: SimulationStats, sum_rewards_mean: float, dir_path: str):
+        board = BatchStatsBoard(
+            sim_stats=sim_stats,
+            num_drivers=len(self._call_env_method("get_drivers")),
+            num_establishments=len(self._call_env_method("get_establishments")),
+            sum_reward=sum_rewards_mean,
+            save_figs=True,
+            dir_path=dir_path,
+        )
+        board.view()
     
     # ========================================================
     #     Escrita do cabeçalho do relatório
