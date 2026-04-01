@@ -21,15 +21,16 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
 from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
-from food_delivery_gym.main.scenarios import get_defaults_scenarios
+from food_delivery_gym.main.scenarios import get_all_scenarios, get_defaults_scenarios
 
 # ── Configuração de diretórios ────────────────────────────────────────────────
 
 DEFAULT_RESULTS_DIR = "./data/runs/execucoes"
 DEFAULT_OUTPUT_PATH = "objective_table.xlsx"
 ALL_OBJECTIVES      = FoodDeliveryGymEnv.REWARD_OBJECTIVES
+ALL_SCENARIOS       = get_all_scenarios()
 DEFAULT_SCENARIOS   = get_defaults_scenarios()
-SCENARIO_LABELS     = {"initial": "Inicial", "medium": "Médio", "complex": "Complexo"}
+SCENARIO_LABELS     = {"initial": "Inicial", "medium": "Médio", "medium_driver_cap_4": "Médio (Cap. 4)", "complex": "Complexo"}
 METRICS             = ["avg", "std_dev", "median", "mode"]
 METRIC_LABELS       = ["Média", "Desvio Padrão", "Mediana", "Moda"]
 ROWS_PER_OBJECTIVE  = len(METRICS)   # 4 linhas por objetivo
@@ -457,7 +458,7 @@ def parse_args():
     )
     parser.add_argument(
         "--scenarios", "-s",
-        nargs="+", choices=DEFAULT_SCENARIOS, default=DEFAULT_SCENARIOS, metavar="SCENARIO",
+        nargs="+", choices=ALL_SCENARIOS, default=DEFAULT_SCENARIOS, metavar="SCENARIO",
         help=f"Cenários a incluir. Opções: {DEFAULT_SCENARIOS}. Padrão: todos.",
     )
     return parser.parse_args()

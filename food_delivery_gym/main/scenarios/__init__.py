@@ -11,4 +11,4 @@ def get_all_scenarios() -> list[str]:
 
 def get_defaults_scenarios() -> list[str]:
     """Retorna os cenários default."""
-    return ["initial", "medium", "complex"]
+    return ["simple", "medium", "complex"]
