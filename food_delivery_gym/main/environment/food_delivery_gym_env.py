@@ -18,9 +18,6 @@ from food_delivery_gym.main.order.order import Order
 from food_delivery_gym.main.route.delivery_route_segment import DeliveryRouteSegment
 from food_delivery_gym.main.route.pickup_route_segment import PickupRouteSegment
 from food_delivery_gym.main.route.route import Route
-from food_delivery_gym.main.statistic.simulation_stats import SimulationStats
-from food_delivery_gym.main.statistic.statistcs_view.episode_stats_board import EpisodeStatsBoard
-from food_delivery_gym.main.statistic.statistcs_view.batch_stats_board import BatchStatsBoard
 from food_delivery_gym.main.utils.random_manager import RandomManager
 from food_delivery_gym.main.view.grid_view_pygame import GridViewPygame
 

@@ -269,14 +269,12 @@ class SimulationStats:
     Boards de visualização
     ──────────────────────
         # Não requer finalize():
-        board = stats.get_episode_board(episode_idx=0, num_drivers=3,
-                                        num_establishments=2, sum_reward=42.0)
+        board = stats.get_episode_board(episode_idx=0)
         board.view()
         board.save("resultados/")
 
         # Requer finalize():
-        board = stats.get_batch_board(num_drivers=3, num_establishments=2,
-                                      sum_reward=40.5)
+        board = stats.get_batch_board()
         board.view()
         board.save("resultados/")
     """
