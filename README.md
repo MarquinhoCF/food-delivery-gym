@@ -461,7 +461,7 @@ Acesse no navegador: `http://localhost:8080`
 python scripts/update_ppo_envs.py
 ```
 
-***Opção 2:** Se você realizou o tuning de hiperparâmetros usando o Optuna. Utilize o script `extract_best_trial` para identificar o melhor trial e gerar automaticamente o bloco de hiperparâmetros num arquivo `ppo.yml` separado. Esse script gera um bloco de hiperparâmetros no formato YAML como esse:
+**Opção 2:** Se você realizou o tuning de hiperparâmetros usando o Optuna. Utilize o script `extract_best_trial` para identificar o melhor trial e gerar automaticamente o bloco de hiperparâmetros num arquivo `ppo.yml` separado. Esse script gera um bloco de hiperparâmetros no formato YAML como esse:
  
 ```yml
 FoodDelivery-medium-obj1-v1:
@@ -687,7 +687,11 @@ optimizer = NearestDriverOptimizerGym(env)
 # ou
 optimizer = RLModelOptimizerGym(env, trained_model)
 
-optimizer.run_simulations(num_runs=10, dir_path="./resultados/", seed=42)
+optimizer.run_simulations(
+      num_runs=10, dir_path="./resultados/", seed=42,
+      save_individual_plots=True, save_mean_plots=True,
+      metrics_fmt="npz",
+  )
 ```
 
 Isso executará múltiplas simulações, coletará estatísticas (recompensa, tempo de entrega, distância percorrida, etc.) e salvará os resultados em um relatório (`.txt`) e um arquivo de métricas e um arquivo `.npz` ou `.json`.
