@@ -56,6 +56,18 @@ class Establishment(MapActor):
         self.process(self.process_order_requests())
         self.process(self.process_accepted_orders())
 
+    def get_episode_stats(self) -> dict:
+        """
+        Retorna as métricas do episódio atual como dict plano.
+        Chamado por SimulationStats.register_episode()
+        """
+        return {
+            "orders_fulfilled":    self.orders_fulfilled,
+            "idle_time":           self.idle_time,
+            "active_time":         self.active_time,
+            "max_orders_in_queue": self.max_orders_in_queue,
+        }
+
     def receive_order_requests(self, orders: List[Order]) -> None:
         self.order_requests += orders
 
@@ -267,17 +279,3 @@ class Establishment(MapActor):
 
     def get_coordinate(self) -> Coordinate:
         return self.coordinate
-    
-    def register_statistic_data(self):
-        id = self.establishment_id
-        FoodDeliverySimpyEnv.establishment_metrics[id]["orders_fulfilled"].append(self.orders_fulfilled)
-        FoodDeliverySimpyEnv.establishment_metrics[id]["idle_time"].append(self.idle_time)
-        FoodDeliverySimpyEnv.establishment_metrics[id]["active_time"].append(self.active_time)
-        FoodDeliverySimpyEnv.establishment_metrics[id]["max_orders_in_queue"].append(self.max_orders_in_queue)
-    
-    def reset_statistics(self):
-        id = self.establishment_id
-        FoodDeliverySimpyEnv.establishment_metrics[id]["orders_fulfilled"].clear()
-        FoodDeliverySimpyEnv.establishment_metrics[id]["idle_time"].clear()
-        FoodDeliverySimpyEnv.establishment_metrics[id]["active_time"].clear()
-        FoodDeliverySimpyEnv.establishment_metrics[id]["max_orders_in_queue"].clear()

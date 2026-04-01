@@ -1,10 +1,10 @@
 from collections import defaultdict
 
 from food_delivery_gym.main.environment.food_delivery_simpy_env import FoodDeliverySimpyEnv
-from food_delivery_gym.main.statistic.metric import Metric
+from food_delivery_gym.main.statistic.metrics.legacy import MetricEnvData
 
 
-class OrderStatusMetric(Metric):
+class OrderStatusMetric(MetricEnvData):
 
     def __init__(self, environment: FoodDeliverySimpyEnv):
         super().__init__(environment)

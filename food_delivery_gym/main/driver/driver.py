@@ -77,6 +77,26 @@ class Driver(MapActor):
 
         self.process(self.process_route_requests())
 
+    def get_episode_stats(self) -> dict:
+        """
+        Retorna as métricas do episódio atual como dict plano.
+        Chamado por SimulationStats.register_episode() — não há efeito colateral.
+        """
+        return {
+            "orders_delivered":       self.orders_delivered,
+            "time_spent_on_delivery": self.get_time_spent_on_delivery(),
+            "idle_time":              self.idle_time,
+            "time_waiting_for_order": self.time_waiting_for_order,
+            "total_distance":         self.total_distance,
+        }
+ 
+    def update_statistics_variables(self) -> None:
+        """Chamado a cada passo de tempo pelo FoodDeliverySimpyEnv."""
+        if not self.is_active():
+            self.idle_time += 1
+        if self.status == DriverStatus.PICKING_UP_WAITING:
+            self.time_waiting_for_order += 1
+
     def receive_route_requests(self, route: Route) -> None:
         self.route_requests.append(route)
 
@@ -422,13 +442,6 @@ class Driver(MapActor):
         estimated_time += self.estimate_time_to_costumer_receive_order(nextOrder)
         
         return estimated_time
-    
-    def update_statistics_variables(self):
-        if not self.is_active():
-            self.idle_time += 1
-        
-        if self.status == DriverStatus.PICKING_UP_WAITING:
-            self.time_waiting_for_order += 1
 
     def get_and_update_distance_traveled(self):
         distance_traveled = self.total_distance - self.last_total_distance
@@ -492,19 +505,3 @@ class Driver(MapActor):
     def get_time_spent_on_delivery(self) -> Number:
         self.get_penality_for_time_spent_for_delivery()
         return self.total_penalty_for_time_spent
-    
-    def register_statistic_data(self):
-        id = self.driver_id
-        FoodDeliverySimpyEnv.driver_metrics[id]["orders_delivered"].append(self.orders_delivered)
-        FoodDeliverySimpyEnv.driver_metrics[id]["time_spent_on_delivery"].append(self.get_time_spent_on_delivery())
-        FoodDeliverySimpyEnv.driver_metrics[id]["idle_time"].append(self.idle_time)
-        FoodDeliverySimpyEnv.driver_metrics[id]["time_waiting_for_order"].append(self.time_waiting_for_order)
-        FoodDeliverySimpyEnv.driver_metrics[id]["total_distance"].append(self.total_distance)
-
-    def reset_statistics(self):
-        id = self.driver_id
-        FoodDeliverySimpyEnv.driver_metrics[id]["orders_delivered"].clear()
-        FoodDeliverySimpyEnv.driver_metrics[id]["time_spent_on_delivery"].clear()
-        FoodDeliverySimpyEnv.driver_metrics[id]["idle_time"].clear()
-        FoodDeliverySimpyEnv.driver_metrics[id]["time_waiting_for_order"].clear()
-        FoodDeliverySimpyEnv.driver_metrics[id]["total_distance"].clear()

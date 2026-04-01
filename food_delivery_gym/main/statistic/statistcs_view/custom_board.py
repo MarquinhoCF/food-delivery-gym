@@ -3,8 +3,8 @@ from typing import List
 
 from matplotlib import pyplot as plt
 
-from food_delivery_gym.main.statistic.board import Board
-from food_delivery_gym.main.statistic.metric import Metric
+from food_delivery_gym.main.statistic.statistcs_view.board import Board
+from food_delivery_gym.main.statistic.metrics.metric import Metric
 
 
 class CustomBoard(Board):

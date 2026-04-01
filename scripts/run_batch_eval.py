@@ -16,9 +16,11 @@ from food_delivery_gym.main.optimizer.optimizer_gym.lowest_cost_driver_optimizer
 from food_delivery_gym.main.optimizer.optimizer_gym.nearest_driver_optimizer_gym import NearestDriverOptimizerGym
 from food_delivery_gym.main.optimizer.optimizer_gym.random_driver_optimizer_gym import RandomDriverOptimizerGym
 from food_delivery_gym.main.optimizer.optimizer_gym.rl_model_optimizer_gym import RLModelOptimizerGym
+from food_delivery_gym.main.scenarios import get_all_scenarios, get_defaults_scenarios
 
-ALL_SCENARIOS = ["initial", "medium", "complex"]
-ALL_OBJECTIVES = list(range(1, 14))
+ALL_SCENARIOS = get_all_scenarios()
+DEFAULT_SCENARIOS = get_defaults_scenarios()
+ALL_OBJECTIVES = FoodDeliveryGymEnv.REWARD_OBJECTIVES
 
 # Chave = identificador do argumento --heuristics
 #   "dir"   = subdiretório de saída (results_dir/<dir>/)
@@ -71,12 +73,12 @@ def parse_args():
         "--scenarios", "-s",
         nargs="+",
         choices=ALL_SCENARIOS,
-        default=ALL_SCENARIOS,
+        default=DEFAULT_SCENARIOS,
         metavar="SCENARIO",
         help=(
             "Cenários a executar. Aceita múltiplos valores.\n"
             f"Opções: {ALL_SCENARIOS}\n"
-            "Padrão: todos\n"
+            f"Padrão: {DEFAULT_SCENARIOS}\n"
             "Exemplo: --scenarios initial medium"
         ),
     )
@@ -152,34 +154,30 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--no-individual-plots",
+        "--batch-plots",
         action="store_true",
-        help="Desativa a geração de gráficos individuais por execução.",
+        help="Ativa a geração de gráficos agregados.",
     )
 
     parser.add_argument(
-        "--no-plots",
+        "--all-plots",
         action="store_true",
-        help="Desativa todos os gráficos (equivale a --no-individual-plots e desativa o gráfico de médias).",
+        help="Ativa todos os gráficos (equivale a --batch-plots e ativa a geração de gráficos por episódio).",
     )
 
     parser.add_argument(
-        "--save-log",
-        action="store_true",
-        help="Salva o log de saída em arquivo (log.txt) dentro do diretório de resultados.",
+        "--metrics-fmt",
+        choices=["npz", "json"],
+        default="npz",
+        help=(
+            "Formato do arquivo de métricas gerado por simulação.\n"
+            "  npz  – comprimido, menor tamanho em disco (padrão)\n"
+            "  json – legível, estrutura orientada por simulação\n"
+            "Exemplo: --metrics-fmt json"
+        ),
     )
 
     return parser.parse_args()
-
-
-def setup_logging(results_dir: str):
-    os.makedirs(results_dir, exist_ok=True)
-    log_path = os.path.join(results_dir, "log.txt")
-    log_file = open(log_path, "w", encoding="utf-8")
-    sys.stdout = log_file
-    sys.stderr = log_file
-    return log_file
-
 
 def create_environment(reward_objective: int, scenario_name: str):
     if reward_objective not in range(1, 14):
@@ -271,8 +269,8 @@ def run_heuristics(
     base_env, scenario: str, heuristics: list, objective: int,
     results_dir: str, num_runs: int, seed: int,
     save_individual_plots: bool, save_mean_plots: bool,
+    metrics_fmt: str,
 ):
-
     for key in heuristics:
         meta = ALL_HEURISTICS[key]
         output_dir = os.path.join(results_dir, meta["dir"]) + "/"
@@ -281,6 +279,7 @@ def run_heuristics(
             num_runs, output_dir, seed=seed,
             save_individual_plots=save_individual_plots,
             save_mean_plots=save_mean_plots,
+            metrics_fmt=metrics_fmt,
         )
 
 
@@ -288,6 +287,7 @@ def run_rl_models(
     objective: int, scenario: str, models: list, model_base_dir: str,
     results_dir: str, num_runs: int, seed: int,
     save_individual_plots: bool, save_mean_plots: bool,
+    metrics_fmt: str,
 ):
     print("\n=== Tentando executar modelos de Aprendizado por Reforço ===")
 
@@ -317,6 +317,7 @@ def run_rl_models(
                 seed=seed,
                 save_individual_plots=save_individual_plots,
                 save_mean_plots=save_mean_plots,
+                metrics_fmt=metrics_fmt,
             )
         except Exception as e:
             print(f"Erro ao executar PPO — objetivo {objective}, cenário '{scenario}', modelo '{model_name}': {e}")
@@ -326,12 +327,13 @@ def run_rl_models(
 def main():
     args = parse_args()
 
-    # --no-plots ativa os dois flags de uma vez
-    if args.no_plots:
-        args.no_individual_plots = True
+    if args.all_plots:
+        args.batch_plots = True
+        save_individual_plots = True
+    else:
+        save_individual_plots = False
 
-    save_individual_plots = not args.no_individual_plots
-    save_mean_plots       = not args.no_plots
+    save_mean_plots       = args.batch_plots
 
     print("=== Avaliando Agentes no Ambiente de Entrega de Última Milha ===")
     print(f"  Objetivos    : {args.objectives}")
@@ -344,14 +346,11 @@ def main():
     print(f"  Results base : {args.results_base_dir}")
     print(f"  Plots indiv. : {'desativados' if not save_individual_plots else 'ativados'}")
     print(f"  Plot médias  : {'desativado' if not save_mean_plots else 'ativado'}")
+    print(f"  Formato métr.: {args.metrics_fmt}")
 
     for objective in args.objectives:
         for scenario in args.scenarios:
             results_dir = args.results_base_dir.format(objective, scenario)
-
-            log_file = None
-            if args.save_log:
-                log_file = setup_logging(results_dir)
 
             print(f"\n\n=== Iniciando avaliações para Objetivo {objective} no cenário '{scenario}' ===")
             base_env = create_environment(reward_objective=objective, scenario_name=scenario)
@@ -363,6 +362,7 @@ def main():
                     args.num_runs, args.seed,
                     save_individual_plots=save_individual_plots,
                     save_mean_plots=save_mean_plots,
+                    metrics_fmt=args.metrics_fmt,
                 )
 
             if not args.no_rl:
@@ -372,10 +372,8 @@ def main():
                     args.num_runs, args.seed,
                     save_individual_plots=save_individual_plots,
                     save_mean_plots=save_mean_plots,
+                    metrics_fmt=args.metrics_fmt,
                 )
-
-            if log_file:
-                log_file.close()
 
     print("\n=== Avaliação concluída ===")
 

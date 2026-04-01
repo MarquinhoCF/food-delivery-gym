@@ -257,32 +257,15 @@ Esse cenário define:
 ### 📝 Registro do Cenário Experimental
 
 O registro dos cenários é feito automaticamente no arquivo `food_delivery_gym/__init__.py`. Para cada combinação de cenário e objetivo de recompensa, um ambiente Gymnasium é registrado no formato:
-
 ```
-food_delivery_gym/FoodDelivery-{cenário}-obj{N}-v0
+FoodDelivery-{cenário}-obj{N}-v1
 ```
 
-Os **cenários disponíveis** são: `initial`, `medium`, `complex`.
+Os **cenários disponíveis** são descobertos automaticamente a partir dos arquivos `.json` presentes em `food_delivery_gym/main/scenarios/`.
 
-Os **objetivos de recompensa disponíveis** são: `1, 2, 3, 4, 7, 8, 11, 12, 13`. As descrições de cada objetivo estão no arquivo `food_delivery_gym/main/scenarios/reward_objectives.txt`.
+Os **objetivos de recompensa disponíveis** são lidos diretamente de `FoodDeliveryGymEnv.REWARD_OBJECTIVES`. As descrições de cada objetivo estão no arquivo `food_delivery_gym/main/scenarios/reward_objectives.txt`.
 
-Para registrar um novo cenário, adicione o arquivo JSON correspondente em `food_delivery_gym/main/scenarios/` e inclua o novo cenário na lista `SCENARIOS` (e/ou novos objetivos em `OBJECTIVES`) no `__init__.py`, seguindo o padrão existente:
-
-```python
-SCENARIOS = ["initial", "medium", "complex", "meu_cenario"]
-OBJECTIVES = [1, 2, 3, 4, 7, 8, 11, 12, 13]
-
-for _scenario in SCENARIOS:
-    for _obj in OBJECTIVES:
-        register(
-            id=f"food_delivery_gym/FoodDelivery-{_scenario}-obj{_obj}-v0",
-            entry_point="food_delivery_gym:_make_env",
-            kwargs={
-                "scenario_json_file_path": get_scenario_path(f"{_scenario}.json"),
-                "reward_objective": _obj,
-            },
-        )
-```
+Para registrar um novo cenário, basta adicionar o arquivo JSON correspondente em `food_delivery_gym/main/scenarios/` ele será detectado automaticamente. Para adicionar um novo objetivo de recompensa, atualize `REWARD_OBJECTIVES` em `FoodDeliveryGymEnv` e implemente a lógica correspondente no método `_calculate_reward`.
 
 ## 🤖 Treinamento de Agentes de Aprendizado por Reforço
 
@@ -402,42 +385,46 @@ Se `torch.cuda.is_available()` retornar `False`, reinstale o PyTorch com o índi
 
 ### 2️⃣ Ajuste de Hiperparâmetros (Opcional, mas Recomendado)
 
+> ⚠️ **Pré-requisito:** Caso tenha adicionado um novo cenário ou objetivo de recompensa ao `food_delivery_gym` desde a última vez que o `ppo.yml` foi atualizado, execute o script `update_ppo_envs.py` na raiz do `rl-baselines3-zoo` antes de prosseguir. Ele detecta automaticamente todos os ambientes registrados no pacote e atualiza a seção do `food_delivery_gym` no `hyperparams/ppo.yml`:
+>
+> ```bash
+> python scripts/update_ppo_envs.py
+> ```
+
 O ajuste de hiperparâmetros usa o [Optuna](https://optuna.org/) para encontrar automaticamente a melhor configuração para o seu agente. Os resultados podem ser **salvos em um banco de dados SQLite**, permitindo que você **retome o estudo de onde parou** caso a execução seja interrompida.
 
 #### 🔹 Comando básico com SQLite (recomendado)
-
+ 
 ```bash
 python train.py \
   --algo ppo \
-  --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
+  --env FoodDelivery-medium-obj1-v1 \
   --n-timesteps 1000000 \
   --optimize-hyperparameters \
   --max-total-trials 200 \
   --n-jobs 2 \
-  --optimization-log-path logs/hyperparam_opt_ppo_food_delivery_medium_obj1/ \
   --storage sqlite:///optuna_studies.db \
   --study-name ppo_medium_obj1
 ```
-
+ 
 #### 🔹 Retomando um estudo existente
-
+ 
 Caso o processo seja interrompido, basta rodar o **mesmo comando novamente** com o mesmo `--storage` e `--study-name`. O Optuna detectará automaticamente o estudo salvo e continuará de onde parou, sem repetir trials já concluídos:
-
+ 
 ```bash
 python train.py \
   --algo ppo \
-  --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
+  --env FoodDelivery-medium-obj1-v1 \
   --n-timesteps 1000000 \
   --optimize-hyperparameters \
   --max-total-trials 200 \
   --n-jobs 2 \
-  --optimization-log-path logs/hyperparam_opt_ppo_food_delivery_medium_obj1/ \
   --storage sqlite:///optuna_studies.db \
   --study-name ppo_medium_obj1
 ```
-
+ 
 #### 📋 Parâmetros explicados
-
+ 
 | Parâmetro | Descrição |
 |-----------|-----------|
 | `--algo ppo` | Algoritmo de AR a ser usado. Outros suportados: `a2c`, `dqn`, `sac`, `td3`. |
@@ -446,9 +433,11 @@ python train.py \
 | `--optimize-hyperparameters` | Ativa o modo de busca automática de hiperparâmetros via Optuna. |
 | `--max-total-trials` | Número máximo de tentativas (trials) que o Optuna vai explorar. Mais trials = melhor resultado, porém mais tempo. |
 | `--n-jobs` | Número de trials executados em paralelo. Depende dos núcleos disponíveis na sua máquina. |
-| `--optimization-log-path` | Diretório onde serão salvos os logs e checkpoints dos modelos avaliados durante a otimização. |
+| `--optimization-log-path` | Diretório onde serão salvos os logs e checkpoints dos modelos avaliados durante a otimização. Se omitido, é criado automaticamente em `<log-folder>/<algo>/<env>_<id>/optimization/`. |
 | `--storage` | URI do banco de dados onde o estudo Optuna será persistido. Use `sqlite:///nome_do_arquivo.db` para SQLite local. |
 | `--study-name` | Nome único do estudo no banco de dados. Permite múltiplos estudos no mesmo arquivo `.db` e retomada após interrupção. |
+ 
+> 💡 **Recomendação:** Não informe `--optimization-log-path` e deixe o valor padrão ser usado. Assim, os trials ficam sempre dentro de `<exp-dir>/optimization/`, que é exatamente a estrutura esperada pelo script `extract_best_trial.py` sem nenhuma configuração adicional.
 
 #### 🔍 Inspecionando o banco de dados do Optuna
 
@@ -464,12 +453,18 @@ Acesse no navegador: `http://localhost:8080`
 
 ### 3️⃣ Treinamento do Modelo
 
-Com os hiperparâmetros definidos (via ajuste ou valores padrão), prossiga com o treinamento.
+#### 1º Passo: Definição dos hiperparâmetros do PPO que seão utilizados no treinamento 
 
-**1º Passo**: Defina os hiperparâmetros no arquivo YAML `hyperparams/best_params_for_food_delivery_gym/ppo.yml`. Se realizou o tuning, use os melhores parâmetros encontrados. Caso contrário, os parâmetros padrão do PPO estão disponíveis na [documentação oficial do Stable-Baselines3 Zoo](https://stable-baselines3.readthedocs.io/en/master/).
+**Opção 1:** Caso você não tenha realizado o tuning de hiperparâmetros, use os valores padrão do PPO, eles são definidos por default (os parâmetros padrão do PPO estão disponíveis na [documentação oficial](https://stable-baselines3.readthedocs.io/en/master/guide/rl_tips.html)). Mas tenha certeza que o seu ambiente está registrado no `rl-baselines3-zoo/hyperparams/ppo.yml` para que o script de treinamento os reconheça. Caso você tenha adicionado um novo cenário ou objetivo de recompensa ao `food_delivery_gym` desde a última vez que o `ppo.yml` foi atualizado, execute o script `update_ppo_envs.py` na raiz do `rl-baselines3-zoo` antes de prosseguir. 
 
+```bash
+python scripts/update_ppo_envs.py
+```
+
+**Opção 2:** Se você realizou o tuning de hiperparâmetros usando o Optuna. Utilize o script `extract_best_trial` para identificar o melhor trial e gerar automaticamente o bloco de hiperparâmetros num arquivo `ppo.yml` separado. Esse script gera um bloco de hiperparâmetros no formato YAML como esse:
+ 
 ```yml
-food_delivery_gym/FoodDelivery-medium-obj1-v0:
+FoodDelivery-medium-obj1-v1:
   n_timesteps: 18000000
   policy: 'MultiInputPolicy'
   n_envs: 4
@@ -485,18 +480,59 @@ food_delivery_gym/FoodDelivery-medium-obj1-v0:
   policy_kwargs: "dict(net_arch=dict(pi=[64], vf=[64]), activation_fn=nn.Tanh)"
   normalize: true
 ```
+ 
+Passe o diretório do experimento gerado pelo RL Baselines3 Zoo (formato `<log-folder>/<algo>/<env>_<id>`):
+ 
+```bash
+python scripts/extract_best_trial.py \
+  --exp-dir logs/ppo/FoodDelivery-medium-obj1-v1_1
 
-**2º Passo**: Execute o treinamento:
+#   O ambiente é inferido automaticamente a partir do diretório, mas pode ser 
+# informado explicitamente se necessário
+python scripts/extract_best_trial.py \
+  --exp-dir logs/ppo/FoodDelivery-medium-obj1-v1_1 \
+  --env FoodDelivery-medium-obj1-v1
+```
+ 
+Opções de configuração do script `extract_best_trial.py`:
+ 
+| Opção | Descrição | Padrão |
+|-------|-----------|--------|
+| `--exp-dir` / `-e` | Diretório do experimento gerado pelo RL Baselines3 Zoo (ex: `logs/ppo/FoodDelivery-medium-obj1-v1_1`). A pasta `optimization/` é localizada automaticamente dentro dele. Sempre obrigatório. | — |
+| `--env` | ID completo do ambiente Gymnasium (ex: `FoodDelivery-medium-obj1-v1`). Se omitido, é inferido a partir do nome do `--exp-dir`. | inferido |
+| `--n-timesteps` | Timesteps para o treinamento final registrado no YAML. | `18000000` |
+| `--n-envs` | Número de ambientes paralelos registrado no YAML. | `4` |
+| `--output-dir` | Diretório base de saída. O subdiretório de versão do pacote é criado automaticamente. | `hyperparams/best_params_for_food_delivery_gym` |
+ 
+O script identifica o melhor trial varrendo todos os `trial_N/evaluations.npz` dentro de `optimization/` e selecionando o trial com maior recompensa média no último checkpoint de avaliação (o mesmo critério ao usado pelo Optuna internamente). A normalização é detectada automaticamente pela presença do arquivo `report_*.pkl` na raiz do `--exp-dir`, gerado pelo Zoo ao final da otimização.
+ 
+O script exibe um resumo completo no terminal e **adiciona** o bloco de hiperparâmetros ao arquivo `ppo.yml` sem sobrescrever entradas anteriores. O subdiretório de saída é determinado automaticamente pela versão instalada do `food_delivery_gym` (ex: `v1.2.x`).
+
+#### 2º Passo: Execute o treinamento
+
+Utilize os comando abaixos para iniciar o treinamento do agente PPO utilizando os hiperparâmetros extraídos no passo anterior.
 
 ```bash
+# Caso queira treinar com os hiperparâmetros padrão do PPO (sem arquivo YAML)
 python train.py \
   --algo ppo \
-  --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
-  --conf-file hyperparams/best_params_for_food_delivery_gym/ppo.yml \
+  --env FoodDelivery-medium-obj1-v1 \
+  --n-timesteps 18000000 \
+  --log-folder logs/training/
+
+# Treinar com os melhores hiperparâmetros extraídos (certifique-se de que o caminho do conf-file está correto)
+python train.py \
+  --algo ppo \
+  --env FoodDelivery-medium-obj1-v1 \
+  --conf-file hyperparams/best_params_for_food_delivery_gym/v1.2.x/ppo.yml \
   --n-timesteps 18000000 \
   --log-folder logs/training/
 ```
 
+> Dica: Caso você não tenha conseguido um resultado bom tente aumentar o número de timesteps para o treinamento ou tente realizar o passo de ajuste os hiperparâmetros e veja o impacto no desempenho do agente.
+
+<!-- 
+TODO -> Verificar se isso funciona
 #### 🔁 Retomando um treinamento interrompido
 
 Se o treinamento for interrompido (queda de energia, erro, etc.), especifique o último checkpoint salvo com `--trained-agent`:
@@ -505,14 +541,14 @@ Se o treinamento for interrompido (queda de energia, erro, etc.), especifique o 
 # Retomar a partir do checkpoint mais recente salvo em logs/
 python train.py \
   --algo ppo \
-  --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
-  --conf-file hyperparams/best_params_for_food_delivery_gym/ppo.yml \
+  --env FoodDelivery-medium-obj1-v1 \
+  --conf-file hyperparams/best_params_for_food_delivery_gym/v1.2.x/ppo.yml \
   --n-timesteps 18000000 \
   --log-folder logs/training/ \
-  --trained-agent logs/training/ppo/FoodDelivery-medium-obj1-v0_1/best_model.zip
-```
+  --trained-agent logs/training/ppo/FoodDelivery-medium-obj1-v1_1/best_model.zip
+``` -->
 
-#### 📋 Parâmetros de treinamento explicados
+##### 📋 Parâmetros de treinamento explicados
 
 | Parâmetro | Descrição |
 |-----------|-----------|
@@ -528,14 +564,14 @@ python train.py \
 | `--verbose` | Nível de verbosidade: `0` = silencioso, `1` = INFO. |
 | `--seed` | Seed para reprodutibilidade dos experimentos. |
 
-#### 🔹 Exemplos adicionais de treinamento
+##### 🔹 Exemplos adicionais de treinamento
 
 ```bash
 # Treinamento com avaliação frequente e seed fixo (reprodutibilidade)
 python train.py \
   --algo ppo \
-  --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
-  --conf-file hyperparams/best_params_for_food_delivery_gym/ppo.yml \
+  --env FoodDelivery-medium-obj1-v1 \
+  --conf-file hyperparams/best_params_for_food_delivery_gym/v1.2.x/ppo.yml \
   --n-timesteps 18000000 \
   --eval-freq 10000 \
   --eval-episodes 10 \
@@ -545,29 +581,22 @@ python train.py \
 # Treinamento com salvamento frequente de checkpoints
 python train.py \
   --algo ppo \
-  --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
-  --conf-file hyperparams/best_params_for_food_delivery_gym/ppo.yml \
+  --env FoodDelivery-medium-obj1-v1 \
+  --conf-file hyperparams/best_params_for_food_delivery_gym/v1.2.x/ppo.yml \
   --n-timesteps 18000000 \
   --save-freq 500000 \
   --log-folder logs/training/
-
-# Treinamento com parâmetros padrão (sem arquivo YAML)
-python train.py \
-  --algo ppo \
-  --env food_delivery_gym/FoodDelivery-medium-obj1-v0 \
-  --n-timesteps 5000000 \
-  --log-folder logs/training/
 ```
 
-**3º Passo**: Visualize a curva de aprendizado após o treinamento:
+#### 3º Passo: Visualize a curva de aprendizado após o treinamento:
 
 ```bash
-python scripts/plot_train.py -a ppo -e FoodDelivery-medium-obj1-v0 -f logs/training/
+python scripts/plot_train.py -a ppo -e FoodDelivery-medium-obj1-v1 -f logs/training/
 ```
 
----
-
-### 4️⃣ Dicas Gerais de Uso do RL Baselines3 Zoo
+<!-- 
+TODO -> Verificar a utilidade desse item
+### 5️⃣ Dicas Gerais de Uso do RL Baselines3 Zoo
 
 - **Organize os estudos por nome**: Use nomes descritivos como `ppo_medium_obj1_run1` para facilitar a rastreabilidade entre múltiplos experimentos.
 - **Use o mesmo banco SQLite para tudo**: Centralizar todos os estudos (tuning e treinamento) em um único `optuna_studies.db` facilita comparações e consultas.
@@ -578,11 +607,13 @@ python scripts/plot_train.py -a ppo -e FoodDelivery-medium-obj1-v0 -f logs/train
 tensorboard --logdir logs/training/
 ```
 
-Acesse em: `http://localhost:6006`
+Acesse em: `http://localhost:6006` -->
+
+---
 
 ## 🧩 Criação de Agentes Otimizadores com `OptimizerGym`
 
-O pacote `food_delivery_gym` permite a criação de agentes otimizadores personalizados, baseados em heurísticas simples ou modelos treinados com Aprendizado por Reforço (AR), por meio da classe abstrata `OptimizerGym`.
+O pacote `food_delivery_gym` permite a criação de agentes otimizadores personalizados, baseados em heurísticas ou modelos treinados com Aprendizado por Reforço (AR), por meio da classe abstrata `OptimizerGym`.
 
 Essa abordagem é útil para avaliar o desempenho de algoritmos customizados no ambiente de entrega de última milha e comparar com agentes baseados em AR.
 
@@ -616,24 +647,35 @@ class NearestDriverOptimizerGym(OptimizerGym):
 Se você já treinou um modelo com o RL Baselines3 Zoo (como mostrado na seção anterior), pode integrá-lo diretamente:
 
 ```python
-from stable_baselines3 import PPO
-from food_delivery_gym.main.optimizer.optimizer_gym.optmizer_gym import OptimizerGym
-from food_delivery_gym.main.route.route import Route
-from food_delivery_gym.main.driver.driver import Driver
-from typing import List, Union
-import numpy as np
-
 class RLModelOptimizerGym(OptimizerGym):
-    def __init__(self, environment, model: PPO):
+
+    def __init__(self, environment: Union[FoodDeliveryGymEnv, VecEnv], model: BaseAlgorithm):
         super().__init__(environment)
         self.model = model
+        
+        model_env = model.get_env()
+        if model_env is not None:
+            print(f"Ambiente do modelo: {type(model_env).__name__}")
+            print(f"Ambiente fornecido: {type(environment).__name__}")
+            
+            if type(model_env) != type(environment):
+                print("AVISO: O ambiente fornecido é diferente do ambiente do modelo!")
+                print("Isso pode causar problemas de normalização ou formato de observação.")
 
     def get_title(self):
         return "Otimizador por Aprendizado por Reforço"
 
     def select_driver(self, obs: dict, drivers: List[Driver], route: Route):
-        action, _ = self.model.predict(obs, deterministic=True)
-        return int(action) if isinstance(action, (int, np.integer)) else action.item()
+        if self.is_vectorized:
+            action, _states = self.model.predict(obs, deterministic=True)
+            if isinstance(action, np.ndarray):
+                action = action[0] if len(action.shape) > 0 else action.item()
+        else:
+            action, _states = self.model.predict(obs, deterministic=True)
+            if isinstance(action, np.ndarray):
+                action = action.item() if action.size == 1 else action
+            
+        return action
 ```
 
 ### ▶️ Executando Simulações com o Otimizador
@@ -645,18 +687,24 @@ optimizer = NearestDriverOptimizerGym(env)
 # ou
 optimizer = RLModelOptimizerGym(env, trained_model)
 
-optimizer.run_simulations(num_runs=10, dir_path="./resultados/", seed=42)
+optimizer.run_simulations(
+      num_runs=10, dir_path="./resultados/", seed=42,
+      save_individual_plots=True, save_mean_plots=True,
+      metrics_fmt="npz",
+  )
 ```
 
-Isso executará múltiplas simulações, coletará estatísticas (recompensa, tempo de entrega, distância percorrida, etc.) e salvará os resultados em um arquivo `.txt` e `.npz`.
+Isso executará múltiplas simulações, coletará estatísticas (recompensa, tempo de entrega, distância percorrida, etc.) e salvará os resultados em um relatório (`.txt`) e um arquivo de métricas e um arquivo `.npz` ou `.json`.
 
-## 🧪 Execução em Lote de Otimizadores e Geração de Tabelas
+## 🧪 Scripts Utilitários
 
-Para facilitar a execução massiva de simulações e a geração de tabelas com os resultados dos agentes otimizadores (heurísticos e baseados em AR), o projeto fornece dois scripts utilitários:
+O projeto fornece quatro scripts utilitários para execução de simulações em lote, geração de gráficos, conversão de métricas e consolidação de resultados em planilhas Excel.
+
+---
 
 ### 🚀 Script `run_batch_eval`: Execução de Múltiplos Otimizadores
 
-Esse script automatiza a execução de diferentes agentes otimizadores em combinações de cenários experimentais e objetivos de recompensa.
+Automatiza a execução de diferentes agentes otimizadores em combinações de cenários experimentais e objetivos de recompensa.
 
 #### ✅ O que ele faz:
 
@@ -666,15 +714,14 @@ Esse script automatiza a execução de diferentes agentes otimizadores em combin
   * `NearestDriverOptimizerGym`
   * `LowestCostDriverOptimizerGym` (com custo de rota)
   * `LowestCostDriverOptimizerGym` (com custo marginal de rota)
-* Executa modelos PPO (`RLModelOptimizerGym`), com **descoberta automática** dos modelos disponíveis em `--model-base-dir`
+* Executa modelos de algoritmos RL (`RLModelOptimizerGym`), com **descoberta automática** dos modelos disponíveis em `--model-base-dir`
 * Gera arquivos `.txt` com os resultados das execuções
-* Gera arquivos `.npz` contendo as métricas agregadas para análise
+* Gera arquivos `.npz` ou `.json` contendo as métricas agregadas para análise
 
 #### 📦 Como usar:
 
-Execução padrão (todos os objetivos, cenários, heurísticas e modelos disponíveis):
-
 ```bash
+# Execução padrão (todos os objetivos, cenários, heurísticas e modelos disponíveis)
 python -m scripts.run_batch_eval
 ```
 
@@ -685,18 +732,20 @@ python -m scripts.run_batch_eval
 | `--objectives` / `-o` | Objetivos de recompensa a executar (1–13). Aceita múltiplos valores. | todos (1–13) |
 | `--scenarios` / `-s` | Cenários a executar: `initial`, `medium`, `complex`. Aceita múltiplos valores. | todos |
 | `--heuristics` | Heurísticas a executar. Aceita múltiplos valores. | todas |
-| `--models` / `-m` | Nomes dos modelos RL (subdiretórios de `obj_N/` com `best_model.zip`). Ver estrutura de diretórios abaixo. | descoberta automática |
+| `--models` / `-m` | Nomes dos modelos RL (subdiretórios de `obj_N/` com `best_model.zip`). | descoberta automática |
 | `--no-heuristics` | Desativa a execução de todas as heurísticas. | — |
 | `--no-rl` | Desativa a execução dos modelos PPO. | — |
 | `--num-runs` / `-n` | Número de simulações por agente. | `20` |
 | `--seed` | Seed para reprodutibilidade. | `123456789` |
-| `--model-base-dir` | Diretório base dos modelos PPO treinados. | `./data/ppo_training/.../treinamento` |
+| `--model-base-dir` | Diretório base dos modelos PPO treinados. | `./data/ppo_training/medium/treinamento` |
 | `--results-base-dir` | Diretório base para salvar resultados. Use `{}` como placeholder para objetivo e cenário. | `./data/runs/execucoes/obj_{}/{}_scenario/` |
-| `--no-individual-plots` | Desativa a geração de gráficos individuais por execução. | — |
-| `--no-plots` | Desativa **todos** os gráficos (equivale a `--no-individual-plots` e desativa o gráfico de médias). | — |
-| `--save-log` | Salva o output em `log.txt` dentro do diretório de resultados. | — |
+| `--batch-plots` | Ativa a geração de gráficos agregados (lote) ao final de cada agente. | — |
+| `--all-plots` | Ativa todos os gráficos: equivale a `--batch-plots` mais gráficos individuais por episódio. | — |
+| `--metrics-fmt` | Formato do arquivo de métricas: `npz` (comprimido) ou `json` (legível). | `npz` |
 
 Os valores possíveis para `--heuristics` são: `random`, `first_driver`, `nearest_driver`, `lowest_route_cost`, `lowest_marginal_route_cost`.
+
+> 💡 **Dica:** Para gerar gráficos de execuções anteriores sem re-executar as simulações, use o script `generate_plots` descrito abaixo.
 
 #### 📁 Estrutura de diretórios para modelos RL
 
@@ -707,11 +756,11 @@ O script descobre automaticamente os modelos disponíveis varrendo `--model-base
 └── obj_1/
 │   ├── 18M_steps/
 │   │   ├── best_model.zip
-│   │   └── food_delivery_gym-FoodDelivery-medium-obj1-v0/
+│   │   └── FoodDelivery-medium-obj1-v1/
 │   │       └── vecnormalize.pkl
 │   └── outro_experimento/
 │       ├── best_model.zip
-│       └── food_delivery_gym-FoodDelivery-medium-obj1-v0/
+│       └── FoodDelivery-medium-obj1-v1/
 │           └── vecnormalize.pkl
 └── obj_2/
     └── ...
@@ -721,7 +770,7 @@ As regras são:
 
 * Cada objetivo deve ter seu próprio subdiretório `obj_N/` dentro de `--model-base-dir`
 * Dentro de `obj_N/`, qualquer subdiretório que contenha `best_model.zip` na raiz é detectado como um modelo — o nome do subdiretório se torna o identificador do modelo nos resultados
-* O `vecnormalize.pkl` deve estar no caminho `<modelo>/food_delivery_gym-FoodDelivery-medium-obj{N}-v0/vecnormalize.pkl`. Se um vecnormalize.pkl for encontrado em qualquer subdiretório do modelo, ele é carregado automaticamente. Caso contrário, o modelo é executado sem normalização. 
+* O `vecnormalize.pkl` é carregado automaticamente se encontrado em qualquer subdiretório do modelo. Caso contrário, o modelo é executado sem normalização
 
 > **Observação:** se os modelos foram treinados com o RL Baselines3 Zoo sem mover os arquivos gerados, a estrutura já estará no formato correto automaticamente. Use `--models` apenas para restringir a execução a modelos específicos dentro de `obj_N/`.
 
@@ -743,24 +792,112 @@ python -m scripts.run_batch_eval --heuristics random nearest_driver
 # Forçar modelos RL específicos (sem descoberta automática)
 python -m scripts.run_batch_eval --models 18M_steps 100M_steps
 
-# Execução rápida
+# Execução rápida para testes
 python -m scripts.run_batch_eval --num-runs 5 --seed 42 --scenarios initial --objectives 1
 
-# Desativar gráficos individuais (mais rápido, mantém gráfico de médias)
-python -m scripts.run_batch_eval --no-individual-plots
+# Gerar gráficos de lote ao final de cada agente
+python -m scripts.run_batch_eval --batch-plots
 
-# Execução completa salvando logs e usando diretórios customizados
+# Gerar todos os gráficos (individuais + lote)
+python -m scripts.run_batch_eval --all-plots
+
+# Salvar métricas em JSON (legível) em vez de NPZ
+python -m scripts.run_batch_eval --metrics-fmt json
+
+# Execução completa com diretórios customizados
 python -m scripts.run_batch_eval \
     --model-base-dir ./meus_modelos \
-    --results-base-dir ./resultados/obj_{}/{}_scenario/ \
-    --save-log
+    --results-base-dir ./resultados/obj_{}/{}_scenario/
 ```
+
+---
+
+### 📈 Script `generate_plots`: Geração de Gráficos a partir de Métricas
+
+Gera gráficos de episódios individuais e/ou agregados (lote) a partir dos arquivos de métricas produzidos pelo `run_batch_eval`, sem precisar re-executar as simulações.
+
+#### ✅ O que ele faz:
+
+* Varre os diretórios de cada agente procurando por arquivos de métricas, priorizando `metrics_data.npz` e usando `metrics_data.json` como fallback
+* Gera os gráficos dentro do diretório `figs/` de cada agente, replicando exatamente a estrutura do `run_batch_eval`:
+
+```
+<results_dir>/obj_N/<scenario>_scenario/<agent>/
+    figs/
+        run_1_results_<reward>/               ← episódios individuais
+            order_generation.png
+            route_reordering.png
+            driver_establishment_metrics.png
+        run_2_results_<reward>/
+            ...
+        mean_results_<avg_reward>_route_reordering.png   ← lote
+        mean_results_<avg_reward>_other_metrics.png      ← lote
+```
+
+#### 📦 Como usar:
+
+```bash
+# Gerar todos os gráficos (padrão)
+python -m scripts.generate_plots --results-dir ./data/runs/execucoes
+
+# Somente gráficos de episódios individuais
+python -m scripts.generate_plots --results-dir ./data/runs/execucoes --only-episode
+
+# Somente gráficos agregados de lote
+python -m scripts.generate_plots --results-dir ./data/runs/execucoes --only-batch
+```
+
+#### ⚙️ Opções de Configuração
+
+| Opção | Descrição | Padrão |
+|-------|-----------|--------|
+| `--results-dir` / `-r` | Diretório raiz com os resultados (`obj_N/`). | `./data/runs/execucoes` |
+| `--objectives` / `-o` | Objetivos a processar (1–13). Aceita múltiplos valores. | todos (1–13) |
+| `--scenarios` / `-s` | Cenários a processar. Aceita múltiplos valores. | todos |
+| `--only-episode` | Gera somente os gráficos de episódios individuais. Mutuamente exclusivo com `--only-batch`. | — |
+| `--only-batch` | Gera somente os gráficos agregados de lote. Mutuamente exclusivo com `--only-episode`. | — |
+
+---
+
+### 🔄 Script `convert_metrics`: Conversão entre NPZ e JSON
+
+Converte arquivos de métricas entre os formatos NPZ (comprimido) e JSON (legível), tanto para arquivos individuais quanto para diretórios inteiros de forma recursiva.
+
+#### ✅ O que ele faz:
+
+* Converte um único arquivo `.npz` → `.json` ou `.json` → `.npz`
+* Quando recebe um diretório, varre recursivamente procurando por todos os arquivos com o nome-base configurado (padrão: `metrics_data`) e converte cada um no mesmo diretório onde foi encontrado
+* Suporta `--dry-run` para inspecionar o que seria convertido sem gravar nada
+
+#### 📦 Como usar:
+
+```bash
+# Converter um arquivo NPZ individual para JSON
+python -m scripts.convert_metrics ./data/runs/execucoes/obj_1/initial_scenario/random/metrics_data.npz
+
+# Converter um arquivo JSON individual para NPZ
+python -m scripts.convert_metrics ./data/runs/execucoes/obj_1/initial_scenario/random/metrics_data.json
+
+# Converter todos os arquivos metrics_data.npz e metrics_data.json em um diretório (recursivo)
+python -m scripts.convert_metrics ./data/runs/execucoes
+
+# Verificar o que seria convertido sem gravar nada
+python -m scripts.convert_metrics ./data/runs/execucoes --dry-run
+```
+
+#### ⚙️ Opções de Configuração
+
+| Opção | Descrição | Padrão |
+|-------|-----------|--------|
+| `path` | Arquivo `.npz` / `.json` ou diretório a processar. | — |
+| `--name` | Nome-base dos arquivos buscados em modo diretório. | `metrics_data` |
+| `--dry-run` | Exibe o que seria convertido sem gravar nenhum arquivo. | — |
 
 ---
 
 ### 📊 Script `generate_table`: Geração de Planilhas Excel com Métricas
 
-Esse script consolida os resultados gerados pelo `run_batch_eval` e gera automaticamente a planilha Excel com as métricas estatísticas de todos os agentes.
+Consolida os resultados gerados pelo `run_batch_eval` e gera automaticamente uma planilha Excel com as métricas estatísticas de todos os agentes. Suporta métricas em NPZ ou JSON, priorizando NPZ quando ambos estiverem disponíveis.
 
 #### ✅ O que ele faz:
 
@@ -772,13 +909,12 @@ Esse script consolida os resultados gerados pelo `run_batch_eval` e gera automat
   * **Tempo Efetivo Gasto**
   * **Distância Percorrida**
 * Destaca em negrito o melhor agente por cenário/objetivo em cada aba (maior média em Recompensas; menor nas demais)
-* Gera um novo arquivo: `objective_table.xlsx`
+* Cria automaticamente os diretórios de saída caso não existam
 
 #### 📦 Como usar:
 
-Garanta que o script `run_batch_eval` já foi executado e os arquivos `metrics_data.npz` foram gerados, então execute:
-
 ```bash
+# Padrão — gera tabela com todos os dados disponíveis
 python -m scripts.generate_table
 ```
 
@@ -787,20 +923,17 @@ python -m scripts.generate_table
 | Opção | Descrição | Padrão |
 |-------|-----------|--------|
 | `--results-dir` / `-r` | Diretório raiz com os resultados (`obj_N/`). | `./data/runs/execucoes` |
-| `--output` / `-out` | Caminho do arquivo Excel de saída. | `objective_table.xlsx` |
+| `--output` / `-out` | Caminho do arquivo Excel de saída. Diretórios intermediários são criados automaticamente. | `objective_table.xlsx` |
 | `--objectives` / `-o` | Objetivos a incluir (1–13). Aceita múltiplos valores. | todos (1–13) |
 | `--scenarios` / `-s` | Cenários a incluir: `initial`, `medium`, `complex`. Aceita múltiplos valores. | todos |
 
 #### 🔹 Exemplos
 
 ```bash
-# Padrão — gera tabela com todos os dados disponíveis
-python -m scripts.generate_table
-
 # Diretório e arquivo de saída customizados
 python -m scripts.generate_table \
     --results-dir ./data/runs/execucoes \
-    --output ./resultados/minha_tabela.xlsx
+    --output ./data/tabelas/objective_table.xlsx
 
 # Apenas objetivos e cenários específicos
 python -m scripts.generate_table --objectives 1 3 5 --scenarios initial medium

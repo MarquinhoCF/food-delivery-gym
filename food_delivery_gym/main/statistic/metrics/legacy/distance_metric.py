@@ -4,10 +4,10 @@ import numpy as np
 
 from food_delivery_gym.main.environment.food_delivery_simpy_env import FoodDeliverySimpyEnv
 from food_delivery_gym.main.events.event_type import EventType
-from food_delivery_gym.main.statistic.metric import Metric
+from food_delivery_gym.main.statistic.metrics.legacy.metric_env_data import MetricEnvData
 
 
-class DistanceMetric(Metric):
+class DistanceMetric(MetricEnvData):
 
     def __init__(self, environment: FoodDeliverySimpyEnv, table=False):
         super().__init__(environment)

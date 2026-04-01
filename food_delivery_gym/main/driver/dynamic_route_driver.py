@@ -67,6 +67,45 @@ class DynamicRouteDriver(Driver):
         self.total_distance_saved = 0
         self.total_distance_increased = 0
 
+    def get_episode_stats(self) -> dict:
+        """
+        Retorna as métricas do episódio atual como dict plano.
+        Sobrescreve Driver.get_episode_stats() adicionando métricas de reordenação.
+        Chamado por SimulationStats.register_episode() — não há efeito colateral.
+        """
+        base = super().get_episode_stats()
+        base["reordering"] = {
+            "total_reorderings":    self.total_reorderings,
+            "successful_reorderings": self.successful_reorderings,
+            "failed_reorderings":     self.failed_reorderings,
+            "net_time_impact":      self.total_time_saved - self.total_time_lost,
+            "net_distance_impact":  self.total_distance_saved - self.total_distance_increased,
+            "success_rate": (
+                self.successful_reorderings / self.total_reorderings * 100
+                if self.total_reorderings > 0 else 0
+            ),
+        }
+        return base
+ 
+    def get_reordering_statistics(self) -> Dict:
+        """Retorna estatísticas detalhadas de reordenação (para uso direto)."""
+        return {
+            "total_reorderings":      self.total_reorderings,
+            "successful_reorderings": self.successful_reorderings,
+            "failed_reorderings":     self.failed_reorderings,
+            "total_time_saved":       self.total_time_saved,
+            "total_time_lost":        self.total_time_lost,
+            "net_time_impact":        self.total_time_saved - self.total_time_lost,
+            "total_distance_saved":   self.total_distance_saved,
+            "total_distance_increased": self.total_distance_increased,
+            "net_distance_impact":    self.total_distance_saved - self.total_distance_increased,
+            "success_rate": (
+                self.successful_reorderings / self.total_reorderings * 100
+                if self.total_reorderings > 0 else 0
+            ),
+            "events": self.reordering_events,
+        }
+
     def picked_up(self, order: Order) -> None:
         self.publish_event(DriverPickedUpOrder(
             order=order,
@@ -266,42 +305,3 @@ class DynamicRouteDriver(Driver):
             )
         )
     
-    def get_reordering_statistics(self) -> Dict:
-        """Retorna estatísticas sobre reordenação de rotas"""
-        return {
-            'total_reorderings': self.total_reorderings,
-            'successful_reorderings': self.successful_reorderings,
-            'failed_reorderings': self.failed_reorderings,
-            'total_time_saved': self.total_time_saved,
-            'total_time_lost': self.total_time_lost,
-            'net_time_impact': self.total_time_saved - self.total_time_lost,
-            'total_distance_saved': self.total_distance_saved,
-            'total_distance_increased': self.total_distance_increased,
-            'net_distance_impact': self.total_distance_saved - self.total_distance_increased,
-            'success_rate': (self.successful_reorderings / self.total_reorderings * 100 if self.total_reorderings > 0 else 0),
-            'events': self.reordering_events
-        }
-    
-    def register_statistic_data(self):
-        id = self.driver_id
-        FoodDeliverySimpyEnv.driver_metrics[id]["orders_delivered"].append(self.orders_delivered)
-        FoodDeliverySimpyEnv.driver_metrics[id]["time_spent_on_delivery"].append(self.get_time_spent_on_delivery())
-        FoodDeliverySimpyEnv.driver_metrics[id]["idle_time"].append(self.idle_time)
-        FoodDeliverySimpyEnv.driver_metrics[id]["time_waiting_for_order"].append(self.time_waiting_for_order)
-        FoodDeliverySimpyEnv.driver_metrics[id]["total_distance"].append(self.total_distance)
-        reordering = {
-            'total_reorderings': self.total_reorderings,
-            'net_time_impact': self.total_time_saved - self.total_time_lost,
-            'net_distance_impact': self.total_distance_saved - self.total_distance_increased,
-            'success_rate': (self.successful_reorderings / self.total_reorderings * 100 if self.total_reorderings > 0 else 0),
-        }
-        FoodDeliverySimpyEnv.driver_metrics[id]["reordering"].append(reordering)
-    
-    def reset_statistics(self):
-        id = self.driver_id
-        FoodDeliverySimpyEnv.driver_metrics[id]["orders_delivered"].clear()
-        FoodDeliverySimpyEnv.driver_metrics[id]["time_spent_on_delivery"].clear()
-        FoodDeliverySimpyEnv.driver_metrics[id]["idle_time"].clear()
-        FoodDeliverySimpyEnv.driver_metrics[id]["time_waiting_for_order"].clear()
-        FoodDeliverySimpyEnv.driver_metrics[id]["total_distance"].clear()
-        FoodDeliverySimpyEnv.driver_metrics[id]["reordering"].clear()

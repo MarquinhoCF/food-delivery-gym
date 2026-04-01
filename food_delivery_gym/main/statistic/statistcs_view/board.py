@@ -1,7 +1,7 @@
 from abc import abstractmethod
 from typing import List
 
-from food_delivery_gym.main.statistic.metric import Metric
+from food_delivery_gym.main.statistic.metrics.metric import Metric
 
 
 class Board:
@@ -11,4 +11,8 @@ class Board:
 
     @abstractmethod
     def view(self) -> None:
+        pass
+
+    @abstractmethod
+    def save(self, dir_path: str) -> None:
         pass

@@ -15,10 +15,6 @@ from food_delivery_gym.main.view.food_delivery_view import FoodDeliveryView
 
 class FoodDeliverySimpyEnv(Environment):
 
-    # Armazena listas de valores para cálculos estatísticos
-    establishment_metrics = defaultdict(lambda: defaultdict(list))
-    driver_metrics = defaultdict(lambda: defaultdict(list))
-
     def __init__(self, map: Map, generators, optimizer, view: FoodDeliveryView = None):
         super().__init__()
         self.map = map
@@ -69,6 +65,9 @@ class FoodDeliverySimpyEnv(Environment):
     
     def get_drivers(self):
         return self._state.drivers
+    
+    def get_establishments(self):
+        return self._state.establishments
 
     def add_ready_order(self, order, event):
         self._state.orders_awaiting_delivery.append(order)
@@ -155,91 +154,4 @@ class FoodDeliverySimpyEnv(Environment):
     def update_spent_drivers(self):
         for driver in self._state.drivers:
             driver.update_spent_time()
-
-    def register_statistic_data(self):
-        for establishment in self._state.establishments:
-            establishment.register_statistic_data()
-
-        for driver in self._state.drivers:
-            driver.register_statistic_data()
-
-    def get_statistics_data(self):
-        return FoodDeliverySimpyEnv.establishment_metrics, FoodDeliverySimpyEnv.driver_metrics
-
-    def reset_statistics(self):
-        for establishment in self._state.establishments:
-            establishment.reset_statistics()
-
-        for driver in self._state.drivers:
-            driver.reset_statistics()
-
-
-    def compute_statistics(self):
-        statistics = {"establishments": {}, "drivers": {}}
-
-        # Establishments
-        for id, metrics in FoodDeliverySimpyEnv.establishment_metrics.items():
-            statistics["establishments"][id] = {
-                key: self.calculate_stats_generic(values)
-                for key, values in metrics.items()
-            }
-
-        # Drivers
-        for id, metrics in FoodDeliverySimpyEnv.driver_metrics.items():
-            statistics["drivers"][id] = {
-                key: self.calculate_stats_generic(values)
-                for key, values in metrics.items()
-            }
-
-        return statistics
-    
-    def calculate_stats_generic(self, values):
-        """
-        Calcula estatísticas de forma genérica:
-        - Lista de números → calcula diretamente
-        - Lista de dicts → calcula por campo interno
-        - Qualquer outra coisa → ignora e retorna {}
-        """
-
-        if not values:
-            return {}
-
-        # Caso 1: lista de números (int/float)
-        if all(isinstance(v, (int, float, np.number)) for v in values):
-
-            def compute_mode(vs):
-                if len(vs) == 1:
-                    return vs[0]
-                counter = Counter(vs)
-                return counter.most_common(1)[0][0]
-
-            return {
-                "mean": float(np.mean(values)),
-                "std_dev": float(np.std(values)) if len(values) > 1 else 0.0,
-                "median": float(np.median(values)),
-                "mode": compute_mode(values),
-            }
-
-        # Caso 2: lista de dicts → achatar por chave
-        if all(isinstance(v, dict) for v in values):
-            grouped = {}
-
-            for item in values:
-                for key, val in item.items():
-                    if isinstance(val, (int, float, np.number)):
-                        grouped.setdefault(key, []).append(val)
-
-            if not grouped:
-                return {}
-
-            return {k: self.calculate_stats_generic(vs) for k, vs in grouped.items()}
-
-        # Caso 3: tipos misturados → ignora
-        return {}
-    
-    def save_metrics_to_file(self, filename="metrics_data.npz"):
-        np.savez_compressed(
-            filename,
-            establishment_metrics=dict(FoodDeliverySimpyEnv.establishment_metrics),
-            driver_metrics=dict(FoodDeliverySimpyEnv.driver_metrics)
-        )
+            

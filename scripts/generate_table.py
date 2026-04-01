@@ -5,11 +5,14 @@ Gera automaticamente a planilha de resultados (objective_table.xlsx) a partir
 dos dados produzidos pelo script evaluate_agents.py.
 
 - Descobre agentes e modelos PPO varrendo os diretórios de resultados
+- Tenta carregar metrics_data.npz; se não encontrar, tenta metrics_data.json
+- Usa SimulationStats para acessar os dados agregados
 - Constrói o Excel dinamicamente: sem mapeamentos manuais de colunas
 - Replica o estilo visual do template original
 - Destaca em negrito o melhor agente por cenário/objetivo em cada aba
 """
 
+import json
 import os
 import argparse
 import numpy as np
@@ -17,12 +20,15 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
+from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
+from food_delivery_gym.main.scenarios import get_defaults_scenarios
+
 # ── Configuração de diretórios ────────────────────────────────────────────────
 
 DEFAULT_RESULTS_DIR = "./data/runs/execucoes"
 DEFAULT_OUTPUT_PATH = "objective_table.xlsx"
-ALL_OBJECTIVES      = list(range(1, 14))
-ALL_SCENARIOS       = ["initial", "medium", "complex"]
+ALL_OBJECTIVES      = FoodDeliveryGymEnv.REWARD_OBJECTIVES
+DEFAULT_SCENARIOS   = get_defaults_scenarios()
 SCENARIO_LABELS     = {"initial": "Inicial", "medium": "Médio", "complex": "Complexo"}
 METRICS             = ["avg", "std_dev", "median", "mode"]
 METRIC_LABELS       = ["Média", "Desvio Padrão", "Mediana", "Moda"]
@@ -38,23 +44,24 @@ KNOWN_HEURISTICS = {
     "lowest_marginal_route_cost":"Motorista de Menor Custo Marginal de Rota",
 }
 
-# Métricas disponíveis nos .npz → nome da aba
-NPZ_KEY_TO_SHEET = {
-    "total_rewards_statistics":          "Recompensas",
-    "time_spent_on_delivery_statistics": "Tempo Efetivo Gasto",
-    "total_distance_traveled_statistics":"Distância Percorrida",
+# Chaves de SimulationStats.aggregate → nome da aba
+# Deve corresponder ao que finalize() grava em self.aggregate
+AGG_KEY_TO_SHEET = {
+    "rewards":       "Recompensas",
+    "delivery_time": "Tempo Efetivo Gasto",
+    "distance":      "Distância Percorrida",
 }
 
 # Recompensas: maior é melhor; demais métricas: menor é melhor
 HIGHER_IS_BETTER = {"Recompensas"}
 
 # ── Paleta de cores (extraída do template original) ───────────────────────────
-COLOR_HEADER_BG   = "104862"   # azul escuro — cabeçalhos
-COLOR_HEADER_FG   = "FFFFFF"   # branco
-COLOR_OBJ_BG      = "CAEEFB"   # azul claro — célula do objetivo
-COLOR_ROW_ALT_A   = "A6CAEC"   # azul médio — média / mediana
-COLOR_ROW_ALT_B   = "DCEAF7"   # azul pálido — desvio padrão / moda
-COLOR_SEP_BG      = "104862"   # separador entre cenários
+COLOR_HEADER_BG = "104862"   # azul escuro — cabeçalhos
+COLOR_HEADER_FG = "FFFFFF"   # branco
+COLOR_OBJ_BG    = "CAEEFB"   # azul claro — célula do objetivo
+COLOR_ROW_ALT_A = "A6CAEC"   # azul médio — média / mediana
+COLOR_ROW_ALT_B = "DCEAF7"   # azul pálido — desvio padrão / moda
+COLOR_SEP_BG    = "104862"   # separador entre cenários
 
 ROW_FILLS = [COLOR_ROW_ALT_A, COLOR_ROW_ALT_B, COLOR_ROW_ALT_A, COLOR_ROW_ALT_B]
 
@@ -139,6 +146,73 @@ def style_data_cell(cell, value, row_idx, bold=False):
     cell.border    = _thin_border()
     cell.alignment = _center()
 
+# ── Carregamento direto de agregados (NPZ ou JSON) ───────────────────────────
+
+def _load_aggregate_npz(npz_path: str) -> dict:
+    """
+    Lê apenas as chaves agg__<metric>__<stat> do arquivo NPZ.
+
+    Retorna dict no formato: { "rewards": { "avg": 1.2, ... }, ... }
+    """
+    aggregate: dict = {}
+    with np.load(npz_path, allow_pickle=False) as raw:
+        for key in raw.files:
+            parts = key.split("__")
+            if parts[0] == "agg" and len(parts) == 3:
+                _, metric, stat = parts
+                val = raw[key]
+                aggregate.setdefault(metric, {})[stat] = (
+                    int(val[0]) if stat == "n" else float(val[0])
+                )
+    return aggregate
+
+
+def _load_aggregate_json(json_path: str) -> dict:
+    """
+    Lê o campo 'aggregate' do arquivo JSON.
+
+    Retorna dict no formato: { "rewards": { "avg": 1.2, ... }, ... }
+    """
+    with open(json_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    return data.get("aggregate", {})
+
+
+def load_aggregate(agent_dir: str) -> dict | None:
+    """
+    Carrega os agregados do diretório do agente.
+
+    Ordem de tentativa:
+      1. metrics_data.npz  →  chaves agg__*
+      2. metrics_data.json →  campo "aggregate"
+
+    Retorna None se nenhum arquivo for encontrado ou ocorrer erro.
+    """
+    npz_path  = os.path.join(agent_dir, "metrics_data.npz")
+    json_path = os.path.join(agent_dir, "metrics_data.json")
+
+    if os.path.exists(npz_path):
+        try:
+            return _load_aggregate_npz(npz_path)
+        except Exception as e:
+            print(f"  [Erro NPZ] {npz_path}: {e}")
+
+    if os.path.exists(json_path):
+        try:
+            return _load_aggregate_json(json_path)
+        except Exception as e:
+            print(f"  [Erro JSON] {json_path}: {e}")
+
+    return None
+
+
+def _has_metrics_file(agent_dir: str) -> bool:
+    """Verifica se há ao menos um arquivo de métricas no diretório do agente."""
+    return (
+        os.path.isfile(os.path.join(agent_dir, "metrics_data.npz")) or
+        os.path.isfile(os.path.join(agent_dir, "metrics_data.json"))
+    )
+
 # ── Descoberta de agentes ─────────────────────────────────────────────────────
 
 def agent_label(dir_name: str) -> str:
@@ -150,11 +224,15 @@ def agent_label(dir_name: str) -> str:
         return f"PPO — {suffix}"
     return dir_name
 
+
 def discover_agents(results_dir: str, objectives: list, scenarios: list) -> list:
     """
     Varre results_dir para descobrir todos os agentes presentes.
-    Retorna lista ordenada: primeiro as heurísticas conhecidas (na ordem de
-    KNOWN_HEURISTICS), depois os modelos PPO em ordem alfabética.
+
+    Um agente é válido se seu diretório contém metrics_data.npz ou
+    metrics_data.json. Retorna lista ordenada: heurísticas conhecidas
+    primeiro (na ordem de KNOWN_HEURISTICS), depois modelos PPO
+    em ordem alfabética.
     """
     found = set()
     for obj in objectives:
@@ -163,27 +241,12 @@ def discover_agents(results_dir: str, objectives: list, scenarios: list) -> list
             if not os.path.isdir(path):
                 continue
             for entry in os.scandir(path):
-                if entry.is_dir() and os.path.isfile(
-                    os.path.join(entry.path, "metrics_data.npz")
-                ):
+                if entry.is_dir() and _has_metrics_file(entry.path):
                     found.add(entry.name)
 
     heuristics = [k for k in KNOWN_HEURISTICS if k in found]
     ppo_models = sorted(d for d in found if d not in KNOWN_HEURISTICS)
     return heuristics + ppo_models
-
-def load_metrics(npz_path: str) -> dict:
-    """Carrega métricas de um arquivo .npz. Retorna dict vazio se inválido."""
-    try:
-        data = np.load(npz_path, allow_pickle=True)
-        result = {}
-        for key in NPZ_KEY_TO_SHEET:
-            arr = data.get(key)
-            result[key] = arr.item() if (isinstance(arr, np.ndarray) and arr.dtype == object) else None
-        return result
-    except Exception as e:
-        print(f"  [Erro] {npz_path}: {e}")
-        return {}
 
 # ── Construção do Excel ───────────────────────────────────────────────────────
 
@@ -191,49 +254,41 @@ def build_workbook(results_dir: str, objectives: list, scenarios: list, agents: 
     wb = Workbook()
     wb.remove(wb.active)
 
-    for sheet_key, sheet_name in NPZ_KEY_TO_SHEET.items():
+    for agg_key, sheet_name in AGG_KEY_TO_SHEET.items():
         ws = wb.create_sheet(sheet_name)
-        _build_sheet(ws, sheet_name, sheet_key, results_dir, objectives, scenarios, agents)
+        _build_sheet(ws, sheet_name, agg_key, results_dir, objectives, scenarios, agents)
 
     return wb
 
 
-def _build_sheet(ws, sheet_name: str, sheet_key: str, results_dir: str,
+def _build_sheet(ws, sheet_name: str, agg_key: str, results_dir: str,
                  objectives: list, scenarios: list, agents: list):
     """Constrói uma aba completa."""
 
     # ── Dimensões dinâmicas ──────────────────────────────────────────────────
     # Layout de colunas por cenário:
-    #   col_A: "Objetivo N"
-    #   col_B: descrição
-    #   col_C: rótulo estatístico ("Média", "Desvio Padrão", …)  — separador
-    #   col_D … col_D+len(agents)-1: dados de cada agente
-    #
-    # COL_A=1, COL_B=2
-    # Para cada cenário i:
-    #   sep_col   = 3 + i * (1 + len(agents) + 1)
-    #   first_agent_col = sep_col + 1
-    #   last_agent_col  = sep_col + 1 + len(agents)
+    #   col 1: "Objetivo N"
+    #   col 2: descrição
+    #   Para cada cenário i:
+    #     sep_col          = 3 + i * (1 + len(agents))
+    #     first_agent_col  = sep_col + 1
+    #     last_agent_col   = sep_col + len(agents)
 
     n = len(agents)
 
     def scenario_start(i):
-        """Coluna do separador "/////..." para o cenário i (0-indexed)."""
-        return 3 + i * (n + 1)   # sep + stats_label + n agents
+        """Coluna do separador de estatísticas para o cenário i (0-indexed)."""
+        return 3 + i * (n + 1)
 
     def first_agent_col(i):
         return scenario_start(i) + 1
 
-    total_cols = scenario_start(len(scenarios))  # after last scenario
-
     # ── Linha 1: Cenário ─────────────────────────────────────────────────────
-    # Colunas A, B fixas
     style_header(ws.cell(1, 1), "Cenário")
     style_separator(ws.cell(1, 2), "//////////")
 
     for i, scenario in enumerate(scenarios):
-        sep = scenario_start(i)
-        # Merge da label do cenário sobre as colunas de dados
+        sep         = scenario_start(i)
         label_start = sep
         label_end   = sep + n
         style_header(ws.cell(1, label_start), SCENARIO_LABELS[scenario])
@@ -247,8 +302,7 @@ def _build_sheet(ws, sheet_name: str, sheet_key: str, results_dir: str,
     style_header(ws.cell(2, 1), "Heurísticas")
     style_header(ws.cell(2, 2), "Descrição")
 
-    for i in enumerate(scenarios):
-        sc_idx = i[0]
+    for sc_idx, _ in enumerate(scenarios):
         sep = scenario_start(sc_idx)
         style_header(ws.cell(2, sep), "Estatísticas")
         for j, agent in enumerate(agents):
@@ -261,7 +315,7 @@ def _build_sheet(ws, sheet_name: str, sheet_key: str, results_dir: str,
         for m_i, (metric_key, metric_label) in enumerate(zip(METRICS, METRIC_LABELS)):
             row = base_row + m_i
 
-            # Coluna A: label do objetivo (apenas na primeira linha, com merge)
+            # Coluna A: label do objetivo (merge nas 4 linhas do objetivo)
             if m_i == 0:
                 style_obj_label(ws.cell(row, 1), f"Objetivo {obj}")
                 if ROWS_PER_OBJECTIVE > 1:
@@ -277,7 +331,6 @@ def _build_sheet(ws, sheet_name: str, sheet_key: str, results_dir: str,
                     end_row=row + ROWS_PER_OBJECTIVE - 1, end_column=2
                 )
             else:
-                # preenche A e B vazios com mesmo fill para aparência uniforme
                 c_a = ws.cell(row, 1)
                 c_a.fill   = _fill(COLOR_OBJ_BG)
                 c_a.border = _thin_border()
@@ -292,27 +345,19 @@ def _build_sheet(ws, sheet_name: str, sheet_key: str, results_dir: str,
                 # Rótulo estatístico
                 style_metric_label(ws.cell(row, sep), metric_label, m_i)
 
-                # Dados de cada agente
+                # Dados de cada agente via SimulationStats
                 for j, agent in enumerate(agents):
-                    npz_path = os.path.join(
-                        results_dir, f"obj_{obj}", f"{scenario}_scenario",
-                        agent, "metrics_data.npz"
+                    agent_dir = os.path.join(
+                        results_dir, f"obj_{obj}", f"{scenario}_scenario", agent
                     )
-                    value = None
-                    if os.path.exists(npz_path):
-                        metrics = load_metrics(npz_path)
-                        stats = metrics.get(sheet_key)
-                        if stats:
-                            value = stats.get(metric_key)
-                            if isinstance(value, (np.floating, np.integer)):
-                                value = float(value)
 
+                    value = _get_metric_value(agent_dir, agg_key, metric_key)
                     style_data_cell(ws.cell(row, first_agent_col(sc_i) + j), value, m_i)
 
     # ── Destacar melhor média por cenário/objetivo ────────────────────────────
     _highlight_best(ws, sheet_name, objectives, scenarios, agents,
                     scenario_start, first_agent_col, n)
-    
+
     # ── Altura das linhas ────────────────────────────────────────────────────
     ws.row_dimensions[1].height = 35
     ws.row_dimensions[2].height = 45
@@ -320,16 +365,37 @@ def _build_sheet(ws, sheet_name: str, sheet_key: str, results_dir: str,
     # ── Larguras de coluna ────────────────────────────────────────────────────
     ws.column_dimensions[get_column_letter(1)].width = 12
     ws.column_dimensions[get_column_letter(2)].width = 48
-    for i, scenario in enumerate(scenarios):
+    for i, _ in enumerate(scenarios):
         sep = scenario_start(i)
         ws.column_dimensions[get_column_letter(sep)].width = 14
         for j in range(n):
-            col = first_agent_col(i) + j
+            col   = first_agent_col(i) + j
             label = agent_label(agents[j])
             ws.column_dimensions[get_column_letter(col)].width = max(18, min(len(label) * 1.1, 40))
 
     # ── Freeze panes ─────────────────────────────────────────────────────────
     ws.freeze_panes = "B3"
+
+
+def _get_metric_value(agent_dir: str, agg_key: str, metric_key: str) -> float | None:
+    """
+    Carrega os agregados do diretório do agente e retorna o valor de
+    aggregate[agg_key][metric_key], ou None se indisponível.
+
+    agg_key   : chave do agregado ("rewards", "delivery_time", "distance")
+    metric_key: estatística desejada ("avg", "std_dev", "median", "mode")
+    """
+    aggregate = load_aggregate(agent_dir)
+    if aggregate is None:
+        return None
+
+    value = aggregate.get(agg_key, {}).get(metric_key)
+
+    if isinstance(value, (np.floating, np.integer)):
+        return float(value)
+    if isinstance(value, float) and value != value:   # NaN
+        return None
+    return value
 
 
 def _highlight_best(ws, sheet_name, objectives, scenarios, agents,
@@ -391,8 +457,8 @@ def parse_args():
     )
     parser.add_argument(
         "--scenarios", "-s",
-        nargs="+", choices=ALL_SCENARIOS, default=ALL_SCENARIOS, metavar="SCENARIO",
-        help=f"Cenários a incluir. Opções: {ALL_SCENARIOS}. Padrão: todos.",
+        nargs="+", choices=DEFAULT_SCENARIOS, default=DEFAULT_SCENARIOS, metavar="SCENARIO",
+        help=f"Cenários a incluir. Opções: {DEFAULT_SCENARIOS}. Padrão: todos.",
     )
     return parser.parse_args()
 
@@ -404,7 +470,10 @@ def main():
     agents = discover_agents(args.results_dir, args.objectives, args.scenarios)
 
     if not agents:
-        print("[AVISO] Nenhum agente encontrado. Verifique o --results-dir e se os arquivos metrics_data.npz existem.")
+        print(
+            "[AVISO] Nenhum agente encontrado. Verifique o --results-dir e se os "
+            "arquivos metrics_data.npz ou metrics_data.json existem."
+        )
         return
 
     print(f"Agentes encontrados ({len(agents)}): {agents}")
@@ -412,6 +481,7 @@ def main():
     print(f"Cenários:  {args.scenarios}")
 
     wb = build_workbook(args.results_dir, args.objectives, args.scenarios, agents)
+    os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
     wb.save(args.output)
     print(f"\nPlanilha salva em: {args.output}")
 
