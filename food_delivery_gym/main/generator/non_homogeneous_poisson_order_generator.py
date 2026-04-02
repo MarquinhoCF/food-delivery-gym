@@ -25,7 +25,7 @@ class NonHomogeneousPoissonOrderGenerator(PoissonOrderGenerator):
             n_samples = max(500, int(time_window * 20))
             time_samples = np.linspace(0, time_window, n_samples)
             rates = [rate_function(t) for t in time_samples]
-            self.max_rate = max(rates)
+            self.max_rate = max(rates) * 1.1 # margem de segurança
         else:
             self.max_rate = max_rate
 
@@ -45,6 +45,8 @@ class NonHomogeneousPoissonOrderGenerator(PoissonOrderGenerator):
                 break
 
             acceptance_prob = self.rate_function(current_time) / self.max_rate
+            # Clamp garante validade mesmo se a rate_function tiver comportamento inesperado
+            acceptance_prob = min(acceptance_prob, 1.0)
             if self.rng.random() < acceptance_prob:
                 arrival_times.append(current_time)
 

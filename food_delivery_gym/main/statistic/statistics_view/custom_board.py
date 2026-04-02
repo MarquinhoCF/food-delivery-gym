@@ -3,7 +3,7 @@ from typing import List
 
 from matplotlib import pyplot as plt
 
-from food_delivery_gym.main.statistic.statistcs_view.board import Board
+from food_delivery_gym.main.statistic.statistics_view.board import Board
 from food_delivery_gym.main.statistic.metrics.metric import Metric
 
 
@@ -41,4 +41,7 @@ class CustomBoard(Board):
 
         # Exibir a figura
         plt.show()
+    
+    def save(self, dir_path: str) -> None:
+        raise NotImplementedError("O método save ainda não foi implementado para o CustomBoard.")
 

@@ -4,8 +4,6 @@ Helper interno para métricas de barra por MapActor
 Não importar diretamente — use as subclasses específicas.
 """
 
-import statistics as stt
-
 from matplotlib.ticker import FuncFormatter
 
 from food_delivery_gym.main.statistic.metrics.metric import Metric
