@@ -26,11 +26,11 @@ from food_delivery_gym.main.scenarios import get_all_scenarios, get_defaults_sce
 # ── Configuração de diretórios ────────────────────────────────────────────────
 
 DEFAULT_RESULTS_DIR = "./data/runs/execucoes"
-DEFAULT_OUTPUT_PATH = "objective_table.xlsx"
+DEFAULT_OUTPUT_PATH = "./data/teste/runs/tabelas/objective_table.xlsx"
 ALL_OBJECTIVES      = FoodDeliveryGymEnv.REWARD_OBJECTIVES
 ALL_SCENARIOS       = get_all_scenarios()
 DEFAULT_SCENARIOS   = get_defaults_scenarios()
-SCENARIO_LABELS     = {"initial": "Inicial", "medium": "Médio", "medium_driver_cap_4": "Médio (Cap. 4)", "complex": "Complexo"}
+SCENARIO_LABELS     = {"initial": "Inicial", "simple": "Simples", "medium": "Médio", "medium_driver_cap_4": "Médio (Cap. 4)", "complex": "Complexo"}
 METRICS             = ["avg", "std_dev", "median", "mode"]
 METRIC_LABELS       = ["Média", "Desvio Padrão", "Mediana", "Moda"]
 ROWS_PER_OBJECTIVE  = len(METRICS)   # 4 linhas por objetivo

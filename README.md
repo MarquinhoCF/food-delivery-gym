@@ -715,6 +715,7 @@ Automatiza a execução de diferentes agentes otimizadores em combinações de c
   * `LowestCostDriverOptimizerGym` (com custo de rota)
   * `LowestCostDriverOptimizerGym` (com custo marginal de rota)
 * Executa modelos de algoritmos RL (`RLModelOptimizerGym`), com **descoberta automática** dos modelos disponíveis em `--model-base-dir`
+* Suporta dois modos de experimento para seleção dos modelos RL: `cross_scenario` e `same_scenario`
 * Gera arquivos `.txt` com os resultados das execuções
 * Gera arquivos `.npz` ou `.json` contendo as métricas agregadas para análise
 
@@ -737,7 +738,10 @@ python -m scripts.run_batch_eval
 | `--no-rl` | Desativa a execução dos modelos PPO. | — |
 | `--num-runs` / `-n` | Número de simulações por agente. | `20` |
 | `--seed` | Seed para reprodutibilidade. | `123456789` |
-| `--model-base-dir` | Diretório base dos modelos PPO treinados. | `./data/ppo_training/medium/treinamento` |
+| `--experiment-mode` | Modo de seleção dos modelos RL: `cross_scenario` ou `same_scenario`. Ver seção abaixo. | `cross_scenario` |
+| `--train-scenario` | Cenário cujos modelos serão usados no modo `cross_scenario`. Ignorado em `same_scenario`. | `medium` |
+| `--model-base-dir` | Diretório raiz dos modelos PPO treinados. | `./data/ppo_training/` |
+| `--model-subdir` | Subdiretório dentro de `<model-base-dir>/<scenario>/` onde ficam os modelos. | `treinamento` |
 | `--results-base-dir` | Diretório base para salvar resultados. Use `{}` como placeholder para objetivo e cenário. | `./data/runs/execucoes/obj_{}/{}_scenario/` |
 | `--batch-plots` | Ativa a geração de gráficos agregados (lote) ao final de cada agente. | — |
 | `--all-plots` | Ativa todos os gráficos: equivale a `--batch-plots` mais gráficos individuais por episódio. | — |
@@ -747,29 +751,56 @@ Os valores possíveis para `--heuristics` são: `random`, `first_driver`, `neare
 
 > 💡 **Dica:** Para gerar gráficos de execuções anteriores sem re-executar as simulações, use o script `generate_plots` descrito abaixo.
 
+---
+
+#### 🔬 Modos de Experimento para Modelos RL
+
+O argumento `--experiment-mode` controla qual modelo treinado é carregado para cada cenário de avaliação. Existem dois modos:
+
+| Modo | Descrição |
+|------|-----------|
+| `cross_scenario` | Usa os modelos treinados em um único cenário fixo (definido por `--train-scenario`) para avaliar em **todos** os cenários selecionados. Útil para medir a capacidade de generalização do agente. |
+| `same_scenario` | Usa o modelo treinado no **próprio cenário** de avaliação. O argumento `--train-scenario` é ignorado neste modo. |
+
+Em ambos os modos, o caminho efetivo dos modelos é resolvido como:
+```
+<model-base-dir>/<train_scenario>/<model-subdir>/obj_N/<model_name>/best_model.zip
+```
+
+onde `train_scenario` é `--train-scenario` no modo `cross_scenario`, ou o próprio cenário de avaliação no modo `same_scenario`.
+
+---
+
 #### 📁 Estrutura de diretórios para modelos RL
 
-O script descobre automaticamente os modelos disponíveis varrendo `--model-base-dir`. Para que um modelo seja reconhecido, os arquivos devem estar organizados da seguinte forma:
-
+O script descobre automaticamente os modelos disponíveis varrendo o diretório resolvido conforme o modo de experimento. Para que um modelo seja reconhecido, os arquivos devem estar organizados da seguinte forma:
 ```
 <model-base-dir>/
-└── obj_1/
-│   ├── 18M_steps/
-│   │   ├── best_model.zip
-│   │   └── FoodDelivery-medium-obj1-v1/
-│   │       └── vecnormalize.pkl
-│   └── outro_experimento/
-│       ├── best_model.zip
-│       └── FoodDelivery-medium-obj1-v1/
-│           └── vecnormalize.pkl
-└── obj_2/
-    └── ...
+├── medium/
+│   └── treinamento/
+│       ├── obj_1/
+│       │   ├── 18M_steps/
+│       │   │   ├── best_model.zip
+│       │   │   └── FoodDelivery-medium-obj1-v1/
+│       │   │       └── vecnormalize.pkl
+│       │   └── outro_experimento/
+│       │       ├── best_model.zip
+│       │       └── FoodDelivery-medium-obj1-v1/
+│       │           └── vecnormalize.pkl
+│       └── obj_2/
+│           └── ...
+├── simple/
+│   └── treinamento/
+│       └── obj_1/ ...
+└── complex/
+    └── treinamento/
+        └── obj_1/ ...
 ```
 
 As regras são:
 
-* Cada objetivo deve ter seu próprio subdiretório `obj_N/` dentro de `--model-base-dir`
-* Dentro de `obj_N/`, qualquer subdiretório que contenha `best_model.zip` na raiz é detectado como um modelo — o nome do subdiretório se torna o identificador do modelo nos resultados
+* Cada cenário deve ter um subdiretório `treinamento` em `<model-base-dir>/`
+* Dentro de `<scenario>/treinamento/obj_N/`, qualquer subdiretório que contenha best_model.zip na raiz é detectado como um modelo, o nome do diretório que contém o modelo se torna o identificador nos resultados
 * O `vecnormalize.pkl` é carregado automaticamente se encontrado em qualquer subdiretório do modelo. Caso contrário, o modelo é executado sem normalização
 
 > **Observação:** se os modelos foram treinados com o RL Baselines3 Zoo sem mover os arquivos gerados, a estrutura já estará no formato correto automaticamente. Use `--models` apenas para restringir a execução a modelos específicos dentro de `obj_N/`.
@@ -791,6 +822,12 @@ python -m scripts.run_batch_eval --heuristics random nearest_driver
 
 # Forçar modelos RL específicos (sem descoberta automática)
 python -m scripts.run_batch_eval --models 18M_steps 100M_steps
+
+# Experimento cross_scenario: modelo treinado em 'medium', avaliado em todos os cenários
+python -m scripts.run_batch_eval --experiment-mode cross_scenario --train-scenario medium
+
+# Experimento same_scenario: cada cenário usa seu próprio modelo treinado
+python -m scripts.run_batch_eval --experiment-mode same_scenario
 
 # Execução rápida para testes
 python -m scripts.run_batch_eval --num-runs 5 --seed 42 --scenarios initial --objectives 1
@@ -923,7 +960,7 @@ python -m scripts.generate_table
 | Opção | Descrição | Padrão |
 |-------|-----------|--------|
 | `--results-dir` / `-r` | Diretório raiz com os resultados (`obj_N/`). | `./data/runs/execucoes` |
-| `--output` / `-out` | Caminho do arquivo Excel de saída. Diretórios intermediários são criados automaticamente. | `objective_table.xlsx` |
+| `--output` / `-out` | Caminho do arquivo Excel de saída. Diretórios intermediários são criados automaticamente. | `./data/teste/runs/tabelas/objective_table.xlsx` |
 | `--objectives` / `-o` | Objetivos a incluir (1–13). Aceita múltiplos valores. | todos (1–13) |
 | `--scenarios` / `-s` | Cenários a incluir: `initial`, `medium`, `complex`. Aceita múltiplos valores. | todos |
 

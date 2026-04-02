@@ -5,8 +5,6 @@ import json
 import os
 import traceback
 
-import numpy as np
-
 from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
 from food_delivery_gym.main.scenarios import get_all_scenarios, get_defaults_scenarios
 from food_delivery_gym.main.statistic.simulation_stats import SimulationStats
