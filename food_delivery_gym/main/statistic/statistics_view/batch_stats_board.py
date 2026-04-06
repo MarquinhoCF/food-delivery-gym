@@ -8,7 +8,7 @@ import matplotlib
 from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
 
-from food_delivery_gym.main.statistic.statistcs_view.board import Board
+from food_delivery_gym.main.statistic.statistics_view.board import Board
 from food_delivery_gym.main.statistic.metrics.route_reordering_metric import RouteReorderingMetric
 from food_delivery_gym.main.statistic.metrics.establishment_metrics import (
     EstablishmentOrdersFulfilledMetric,
@@ -82,8 +82,8 @@ class BatchStatsBoard(Board):
 
     def _fig_height(self, rows: int) -> float:
         first_ep = self.sim_stats.get_episode_sim(0)
-        num_drivers = len(first_ep.get("drivers", {}))
-        num_establishments = len(first_ep.get("establishments", {}))
+        num_drivers = len(first_ep.get("driver", {}))
+        num_establishments = len(first_ep.get("establishment", {}))
 
         extra = max(num_drivers, num_establishments) * 0.5
         return max(6, rows * 3 + extra)

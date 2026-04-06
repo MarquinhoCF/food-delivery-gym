@@ -5,14 +5,13 @@ import json
 import os
 import traceback
 
-import numpy as np
-
 from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
-from food_delivery_gym.main.scenarios import get_defaults_scenarios
+from food_delivery_gym.main.scenarios import get_all_scenarios, get_defaults_scenarios
 from food_delivery_gym.main.statistic.simulation_stats import SimulationStats
 
 DEFAULT_RESULTS_DIR = "./data/runs/execucoes"
 ALL_OBJECTIVES      = FoodDeliveryGymEnv.REWARD_OBJECTIVES
+ALL_SCENARIOS       = get_all_scenarios()
 DEFAULT_SCENARIOS   = get_defaults_scenarios()
 
 
@@ -215,10 +214,10 @@ def parse_args():
     parser.add_argument(
         "--scenarios", "-s",
         nargs="+",
-        choices=DEFAULT_SCENARIOS,
+        choices=ALL_SCENARIOS,
         default=DEFAULT_SCENARIOS,
         metavar="SCENARIO",
-        help=f"Cenários a processar. Opções: {DEFAULT_SCENARIOS}. Padrão: todos.",
+        help=f"Cenários a processar. Opções: {ALL_SCENARIOS}. Padrão: {DEFAULT_SCENARIOS}.",
     )
 
     mode = parser.add_mutually_exclusive_group()

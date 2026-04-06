@@ -1,5 +1,4 @@
 from importlib.resources import files
-import sys
 import os
 import traceback
 import argparse
@@ -21,6 +20,16 @@ from food_delivery_gym.main.scenarios import get_all_scenarios, get_defaults_sce
 ALL_SCENARIOS = get_all_scenarios()
 DEFAULT_SCENARIOS = get_defaults_scenarios()
 ALL_OBJECTIVES = FoodDeliveryGymEnv.REWARD_OBJECTIVES
+DEFAULT_NUM_RUNS = 20
+DEFAULT_SEED = 123456789
+DEFAULT_MODEL_BASE_DIR = "./data/ppo_training/"
+DEFAULT_MODEL_SUBDIR = "treinamento"
+EXPERIMENT_MODES = ["cross_scenario", "same_scenario"]
+DEFAULT_EXPERIMENT_MODE = "cross_scenario"
+DEFAULT_TRAIN_SCENARIO = "medium"
+DEFAULT_RESULTS_BASE_DIR = "./data/runs/execucoes/obj_{}/{}_scenario/"
+METRICS_FMT_OPTIONS = ["npz", "json"]
+DEFAULT_METRICS_FMT = "npz"
 
 # Chave = identificador do argumento --heuristics
 #   "dir"   = subdiretório de saída (results_dir/<dir>/)
@@ -124,32 +133,73 @@ def parse_args():
     parser.add_argument(
         "--num-runs", "-n",
         type=int,
-        default=20,
-        help="Número de simulações por agente. Padrão: 20.",
+        default=DEFAULT_NUM_RUNS,
+        help=f"Número de simulações por agente. Padrão: {DEFAULT_NUM_RUNS}.",
     )
 
     parser.add_argument(
         "--seed",
         type=int,
-        default=123456789,
-        help="Seed para reprodutibilidade. Padrão: 123456789.",
+        default=DEFAULT_SEED,
+        help=f"Seed para reprodutibilidade. Padrão: {DEFAULT_SEED}.",
     )
 
     parser.add_argument(
         "--model-base-dir",
         type=str,
-        default="./data/ppo_training/medium/treinamento",
-        help="Diretório base dos modelos PPO treinados.",
+        default=DEFAULT_MODEL_BASE_DIR,
+        help=(
+            "Diretório raiz dos modelos PPO treinados.\n"
+            f"Estrutura esperada: <model-base-dir>/<scenario>/{DEFAULT_MODEL_SUBDIR}/obj_N/<model_name>/best_model.zip\n"
+            f"Padrão: {DEFAULT_MODEL_BASE_DIR}"
+        ),
+    )
+
+    parser.add_argument(
+        "--experiment-mode",
+        choices=EXPERIMENT_MODES,
+        default=DEFAULT_EXPERIMENT_MODE,
+        help=(
+            "Modo de seleção dos modelos RL:\n"
+            "  cross_scenario  – usa modelos treinados em --train-scenario para avaliar\n"
+            "                    em todos os cenários selecionados (comportamento anterior).\n"
+            "  same_scenario   – usa o modelo treinado no próprio cenário de avaliação.\n"
+            f"Padrão: {DEFAULT_EXPERIMENT_MODE}"
+        ),
+    )
+
+    parser.add_argument(
+        "--train-scenario",
+        type=str,
+        choices=ALL_SCENARIOS,
+        default=DEFAULT_TRAIN_SCENARIO,
+        help=(
+            "Cenário cujos modelos serão usados no modo cross_scenario.\n"
+            "Ignorado no modo same_scenario.\n"
+            f"Padrão: {DEFAULT_TRAIN_SCENARIO}"
+        ),
     )
 
     parser.add_argument(
         "--results-base-dir",
         type=str,
-        default="./data/runs/execucoes/obj_{}/{}_scenario/",
+        default=DEFAULT_RESULTS_BASE_DIR,
         help=(
             "Diretório base para salvar resultados.\n"
             "Use '{}' como placeholder para objetivo e cenário respectivamente.\n"
-            "Padrão: ./data/runs/execucoes/obj_{}/{}_scenario/"
+            f"Padrão: {DEFAULT_RESULTS_BASE_DIR}"
+        ),
+    )
+
+    parser.add_argument(
+        "--metrics-fmt",
+        choices=METRICS_FMT_OPTIONS,
+        default=DEFAULT_METRICS_FMT,
+        help=(
+            "Formato do arquivo de métricas gerado por simulação.\n"
+            "  npz  – comprimido, menor tamanho em disco (padrão)\n"
+            "  json – legível, estrutura orientada por simulação\n"
+            f"Padrão: {DEFAULT_METRICS_FMT}"
         ),
     )
 
@@ -165,19 +215,7 @@ def parse_args():
         help="Ativa todos os gráficos (equivale a --batch-plots e ativa a geração de gráficos por episódio).",
     )
 
-    parser.add_argument(
-        "--metrics-fmt",
-        choices=["npz", "json"],
-        default="npz",
-        help=(
-            "Formato do arquivo de métricas gerado por simulação.\n"
-            "  npz  – comprimido, menor tamanho em disco (padrão)\n"
-            "  json – legível, estrutura orientada por simulação\n"
-            "Exemplo: --metrics-fmt json"
-        ),
-    )
-
-    return parser.parse_args()
+    return parser, parser.parse_args()
 
 def create_environment(reward_objective: int, scenario_name: str):
     if reward_objective not in range(1, 14):
@@ -325,7 +363,7 @@ def run_rl_models(
 
 
 def main():
-    args = parse_args()
+    parser, args = parse_args()
 
     if args.all_plots:
         args.batch_plots = True
@@ -342,11 +380,25 @@ def main():
     print(f"  Heurísticas  : {args.heuristics if not args.no_heuristics else 'desativadas'}")
     print(f"  RL (PPO)     : {'desativado' if args.no_rl else 'ativado'}")
     print(f"  Runs         : {args.num_runs} | Seed: {args.seed}")
+    print(f"  Modo experim.: {args.experiment_mode}")
     print(f"  Model base   : {args.model_base_dir}")
+    if args.experiment_mode == "cross_scenario":
+        print(f"  Train scenario: {args.train_scenario}")
     print(f"  Results base : {args.results_base_dir}")
     print(f"  Plots indiv. : {'desativados' if not save_individual_plots else 'ativados'}")
     print(f"  Plot médias  : {'desativado' if not save_mean_plots else 'ativado'}")
     print(f"  Formato métr.: {args.metrics_fmt}")
+
+    if not args.no_rl and args.experiment_mode == "cross_scenario":
+        expected_dir = os.path.join(
+            args.model_base_dir, args.train_scenario, DEFAULT_MODEL_SUBDIR
+        )
+        if not os.path.isdir(expected_dir):
+            parser.error(
+                f"--train-scenario '{args.train_scenario}': diretório de modelos não encontrado.\n"
+                f"  Esperado: {expected_dir}\n"
+                "  Verifique --model-base-dir e --train-scenario."
+            )
 
     for objective in args.objectives:
         for scenario in args.scenarios:
@@ -366,9 +418,19 @@ def main():
                 )
 
             if not args.no_rl:
-                models = args.models if args.models else discover_models(args.model_base_dir, objective)
+                # Resolve o diretório de modelos de acordo com o modo de experimento.
+                if args.experiment_mode == "same_scenario":
+                    train_scenario = scenario          # modelo treinado no próprio cenário
+                else:                                  # cross_scenario
+                    train_scenario = args.train_scenario
+
+                effective_model_dir = os.path.join(
+                    args.model_base_dir, train_scenario, DEFAULT_MODEL_SUBDIR
+                )
+
+                models = args.models if args.models else discover_models(effective_model_dir, objective)
                 run_rl_models(
-                    objective, scenario, models, args.model_base_dir, results_dir,
+                    objective, scenario, models, effective_model_dir, results_dir,
                     args.num_runs, args.seed,
                     save_individual_plots=save_individual_plots,
                     save_mean_plots=save_mean_plots,

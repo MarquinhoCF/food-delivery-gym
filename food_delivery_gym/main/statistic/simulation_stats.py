@@ -74,8 +74,8 @@ from typing import IO, Literal
 
 import numpy as np
 
-from food_delivery_gym.main.statistic.statistcs_view.batch_stats_board import BatchStatsBoard
-from food_delivery_gym.main.statistic.statistcs_view.episode_stats_board import EpisodeStatsBoard
+from food_delivery_gym.main.statistic.statistics_view.batch_stats_board import BatchStatsBoard
+from food_delivery_gym.main.statistic.statistics_view.episode_stats_board import EpisodeStatsBoard
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -289,20 +289,6 @@ class SimulationStats:
         self.aggregate: dict                = {}
         self._num_runs: int                 = 0
         self._sim: list[dict] | None        = None
-
-        # Populado por register_episode()
-        self.num_drivers: int | None        = 0
-        self.num_establishments: int | None = 0
-
-    def get_num_drivers(self) -> int:
-        if self.num_drivers is not None:
-            return self.num_drivers
-        raise ValueError("Número de motoristas não registrado. Chame register_episode() primeiro.")
-    
-    def get_num_establishments(self) -> int:
-        if self.num_establishments is not None:
-            return self.num_establishments
-        raise ValueError("Número de estabelecimentos não registrado. Chame register_episode() primeiro.")
     
     # ════════════════════════════════════════════════════════════════════
     #  API principal
@@ -342,9 +328,6 @@ class SimulationStats:
             ],
         }
         self._raw_episodes.append(ep)
-        if self.num_drivers is None and self.num_establishments is None:
-            self.num_drivers = len(ep["drivers"])
-            self.num_establishments = len(ep["establishments"])
         self._sim = None  # invalida cache lazy
 
     def finalize(self) -> "SimulationStats":
@@ -451,16 +434,16 @@ class SimulationStats:
 
     def get_episode_board(self, episode_idx: int,) -> "EpisodeStatsBoard":
         # Importação lazy — evita ciclo de imports entre stats ↔ boards
-        from food_delivery_gym.main.statistic.statistcs_view.episode_stats_board import (
+        from food_delivery_gym.main.statistic.statistics_view.episode_stats_board import (
             EpisodeStatsBoard,
         )
         return EpisodeStatsBoard(sim_stats=self, episode_idx=episode_idx)
 
     def get_batch_board(self) -> "BatchStatsBoard":
-        if self.aggregate is None:
+        if not self.aggregate:
             raise ValueError("Agregados não computados. Chame finalize() antes de obter o batch board.")
         # Importação lazy — evita ciclo de imports entre stats ↔ boards
-        from food_delivery_gym.main.statistic.statistcs_view.batch_stats_board import (
+        from food_delivery_gym.main.statistic.statistics_view.batch_stats_board import (
             BatchStatsBoard,
         )
         return BatchStatsBoard(sim_stats=self)

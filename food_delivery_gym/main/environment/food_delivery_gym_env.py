@@ -379,7 +379,7 @@ class FoodDeliveryGymEnv(Env):
 
         return observation, info
     
-    def reset_environment(self, seed: int | None = None, options: Optional[dict] = None):
+    def clear_simpy_env(self):
         """
         Limpa o último estado da simulação (last_simpy_env).
 
@@ -388,7 +388,6 @@ class FoodDeliveryGymEnv(Env):
         - Este método garante que o último ambiente SimPy, que foi armazenado para estatísticas, seja descartado.
         """
         self.last_simpy_env = None
-        return self.reset(seed=seed, options=options)
     
     def _select_driver_to_order(self, selected_driver, order):
         segment_pickup = PickupRouteSegment(order)

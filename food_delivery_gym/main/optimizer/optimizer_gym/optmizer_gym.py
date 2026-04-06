@@ -5,7 +5,6 @@ import traceback
 from typing import List, Union
 
 import numpy as np
-import statistics as stt
 from stable_baselines3.common.vec_env import VecEnv, VecEnvWrapper
 
 from food_delivery_gym.main.driver.driver import Driver
@@ -17,7 +16,7 @@ from food_delivery_gym.main.route.delivery_route_segment import DeliveryRouteSeg
 from food_delivery_gym.main.route.pickup_route_segment import PickupRouteSegment
 from food_delivery_gym.main.route.route import Route
 from food_delivery_gym.main.statistic.simulation_stats import SimulationStats
-from food_delivery_gym.main.statistic.statistcs_view.board import Board
+from food_delivery_gym.main.statistic.statistics_view.board import Board
 
 
 class OptimizerGym(Optimizer, ABC):
@@ -107,16 +106,17 @@ class OptimizerGym(Optimizer, ABC):
 
     def reset_env(self, seed: int | None = None):
         if self.is_vectorized:
-            # env_method despacha reset_environment para cada sub-ambiente,
-            # limpando last_simpy_env antes do próximo episódio
-            self._call_env_method("reset_environment", seed=seed)
-
-            # Obtém a observação normalizada atualizada pelo VecNormalize
-            self.state = self.wrapped_env.reset()
-            if hasattr(self.wrapped_env, 'seed'):
+            if seed is not None and hasattr(self.wrapped_env, 'seed'):
                 self.wrapped_env.seed(seed)
+
+            # wrapped_env.reset() percorre toda a pilha de wrappers (incluindo
+            # VecNormalize). clear_simpy_env descarta o SimPy env
+            # do episódio anterior sem disparar um segundo reset.
+            self.state = self.wrapped_env.reset()
+            self._call_env_method("clear_simpy_env")
         else:
-            self.state, _ = self.wrapped_env.reset_environment(seed=seed)
+            self.state, _ = self.wrapped_env.reset(seed=seed)
+            self.gym_env.clear_simpy_env()
 
         self.done = False
         self.truncated = False
@@ -231,7 +231,7 @@ class OptimizerGym(Optimizer, ABC):
                     results_file.write(
                         f"Execução {i + 1}: Retorno = {sum_reward:.4f} | "
                         f"Passos = {ep_length} | SimPy t = {simpy_env.now} | "
-                        f"Truncada = {was_truncated}\\n"
+                        f"Truncada = {was_truncated}\n"
                     )
  
                     # ── Gráficos do episódio individual ───────────────────
@@ -283,14 +283,11 @@ class OptimizerGym(Optimizer, ABC):
         results_file.write("\n\n---> Registro de execuções:\n")
 
     # ========================================================
-    #     Helpers de controle do ambiente
+    #     Helper de controle do ambiente
     # ========================================================
 
     def set_gym_env_mode(self, mode: EnvMode):
         self._call_env_method('set_mode', mode)
-
-    def show_statistics_board(self):
-        self._call_env_method('show_statistics_board')
     
     # =====================================================================
     #     Execução interativa / automática
@@ -396,7 +393,7 @@ class OptimizerGym(Optimizer, ABC):
         print(f"\nExecução finalizada em {step} passos")
         print(f"Recompensa total: {sum_reward:.2f}")
 
-        return self._generate_episode_stats_board(sum_reward=sum_reward, step=step)
+        return self._generate_episode_board(sum_reward=sum_reward, step=step)
 
     def run_interactive(self, max_steps: int = 10000) -> Board:
         """

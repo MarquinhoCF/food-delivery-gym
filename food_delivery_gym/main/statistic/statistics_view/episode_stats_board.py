@@ -8,7 +8,7 @@ import matplotlib
 from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
 
-from food_delivery_gym.main.statistic.statistcs_view.board import Board
+from food_delivery_gym.main.statistic.statistics_view.board import Board
 from food_delivery_gym.main.statistic.metrics.poisson_order_generation_metric import PoissonOrderGenerationMetric
 from food_delivery_gym.main.statistic.metrics.order_flow_metric import OrderFlowMetric
 from food_delivery_gym.main.statistic.metrics.route_reordering_metric import RouteReorderingMetric
