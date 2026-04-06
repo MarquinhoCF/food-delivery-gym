@@ -413,7 +413,7 @@ def main():
                     train_scenario = args.train_scenario
 
                 effective_model_dir = os.path.join(
-                    args.model_base_dir, train_scenario, args.model_subdir
+                    args.model_base_dir, train_scenario, DEFAULT_MODEL_SUBDIR
                 )
 
                 models = args.models if args.models else discover_models(effective_model_dir, objective)

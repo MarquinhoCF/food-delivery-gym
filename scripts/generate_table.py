@@ -26,7 +26,7 @@ from food_delivery_gym.main.scenarios import get_all_scenarios, get_defaults_sce
 # ── Configuração de diretórios ────────────────────────────────────────────────
 
 DEFAULT_RESULTS_DIR = "./data/runs/execucoes"
-DEFAULT_OUTPUT_PATH = "./data/teste/runs/tabelas/objective_table.xlsx"
+DEFAULT_OUTPUT_PATH = "./data/runs/tabelas/objective_table.xlsx"
 ALL_OBJECTIVES      = FoodDeliveryGymEnv.REWARD_OBJECTIVES
 ALL_SCENARIOS       = get_all_scenarios()
 DEFAULT_SCENARIOS   = get_defaults_scenarios()
