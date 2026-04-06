@@ -453,13 +453,19 @@ def parse_args():
     )
     parser.add_argument(
         "--objectives", "-o",
-        nargs="+", type=int, default=ALL_OBJECTIVES, metavar="N",
+        nargs="+", 
+        type=int, 
+        default=ALL_OBJECTIVES, 
+        metavar="N",
         help="Objetivos a incluir. Padrão: todos (1–13).",
     )
     parser.add_argument(
         "--scenarios", "-s",
-        nargs="+", choices=ALL_SCENARIOS, default=DEFAULT_SCENARIOS, metavar="SCENARIO",
-        help=f"Cenários a incluir. Opções: {DEFAULT_SCENARIOS}. Padrão: todos.",
+        nargs="+", 
+        choices=ALL_SCENARIOS, 
+        default=DEFAULT_SCENARIOS, 
+        metavar="SCENARIO",
+        help=f"Cenários a incluir. Opções: {ALL_SCENARIOS}. Padrão: {DEFAULT_SCENARIOS}.",
     )
     return parser.parse_args()
 

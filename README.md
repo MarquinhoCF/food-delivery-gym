@@ -731,7 +731,7 @@ python -m scripts.run_batch_eval
 | Opção | Descrição | Padrão |
 |-------|-----------|--------|
 | `--objectives` / `-o` | Objetivos de recompensa a executar (1–13). Aceita múltiplos valores. | todos (1–13) |
-| `--scenarios` / `-s` | Cenários a executar: `initial`, `medium`, `complex`. Aceita múltiplos valores. | todos |
+| `--scenarios` / `-s` | Cenários a executar: `simple`, `medium`, `complex`. Aceita múltiplos valores. | todos |
 | `--heuristics` | Heurísticas a executar. Aceita múltiplos valores. | todas |
 | `--models` / `-m` | Nomes dos modelos RL (subdiretórios de `obj_N/` com `best_model.zip`). | descoberta automática |
 | `--no-heuristics` | Desativa a execução de todas as heurísticas. | — |
@@ -740,8 +740,7 @@ python -m scripts.run_batch_eval
 | `--seed` | Seed para reprodutibilidade. | `123456789` |
 | `--experiment-mode` | Modo de seleção dos modelos RL: `cross_scenario` ou `same_scenario`. Ver seção abaixo. | `cross_scenario` |
 | `--train-scenario` | Cenário cujos modelos serão usados no modo `cross_scenario`. Ignorado em `same_scenario`. | `medium` |
-| `--model-base-dir` | Diretório raiz dos modelos PPO treinados. | `./data/ppo_training/` |
-| `--model-subdir` | Subdiretório dentro de `<model-base-dir>/<scenario>/` onde ficam os modelos. | `treinamento` |
+| `--model-base-dir` | Diretório raiz dos modelos PPO treinados. Os modelos são buscados em `<model-base-dir>/<scenario>/treinamento/`. | `./data/ppo_training/` |
 | `--results-base-dir` | Diretório base para salvar resultados. Use `{}` como placeholder para objetivo e cenário. | `./data/runs/execucoes/obj_{}/{}_scenario/` |
 | `--batch-plots` | Ativa a geração de gráficos agregados (lote) ao final de cada agente. | — |
 | `--all-plots` | Ativa todos os gráficos: equivale a `--batch-plots` mais gráficos individuais por episódio. | — |
@@ -830,7 +829,7 @@ python -m scripts.run_batch_eval --experiment-mode cross_scenario --train-scenar
 python -m scripts.run_batch_eval --experiment-mode same_scenario
 
 # Execução rápida para testes
-python -m scripts.run_batch_eval --num-runs 5 --seed 42 --scenarios initial --objectives 1
+python -m scripts.run_batch_eval --num-runs 5 --seed 42 --scenarios simple --objectives 1
 
 # Gerar gráficos de lote ao final de cada agente
 python -m scripts.run_batch_eval --batch-plots
@@ -910,10 +909,10 @@ Converte arquivos de métricas entre os formatos NPZ (comprimido) e JSON (legív
 
 ```bash
 # Converter um arquivo NPZ individual para JSON
-python -m scripts.convert_metrics ./data/runs/execucoes/obj_1/initial_scenario/random/metrics_data.npz
+python -m scripts.convert_metrics ./data/runs/execucoes/obj_1/simple_scenario/random/metrics_data.npz
 
 # Converter um arquivo JSON individual para NPZ
-python -m scripts.convert_metrics ./data/runs/execucoes/obj_1/initial_scenario/random/metrics_data.json
+python -m scripts.convert_metrics ./data/runs/execucoes/obj_1/simple_scenario/random/metrics_data.json
 
 # Converter todos os arquivos metrics_data.npz e metrics_data.json em um diretório (recursivo)
 python -m scripts.convert_metrics ./data/runs/execucoes
@@ -960,9 +959,9 @@ python -m scripts.generate_table
 | Opção | Descrição | Padrão |
 |-------|-----------|--------|
 | `--results-dir` / `-r` | Diretório raiz com os resultados (`obj_N/`). | `./data/runs/execucoes` |
-| `--output` / `-out` | Caminho do arquivo Excel de saída. Diretórios intermediários são criados automaticamente. | `./data/teste/runs/tabelas/objective_table.xlsx` |
+| `--output` / `-out` | Caminho do arquivo Excel de saída. Diretórios intermediários são criados automaticamente. | `./data/runs/tabelas/objective_table.xlsx` |
 | `--objectives` / `-o` | Objetivos a incluir (1–13). Aceita múltiplos valores. | todos (1–13) |
-| `--scenarios` / `-s` | Cenários a incluir: `initial`, `medium`, `complex`. Aceita múltiplos valores. | todos |
+| `--scenarios` / `-s` | Cenários a incluir: `simple`, `medium`, `complex`. Aceita múltiplos valores. | todos |
 
 #### 🔹 Exemplos
 
@@ -970,8 +969,8 @@ python -m scripts.generate_table
 # Diretório e arquivo de saída customizados
 python -m scripts.generate_table \
     --results-dir ./data/runs/execucoes \
-    --output ./data/tabelas/objective_table.xlsx
+    --output ./data/runs/tabelas/objective_table.xlsx
 
 # Apenas objetivos e cenários específicos
-python -m scripts.generate_table --objectives 1 3 5 --scenarios initial medium
+python -m scripts.generate_table --objectives 1 3 5 --scenarios simple medium
 ```

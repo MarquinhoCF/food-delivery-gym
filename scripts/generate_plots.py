@@ -217,7 +217,7 @@ def parse_args():
         choices=ALL_SCENARIOS,
         default=DEFAULT_SCENARIOS,
         metavar="SCENARIO",
-        help=f"Cenários a processar. Opções: {DEFAULT_SCENARIOS}. Padrão: todos.",
+        help=f"Cenários a processar. Opções: {ALL_SCENARIOS}. Padrão: {DEFAULT_SCENARIOS}.",
     )
 
     mode = parser.add_mutually_exclusive_group()

@@ -150,7 +150,7 @@ def parse_args():
         default=DEFAULT_MODEL_BASE_DIR,
         help=(
             "Diretório raiz dos modelos PPO treinados.\n"
-            f"Estrutura esperada: <model-base-dir>/<scenario>/{DEFAULT_RESULTS_BASE_DIR}/obj_N/<model_name>/best_model.zip\n"
+            f"Estrutura esperada: <model-base-dir>/<scenario>/{DEFAULT_MODEL_SUBDIR}/obj_N/<model_name>/best_model.zip\n"
             f"Padrão: {DEFAULT_MODEL_BASE_DIR}"
         ),
     )
@@ -171,6 +171,7 @@ def parse_args():
     parser.add_argument(
         "--train-scenario",
         type=str,
+        choices=ALL_SCENARIOS,
         default=DEFAULT_TRAIN_SCENARIO,
         help=(
             "Cenário cujos modelos serão usados no modo cross_scenario.\n"
@@ -214,7 +215,7 @@ def parse_args():
         help="Ativa todos os gráficos (equivale a --batch-plots e ativa a geração de gráficos por episódio).",
     )
 
-    return parser.parse_args()
+    return parser, parser.parse_args()
 
 def create_environment(reward_objective: int, scenario_name: str):
     if reward_objective not in range(1, 14):
@@ -362,7 +363,7 @@ def run_rl_models(
 
 
 def main():
-    args = parse_args()
+    parser, args = parse_args()
 
     if args.all_plots:
         args.batch_plots = True
@@ -387,6 +388,17 @@ def main():
     print(f"  Plots indiv. : {'desativados' if not save_individual_plots else 'ativados'}")
     print(f"  Plot médias  : {'desativado' if not save_mean_plots else 'ativado'}")
     print(f"  Formato métr.: {args.metrics_fmt}")
+
+    if not args.no_rl and args.experiment_mode == "cross_scenario":
+        expected_dir = os.path.join(
+            args.model_base_dir, args.train_scenario, DEFAULT_MODEL_SUBDIR
+        )
+        if not os.path.isdir(expected_dir):
+            parser.error(
+                f"--train-scenario '{args.train_scenario}': diretório de modelos não encontrado.\n"
+                f"  Esperado: {expected_dir}\n"
+                "  Verifique --model-base-dir e --train-scenario."
+            )
 
     for objective in args.objectives:
         for scenario in args.scenarios:
