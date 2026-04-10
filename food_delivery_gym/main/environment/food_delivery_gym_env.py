@@ -211,58 +211,53 @@ class FoodDeliveryGymEnv(Env):
             )
 
     def get_observation(self):
+        n = self.num_drivers
+        drivers = self.simpy_env.state.drivers
+
         # --- Motoristas ---
-        # 1. drivers_coord: Coordenada atual de cada motorista (posição no grid)
-        drivers_coord = np.zeros((self.num_drivers*2,), dtype=self.dtype_observation)
-        for i, driver in enumerate(self.simpy_env.state.drivers):
-            coords = driver.get_coordinate()
-            index = i * 2
-            drivers_coord[index] = coords[0]
-            drivers_coord[index + 1] = coords[1]
-        # 2. drivers_estimated_remaining_time: Tempo estimado restante para cada motorista completar todas as entregas na sua lista
-        drivers_estimated_remaining_time = np.zeros((self.num_drivers,), dtype=self.dtype_observation)
-        for i, driver in enumerate(self.simpy_env.state.drivers):
+        drivers_coord = np.empty((n * 2,), dtype=self.dtype_observation)
+        drivers_estimated_remaining_time = np.empty((n,), dtype=self.dtype_observation)
+        driver_status = np.empty((n,), dtype=self.dtype_observation)
+        drivers_queue_size = np.empty((n,), dtype=self.dtype_observation)
+        drivers_velocity = np.empty((n,), dtype=self.dtype_observation)
+        order_estimated_delivery_time = np.empty((n,), dtype=self.dtype_observation)
+        for i, driver in enumerate(drivers):
+            # 1. Coordenada atual
+            coord = driver.get_coordinate()
+            drivers_coord[i * 2]     = coord[0]
+            drivers_coord[i * 2 + 1] = coord[1]
+            # 2. Tempo estimado restante para completar todas as entregas
             drivers_estimated_remaining_time[i] = driver.estimate_total_busy_time()
-        # 3. driver_status: Status atual de cada motorista (disponível, coletando, entregando, etc.)
-        driver_status = np.zeros((self.num_drivers,), dtype=self.dtype_observation)
-        for i, driver in enumerate(self.simpy_env.state.drivers):
+            # 3. Status atual (disponível, coletando, entregando, etc.)
             driver_status[i] = driver.get_status_for_observation().value
-        # 4. drivers_queue_size: Número de pedidos na lista de cada motorista
-        drivers_queue_size = np.zeros((self.num_drivers,), dtype=self.dtype_observation)
-        for i, driver in enumerate(self.simpy_env.state.drivers):
+            # 4. Número de pedidos na lista
             drivers_queue_size[i] = driver.get_number_of_orders_in_list()
-        # 5. drivers_velocity: Velocidade de cada motorista
-        drivers_velocity = np.zeros((self.num_drivers,), dtype=self.dtype_observation)
-        for i, driver in enumerate(self.simpy_env.state.drivers):
+            # 5. Velocidade
             drivers_velocity[i] = driver.get_velocity()
+            # 6. Tempo estimado para entregar o pedido atual caso seja atribuído a este motorista
+            order_estimated_delivery_time[i] = driver.estimate_time_to_complete_next_order(self.current_order)
 
         # --- Pedido Atual ---
-        # 1. order_restaurant_coord: Coordenada do restaurante do pedido atual
-        order_restaurant_coord = np.zeros((2,), dtype=self.dtype_observation)
-        if self.current_order:
-            order_restaurant_coord[0] = self.current_order.get_establishment().get_coordinate()[0]
-            order_restaurant_coord[1] = self.current_order.get_establishment().get_coordinate()[1]
-        # 2. order_customer_coord: Coordenada do cliente do pedido atual
-        order_customer_coord = np.zeros((2,), dtype=self.dtype_observation)
-        if self.current_order:
-            order_customer_coord[0] = self.current_order.get_customer().get_coordinate()[0]
-            order_customer_coord[1] = self.current_order.get_customer().get_coordinate()[1]
-        # 3. order_estimated_ready_time: Tempo estimado para o pedido atual ficar pronto no restaurante
+        order_restaurant_coord  = np.zeros((2,), dtype=self.dtype_observation)
+        order_customer_coord    = np.zeros((2,), dtype=self.dtype_observation)
         order_estimated_ready_time = np.zeros((1,), dtype=self.dtype_observation)
         if self.current_order:
+            # 1. Coordenada do restaurante do pedido atual
+            est_coord = self.current_order.get_establishment().get_coordinate()
+            order_restaurant_coord[0] = est_coord[0]
+            order_restaurant_coord[1] = est_coord[1]
+            # 2. Coordenada do cliente do pedido atual
+            cust_coord = self.current_order.get_customer().get_coordinate()
+            order_customer_coord[0] = cust_coord[0]
+            order_customer_coord[1] = cust_coord[1]
+            # 3. Tempo estimado para o pedido ficar pronto no restaurante
             order_estimated_ready_time[0] = self.current_order.get_estimated_ready_time()
-        # 4. order_estimated_delivery_time: Tempo estimado para o pedido atual ser entregue ao cliente
-        order_estimated_delivery_time = np.zeros((self.num_drivers,), dtype=self.dtype_observation)
-        for i, driver in enumerate(self.simpy_env.state.drivers):
-                    order_estimated_delivery_time[i] = driver.estimate_time_to_complete_next_order(self.current_order)
 
         # --- Ambiente ---
-        # 1. current_time_step: O tempo atual da simulação (número do passo)
-        current_time_step = self.simpy_env.now
-        current_time_step = np.array([current_time_step], dtype=self.dtype_observation)
+        # 1. Tempo atual da simulação
+        current_time_step = np.array([self.simpy_env.now], dtype=self.dtype_observation)
 
-        # Criando a observação final no formato esperado
-        obs = {
+        return {
             'drivers_coord': drivers_coord,
             'drivers_estimated_remaining_time': drivers_estimated_remaining_time,
             'driver_status': driver_status,
@@ -274,8 +269,6 @@ class FoodDeliveryGymEnv(Env):
             'order_estimated_delivery_time': order_estimated_delivery_time,
             'current_time_step': current_time_step
         }
-
-        return obs
        
     def get_info(self):
         return {'simpy_time_step': self.simpy_env.now}
