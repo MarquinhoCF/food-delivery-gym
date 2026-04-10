@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 import traceback
 from typing import Optional
+
+from food_delivery_gym.main.utils.rate_function_utils import build_rate_function, validate_rate_function
 import numpy as np
 from gymnasium import Env
 from gymnasium.spaces import Dict, Box, Discrete
@@ -122,6 +124,7 @@ class FoodDeliveryGymEnv(Env):
         if og["type"] == "non_homogeneous_poisson":
             if "rate_function" not in og:
                 raise ValueError("rate_function é obrigatório para 'non_homogeneous_poisson'")
+            validate_rate_function(og["rate_function"])
         
         self.estimated_num_orders = og["estimated_num_orders"]
         self.order_generator_config = scenario.get("order_generator", {})
@@ -198,7 +201,7 @@ class FoodDeliveryGymEnv(Env):
         
         elif generator_type == "non_homogeneous_poisson":
             rate_function_code = self.order_generator_config["rate_function"]
-            rate_function = eval(rate_function_code) # Cria a função de taxa a partir do código
+            rate_function = build_rate_function(rate_function_code)
             
             return NonHomogeneousPoissonOrderGenerator(
                 estimated_num_orders=estimated_num_orders,

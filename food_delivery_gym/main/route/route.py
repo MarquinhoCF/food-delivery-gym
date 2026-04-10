@@ -1,3 +1,4 @@
+import uuid
 from typing import List
 
 from food_delivery_gym.main.base.dimensions import Dimensions
@@ -7,18 +8,11 @@ from food_delivery_gym.main.route.route_segment import RouteSegment
 
 
 class Route:
-    _id_counter = 0  # Variável estática para o ID
-
     def __init__(self, environment: FoodDeliverySimpyEnv, route_segments: List[RouteSegment]):
-        self.route_id = Route._generate_id()
+        self.route_id = uuid.uuid4()  # ID único global, seguro para uso em processos paralelos
         self.environment = environment
         self.route_segments = route_segments
         self.required_capacity = self.calculate_required_capacity()
-
-    @classmethod
-    def _generate_id(cls):
-        cls._id_counter += 1
-        return cls._id_counter
 
     def calculate_required_capacity(self):
         dimensions = Dimensions(0, 0, 0, 0)
