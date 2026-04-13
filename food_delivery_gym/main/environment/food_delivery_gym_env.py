@@ -70,6 +70,7 @@ class FoodDeliveryGymEnv(Env):
         self._last_decision_time = None # Último passo de tempo em que o agente tomou uma decisão
         self.last_simpy_env = None # Ambiente de simulação da execução anterior -> para fins de computação de estatísticas
         self.orders_generated = None # Número de pedidos que o gerador de pedidos vai gerar
+        self._cached_busy_times: np.ndarray | None = None # Cache de estimate_total_busy_time() do último get_observation()
 
         # Definindo o objetivo da recompensa
         self.set_reward_objective(reward_objective)
@@ -257,6 +258,9 @@ class FoodDeliveryGymEnv(Env):
         # 1. Tempo atual da simulação
         current_time_step = np.array([self.simpy_env.now], dtype=self.dtype_observation)
 
+        # Persiste o array de busy times para reutilização em _calculate_reward() (objetivos que somam estimate_total_busy_time)
+        self._cached_busy_times = drivers_estimated_remaining_time
+
         return {
             'drivers_coord': drivers_coord,
             'drivers_estimated_remaining_time': drivers_estimated_remaining_time,
@@ -396,8 +400,8 @@ class FoodDeliveryGymEnv(Env):
 
         # Objetivo 1: Minimizar o tempo de entrega a partir da expectativa de tempo gasto com a entrega -> Recompensa negativa a cada passo
         if self.reward_objective == 1:
-            # Soma das estimativas do tempo de ocupação de cada motoristas
-            reward = -sum(driver.estimate_total_busy_time() for driver in self.simpy_env.state.drivers)
+            # Reutiliza o array já calculado em get_observation() — evita recalcular estimate_total_busy_time() por driver
+            reward = -float(self._cached_busy_times.sum())
 
         # Objetivo 2: Minimizar o custo de operação a partir da expectativa da distância a ser percorrida -> Recompensa negativa a cada passo
         if self.reward_objective == 2:
