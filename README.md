@@ -974,3 +974,91 @@ python -m scripts.generate_table \
 # Apenas objetivos e cenários específicos
 python -m scripts.generate_table --objectives 1 3 5 --scenarios simple medium
 ```
+
+---
+
+### 📊 Script `generate_boxplots`: Geração de Boxplots Comparativos
+
+Gera boxplots para comparar visualmente o desempenho dos agentes em três métricas independentes: **Recompensa Acumulada**, **Tempo Efetivo Gasto** e **Distância Percorrida**. Lê os arquivos `metrics_data.npz` / `metrics_data.json` produzidos pelo `run_batch_eval`.
+
+#### O que ele faz:
+
+* Descobre automaticamente todos os agentes com dados disponíveis no diretório de resultados
+* Suporta dois modos de agrupamento no eixo X: **por agente** (padrão) ou **por cenário** (`--by-scenario`)
+* Permite gerar uma figura única com as três métricas lado a lado, arquivos separados por métrica (`--split`) ou um subplot por cenário (`--split-scenarios`)
+* Exibe opcionalmente outliers, médias (losango), valores numéricos das médias e anotação do N amostral por box
+* Adiciona entradas de estatísticas (mediana e média) na legenda via `--legend-stats`
+* Exporta nos formatos `pdf`, `png` ou `svg`
+
+#### 📦 Como usar:
+
+```bash
+# Gerar figura com os três boxplots (padrão: objetivo 3, todos os cenários)
+python generate_boxplots.py
+
+# Selecionar agentes e cenário específico
+python generate_boxplots.py --agents random nearest_driver lowest_marginal_route_cost \
+       --scenarios simple
+
+# Comparar dois modelos PPO com heurísticas, objetivo 5
+python generate_boxplots.py --agents random nearest_driver ppo_18M ppo_36M --objective 5
+
+# Salvar cada métrica em arquivo separado, alta resolução, formato SVG
+python generate_boxplots.py --split --dpi 600 --fmt svg
+
+# Um PNG por métrica com N subplots (um por cenário), legenda unificada
+python generate_boxplots.py --by-scenario --split-scenarios
+
+# Ocultar outliers, exibir médias e anotar N amostras
+python generate_boxplots.py --no-fliers --show-means --show-mean-values --annotate-n
+
+# Adicionar entradas de mediana e média na legenda
+python generate_boxplots.py --by-scenario --split-scenarios --show-means --legend-stats
+
+# Selecionar apenas recompensa e distância
+python generate_boxplots.py --metrics rewards distance
+```
+
+#### ⚙️ Opções de Configuração
+
+**Dados**
+
+| Opção | Descrição | Padrão |
+|-------|-----------|--------|
+| `--results-dir` / `-r` | Diretório raiz com os resultados (`obj_N/`). | `./data/runs/execucoes` |
+| `--objective` / `-o` | Número do objetivo a processar (`obj_N/`). | `3` |
+| `--scenarios` / `-s` | Cenários a incluir: `simple`, `medium`, `complex`. Aceita múltiplos valores. | todos |
+| `--agents` / `-a` | Nomes dos diretórios dos agentes, na ordem desejada. Se omitido, todos os agentes com dados são descobertos automaticamente. | descoberta automática |
+| `--exclude-agents` | Agentes a excluir mesmo que descobertos automaticamente. | — |
+
+**Métricas**
+
+| Opção | Descrição | Padrão |
+|-------|-----------|--------|
+| `--metrics` / `-M` | Métricas a plotar: `rewards`, `delivery_time`, `distance`. Aceita múltiplos valores. | todas |
+
+**Layout e visualização**
+
+| Opção | Descrição | Padrão |
+|-------|-----------|--------|
+| `--by-scenario` | Agrupa por agente no eixo X, usando cenários como grupos de boxes. Por padrão, o eixo X é de cenários com agentes como grupos. | — |
+| `--split-scenarios` | Gera 1 arquivo por métrica com N subplots (um por cenário), cada um com escala Y independente. Requer `--by-scenario`. | — |
+| `--split` | Salva cada métrica em um arquivo separado em vez de uma figura única. | — |
+| `--no-fliers` | Oculta os outliers (pontos além dos whiskers). | — |
+| `--show-means` | Exibe a média como um losango dentro de cada box. | — |
+| `--show-mean-values` | Anota o valor numérico da média ao lado de cada losango. Requer `--show-means`. | — |
+| `--annotate-n` | Anota o número de amostras (N) abaixo de cada box. | — |
+| `--suptitle` | Título geral da figura. | — |
+| `--legend-cols` | Número de colunas da legenda. | automático |
+| `--legend-stats` | Adiciona entradas de Mediana (linha preta) e, se `--show-means` ativo, Média (losango) na legenda. | — |
+
+**Saída**
+
+| Opção | Descrição | Padrão |
+|-------|-----------|--------|
+| `--output-dir` / `-od` | Diretório de saída das figuras. | `./data/runs/figuras` |
+| `--prefix` | Prefixo do nome do arquivo de saída. | `boxplot` |
+| `--fmt` | Formato de saída: `pdf`, `png`, `svg`. | `pdf` |
+| `--figsize` | Dimensões da figura `(largura altura)` em polegadas. | `16 5` |
+| `--dpi` | Resolução em DPI. | `300` |
+| `--font-size` | Tamanho base da fonte. | `9` |

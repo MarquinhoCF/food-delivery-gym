@@ -3,7 +3,7 @@
       "type": "non_homogeneous_poisson",
       "estimated_num_orders": 576,
       "time_window": 960,
-      "rate_function": "lambda t: 0.3115 + 0.9345 * (np.exp(-((t - 330)**2) / 7000) + np.exp(-((t - 630)**2) / 7000))"
+      "rate_function": "lambda t: 0.3115 + 0.9345 * (exp(-((t - 330)**2) / 7000) + exp(-((t - 630)**2) / 7000))"
     },
     "simpy_env": {
         "max_time_step": 5760
