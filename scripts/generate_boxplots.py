@@ -1,30 +1,3 @@
-"""
-generate_boxplots.py
-────────────────────
-Gera boxplots para três métricas independentes:
-  • Recompensa Acumulada   (ep__rewards)
-  • Tempo Efetivo Gasto    (ep__delivery_time)
-  • Distância Percorrida   (ep__distance)
-
-Lê arquivos metrics_data.npz / metrics_data.json gerados por SimulationStats.save()
-na estrutura:
-  <results-dir>/obj_<N>/<scenario>_scenario/<agent>/metrics_data.*
-
-Uso rápido
-──────────
-  # Todos os agentes, cenário simples, objetivo 3
-  python generate_boxplots.py --objective 3 --scenarios simple
-
-  # Só heurísticas, sem PPO, comparar cenários lado a lado
-  python generate_boxplots.py --agents random nearest_driver lowest_marginal_route_cost
-
-  # Salvar cada métrica em arquivo separado, formato SVG
-  python generate_boxplots.py --split --fmt svg
-
-  # Controlar tamanho e DPI para publicação
-  python generate_boxplots.py --figsize 18 5 --dpi 600 --fmt pdf
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -49,6 +22,8 @@ KNOWN_AGENTS: dict[str, str] = {
     "nearest_driver":               "Mot. Próximo",
     "lowest_route_cost":            "Menor Custo",
     "lowest_marginal_route_cost":   "Menor Custo Marg.",
+    "ppo_18M_steps":                "PPO Padrão",
+    "ppo_18M_steps_otimizado":      "PPO Otimizado",
 }
 
 HEURISTIC_DIRS = set(KNOWN_AGENTS.keys())
@@ -60,16 +35,16 @@ SCENARIO_LABELS   = {"simple": "Simples", "medium": "Médio", "complex": "Comple
 _BASE_PALETTE = [
     "#E64B35",  # vermelho
     "#4DBBD5",  # azul claro
-    "#00A087",  # verde-água
+    "#FF8C00",  # laranja
+    "#036060",  # verde escuro
     "#3C5488",  # azul escuro
-    "#F39B7F",  # salmão
-    "#8491B4",  # roxo claro
+    "#6A0572",  # roxo escuro
+    "#00A087",  # verde-água
     "#91D1C2",  # menta
     "#DC0000",  # vermelho vivo
     "#7E6148",  # marrom
     "#B09C85",  # bege
-    "#FF8C00",  # laranja
-    "#6A0572",  # roxo escuro
+    "#8491B4",  # roxo claro
 ]
 
 # Paleta alternativa por cenário (para modo --by-scenario)
