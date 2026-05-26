@@ -1,3 +1,4 @@
+from collections import deque
 from typing import Optional, List
 
 from simpy.events import ProcessGenerator
@@ -51,7 +52,7 @@ class Driver(MapActor):
 
         self.current_route: Optional[Route] = None
         self.current_route_segment: Optional[RouteSegment] = None
-        self.route_requests: List[Route] = []
+        self.route_requests: deque[Route] = deque()
 
         # Variável para retornar a recompensa do objetivo 5: 
         # Minimizar o tempo de entrega a partir da expectativa de tempo gasto com a entrega ao final do episódio 
@@ -116,7 +117,7 @@ class Driver(MapActor):
     def process_route_requests(self) -> ProcessGenerator:
         while True:
             if self.route_requests:
-                route = self.route_requests.pop(0)
+                route = self.route_requests.popleft()
                 self.process_route_request(route)
                 yield self.timeout(self.time_to_accept_or_reject_route())
             else:

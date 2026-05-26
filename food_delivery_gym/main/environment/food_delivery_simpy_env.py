@@ -1,6 +1,6 @@
-from collections import Counter, defaultdict
+from collections import deque
 from statistics import mode
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 from simpy import Environment, Event
@@ -26,7 +26,7 @@ class FoodDeliverySimpyEnv(Environment):
         self._state = DeliveryEnvState()
         self.init()
 
-        self.core_events: List[Event] = []
+        self.core_events: deque = deque()
 
     def set_env_mode(self, mode: EnvMode):
         self.env_mode = mode
@@ -35,10 +35,7 @@ class FoodDeliverySimpyEnv(Environment):
         self.core_events.append(event)
     
     def dequeue_core_event(self):
-        if self.core_events:
-            return self.core_events.pop(0)
-        else:
-            return None
+        return self.core_events.popleft() if self.core_events else None
     
     def clear_core_events(self):
         self.core_events.clear()
