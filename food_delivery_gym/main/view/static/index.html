@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Food Delivery – Lavras, MG</title>
+  <link rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style>
+    html, body, #map { height: 100%; margin: 0; }
+    #panel {
+      position: absolute; top: 10px; right: 10px; z-index: 1000;
+      background: rgba(255,255,255,.9); padding: 12px;
+      border-radius: 8px; font-family: monospace; min-width: 180px;
+    }
+    #panel h3 { margin: 0 0 8px; font-size: 14px; }
+    #panel p  { margin: 2px 0; font-size: 12px; }
+  </style>
+</head>
+<body>
+<div id="map"></div>
+<div id="panel">
+  <h3>Simulação Lavras</h3>
+  <p>Tempo: <span id="sim-time">–</span></p>
+  <p>Entregues: <span id="delivered">–</span></p>
+  <p>WS: <span id="ws-status" style="color:red">desconectado</span></p>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ── Mapa ───────────────────────────────────────────────────────────
+const CENTER = [-21.241, -44.990];
+const map = L.map("map").setView(CENTER, 15);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  attribution: "© OpenStreetMap contributors"
+}).addTo(map);
+
+// ── Estado ─────────────────────────────────────────────────────────
+const layers = { drivers: {}, establishments: {}, customers: {} };
+const routes = {};   // driver_id → polyline
+
+function iconDriver(color, status) {
+  const pulse = status.includes("DELIVERING") || status.includes("PICKING")
+    ? "●" : "◎";
+  return L.divIcon({
+    html: `<div style="color:${color};font-size:20px;line-height:1">${pulse}</div>`,
+    iconSize: [20, 20], className: ""
+  });
+}
+function iconEstablishment() {
+  return L.divIcon({
+    html: `<div style="font-size:18px">🏪</div>`,
+    iconSize: [22, 22], className: ""
+  });
+}
+function iconCustomer() {
+  return L.divIcon({
+    html: `<div style="font-size:14px">📍</div>`,
+    iconSize: [16, 22], className: ""
+  });
+}
+
+// ── Atualização de estado ───────────────────────────────────────────
+function applyState(data) {
+  document.getElementById("sim-time").textContent =
+    Math.round(data.time);
+  document.getElementById("delivered").textContent =
+    data.delivered;
+
+  // Motoristas
+  const seenDrivers = new Set();
+  for (const d of data.drivers) {
+    seenDrivers.add(d.id);
+    const pos = [d.lat, d.lon];
+
+    if (!layers.drivers[d.id]) {
+      layers.drivers[d.id] = L.marker(pos, { icon: iconDriver(d.color, d.status) })
+        .bindTooltip(`Motorista ${d.id}`)
+        .addTo(map);
+    } else {
+      layers.drivers[d.id].setLatLng(pos);
+      layers.drivers[d.id].setIcon(iconDriver(d.color, d.status));
+    }
+
+    // Rota
+    if (routes[d.id]) map.removeLayer(routes[d.id]);
+    if (d.route && d.route.length > 1) {
+      routes[d.id] = L.polyline(d.route, {
+        color: d.color, weight: 3, opacity: 0.7, dashArray: "6 4"
+      }).addTo(map);
+    }
+  }
+  // Remove motoristas desaparecidos
+  for (const id of Object.keys(layers.drivers)) {
+    if (!seenDrivers.has(Number(id))) {
+      map.removeLayer(layers.drivers[id]);
+      delete layers.drivers[id];
+    }
+  }
+
+  // Estabelecimentos (estáticos — só cria)
+  for (const e of data.establishments) {
+    if (!layers.establishments[e.id]) {
+      layers.establishments[e.id] = L.marker([e.lat, e.lon], {
+        icon: iconEstablishment()
+      }).bindTooltip(`Estab. ${e.id} | fila: ${e.queue}`).addTo(map);
+    } else {
+      layers.establishments[e.id].getTooltip()
+        .setContent(`Estab. ${e.id} | fila: ${e.queue}`);
+    }
+  }
+
+  // Clientes
+  const seenCustomers = new Set();
+  for (const c of data.customers) {
+    seenCustomers.add(c.id);
+    if (!layers.customers[c.id]) {
+      layers.customers[c.id] = L.marker([c.lat, c.lon], {
+        icon: iconCustomer()
+      }).bindTooltip(`Cliente ${c.id}`).addTo(map);
+    }
+  }
+  for (const id of Object.keys(layers.customers)) {
+    if (!seenCustomers.has(Number(id))) {
+      map.removeLayer(layers.customers[id]);
+      delete layers.customers[id];
+    }
+  }
+}
+
+// ── WebSocket ───────────────────────────────────────────────────────
+function connect() {
+  const ws = new WebSocket("ws://localhost:8765");
+  const statusEl = document.getElementById("ws-status");
+
+  ws.onopen = () => {
+    statusEl.textContent = "conectado";
+    statusEl.style.color = "green";
+  };
+  ws.onmessage = (evt) => {
+    const data = JSON.parse(evt.data);
+    if (data.type === "state") applyState(data);
+  };
+  ws.onclose = () => {
+    statusEl.textContent = "reconectando…";
+    statusEl.style.color = "orange";
+    setTimeout(connect, 2000);
+  };
+  ws.onerror = () => ws.close();
+}
+
+connect();
+</script>
+</body>
+</html>

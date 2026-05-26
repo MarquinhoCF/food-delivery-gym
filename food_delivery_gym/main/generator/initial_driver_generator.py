@@ -21,7 +21,7 @@ class InitialDriverGenerator(InitialGenerator):
                 coordinate=env.map.random_point(),
                 available=True,
                 status=DriverStatus.AVAILABLE,
-                movement_rate=self.rng.integers(self.vel_drivers[0], self.vel_drivers[1]+1),
+                movement_rate=float(self.rng.integers(self.vel_drivers[0], self.vel_drivers[1]+1)),
                 # Gerar uma cor aleatória RGB para cada motorista
                 color=(self.rng.integers(0, 255+1), self.rng.integers(0, 255+1), self.rng.integers(0, 255+1)),
                 reward_objective=self.reward_objective,

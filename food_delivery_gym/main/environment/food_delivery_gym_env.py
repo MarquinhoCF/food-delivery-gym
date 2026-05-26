@@ -3,6 +3,9 @@ from pathlib import Path
 import traceback
 from typing import Optional
 
+from food_delivery_gym.main.view.http_server import start_http_server
+
+from food_delivery_gym.main.map.osmnx_map import OSMnxMap
 from food_delivery_gym.main.utils.rate_function_utils import build_rate_function, validate_rate_function
 import numpy as np
 from gymnasium import Env
@@ -21,6 +24,7 @@ from food_delivery_gym.main.route.delivery_route_segment import DeliveryRouteSeg
 from food_delivery_gym.main.route.pickup_route_segment import PickupRouteSegment
 from food_delivery_gym.main.route.route import Route
 from food_delivery_gym.main.utils.random_manager import RandomManager
+from food_delivery_gym.main.view.leaflet_view import LeafletView
 from food_delivery_gym.main.view.grid_view_pygame import GridViewPygame
 
 class FoodDeliveryGymEnv(Env):
@@ -76,18 +80,29 @@ class FoodDeliveryGymEnv(Env):
         self.set_reward_objective(reward_objective)
 
         # Espaço de Observação
+        LAT_MIN, LAT_MAX = -21.265, -21.218
+        LON_MIN, LON_MAX = -45.010, -44.970
         self.dtype_observation = np.float32
         self.observation_space = Dict({
             # --- Motoristas ---
-            'drivers_coord': Box(low=0, high=self.grid_map_size - 1, shape=(self.num_drivers*2,), dtype=self.dtype_observation),
+            'drivers_lat': Box(low=LAT_MIN, high=LAT_MAX,
+                       shape=(self.num_drivers,), dtype=self.dtype_observation),
+            'drivers_lon': Box(low=LON_MIN, high=LON_MAX,
+                       shape=(self.num_drivers,), dtype=self.dtype_observation),
             'drivers_estimated_remaining_time': Box(low=0, high=self.max_time_step, shape=(self.num_drivers,), dtype=self.dtype_observation),
             'driver_status': Box(low=1, high=len(DriverStatus), shape=(self.num_drivers,), dtype=self.dtype_observation),
             'drivers_queue_size': Box(low=0, high=self.estimated_num_orders * 1.2, shape=(self.num_drivers,), dtype=self.dtype_observation),
             'drivers_velocity': Box(low=min(self.vel_drivers), high=max(self.vel_drivers), shape=(self.num_drivers,), dtype=self.dtype_observation),
 
             # --- Pedido Atual ---  
-            'order_restaurant_coord': Box(low=0, high=self.grid_map_size - 1, shape=(2,), dtype=self.dtype_observation),
-            'order_customer_coord': Box(low=0, high=self.grid_map_size - 1, shape=(2,), dtype=self.dtype_observation),
+            'order_restaurant_lat': Box(low=LAT_MIN, high=LAT_MAX,
+                       shape=(1,), dtype=self.dtype_observation),
+            'order_restaurant_lon': Box(low=LON_MIN, high=LON_MAX,
+                       shape=(1,), dtype=self.dtype_observation),
+            'order_customer_lat': Box(low=LAT_MIN, high=LAT_MAX,
+                       shape=(1,), dtype=self.dtype_observation),
+            'order_customer_lon': Box(low=LON_MIN, high=LON_MAX,
+                       shape=(1,), dtype=self.dtype_observation),
             'order_estimated_ready_time': Box(low=0, high=self.max_time_step, shape=(1,), dtype=self.dtype_observation),
             'order_estimated_delivery_time': Box(low=0, high=self.max_time_step, shape=(self.num_drivers,), dtype=self.dtype_observation),
 
@@ -216,7 +231,9 @@ class FoodDeliveryGymEnv(Env):
         drivers = self.simpy_env.state.drivers
 
         # --- Motoristas ---
-        drivers_coord = np.empty((n * 2,), dtype=self.dtype_observation)
+        #drivers_coord = np.empty((n * 2,), dtype=self.dtype_observation)
+        drivers_lat = np.empty((n,), dtype=self.dtype_observation)
+        drivers_lon = np.empty((n,), dtype=self.dtype_observation)
         drivers_estimated_remaining_time = np.empty((n,), dtype=self.dtype_observation)
         driver_status = np.empty((n,), dtype=self.dtype_observation)
         drivers_queue_size = np.empty((n,), dtype=self.dtype_observation)
@@ -224,9 +241,9 @@ class FoodDeliveryGymEnv(Env):
         order_estimated_delivery_time = np.empty((n,), dtype=self.dtype_observation)
         for i, driver in enumerate(drivers):
             # 1. Coordenada atual
-            coord = driver.get_coordinate()
-            drivers_coord[i * 2]     = coord[0]
-            drivers_coord[i * 2 + 1] = coord[1]
+            lat, lon = self.simpy_env.map.to_latlon(driver.get_coordinate())
+            drivers_lat[i] = lat
+            drivers_lon[i] = lon
             # 2. Tempo estimado restante para completar todas as entregas
             drivers_estimated_remaining_time[i] = driver.estimate_total_busy_time()
             # 3. Status atual (disponível, coletando, entregando, etc.)
@@ -239,18 +256,20 @@ class FoodDeliveryGymEnv(Env):
             order_estimated_delivery_time[i] = driver.estimate_time_to_complete_next_order(self.current_order)
 
         # --- Pedido Atual ---
-        order_restaurant_coord  = np.zeros((2,), dtype=self.dtype_observation)
-        order_customer_coord    = np.zeros((2,), dtype=self.dtype_observation)
+        order_restaurant_lat = np.zeros((1,), dtype=self.dtype_observation)
+        order_restaurant_lon = np.zeros((1,), dtype=self.dtype_observation)
+        order_customer_lat = np.zeros((1,), dtype=self.dtype_observation)
+        order_customer_lon = np.zeros((1,), dtype=self.dtype_observation)
         order_estimated_ready_time = np.zeros((1,), dtype=self.dtype_observation)
         if self.current_order:
             # 1. Coordenada do restaurante do pedido atual
-            est_coord = self.current_order.get_establishment().get_coordinate()
-            order_restaurant_coord[0] = est_coord[0]
-            order_restaurant_coord[1] = est_coord[1]
+            establishment_lat, establishment_lon = self.simpy_env.map.to_latlon(self.current_order.get_establishment().get_coordinate())
+            order_restaurant_lat[0] = establishment_lat
+            order_restaurant_lon[0] = establishment_lon
             # 2. Coordenada do cliente do pedido atual
-            cust_coord = self.current_order.get_customer().get_coordinate()
-            order_customer_coord[0] = cust_coord[0]
-            order_customer_coord[1] = cust_coord[1]
+            customer_lat, customer_lon = self.simpy_env.map.to_latlon(self.current_order.get_customer().get_coordinate())
+            order_customer_lat[0] = customer_lat
+            order_customer_lon[0] = customer_lon
             # 3. Tempo estimado para o pedido ficar pronto no restaurante
             order_estimated_ready_time[0] = self.current_order.get_estimated_ready_time()
 
@@ -262,13 +281,16 @@ class FoodDeliveryGymEnv(Env):
         self._cached_busy_times = drivers_estimated_remaining_time
 
         return {
-            'drivers_coord': drivers_coord,
+            'drivers_lat': drivers_lat,
+            'drivers_lon': drivers_lon,
             'drivers_estimated_remaining_time': drivers_estimated_remaining_time,
             'driver_status': driver_status,
             'drivers_queue_size': drivers_queue_size,
             'drivers_velocity': drivers_velocity,
-            'order_restaurant_coord': order_restaurant_coord,
-            'order_customer_coord': order_customer_coord,
+            'order_restaurant_lat': order_restaurant_lat,
+            'order_restaurant_lon': order_restaurant_lon,
+            'order_customer_lat': order_customer_lat,
+            'order_customer_lon': order_customer_lon,
             'order_estimated_ready_time': order_estimated_ready_time,
             'order_estimated_delivery_time': order_estimated_delivery_time,
             'current_time_step': current_time_step
@@ -338,7 +360,7 @@ class FoodDeliveryGymEnv(Env):
 
         # Cria o ambiente SimPy
         self.simpy_env = FoodDeliverySimpyEnv(
-            map=GridMap(self.grid_map_size),
+            map=OSMnxMap(cache=True),
             generators=[
                 InitialEstablishmentOrderRateGenerator(
                     self.num_establishments,
@@ -357,13 +379,12 @@ class FoodDeliveryGymEnv(Env):
                 poisson_order_generator
             ],
             optimizer=None,
-            view=GridViewPygame(
-                grid_size=self.grid_map_size,
-                draw_grid=draw_grid,
-                window_size=window_size,
-                fps=fps
-            ) if render_mode == "human" else None
+            view=LeafletView() if render_mode == "human" else None
         )
+
+        if render_mode == "human" and not hasattr(self, "_http_started"):
+            start_http_server(8080)
+            self._http_started = True
 
         self.simpy_env.set_env_mode(self.env_mode)
 

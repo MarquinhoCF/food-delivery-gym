@@ -61,7 +61,7 @@ class PoissonOrderGenerator(Generator):
             coordinate=point_in_gauss_circle(
                 establishment.coordinate,
                 establishment.operating_radius,
-                env.map.size,
+                env.map,
                 self.rng
             ),
             available=True,

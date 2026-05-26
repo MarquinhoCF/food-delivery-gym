@@ -393,7 +393,7 @@ class OptimizerGym(Optimizer, ABC):
         print(f"\nExecução finalizada em {step} passos")
         print(f"Recompensa total: {sum_reward:.2f}")
 
-        return self._generate_episode_board(sum_reward=sum_reward, step=step)
+        return self._generate_episode_board(sum_reward=sum_reward, length=step)
 
     def run_interactive(self, max_steps: int = 10000) -> Board:
         """

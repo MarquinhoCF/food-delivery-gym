@@ -23,7 +23,7 @@ class InitialDynamicRouteDriverGenerator(InitialGenerator):
                 tolerance_percentage=self.tolerance_percentage,
                 max_capacity=self.max_capacity,
                 status=DriverStatus.AVAILABLE,
-                movement_rate=self.rng.integers(self.vel_drivers[0], self.vel_drivers[1]+1),
+                movement_rate=float(self.rng.integers(self.vel_drivers[0], self.vel_drivers[1]+1)),
                 # Gerar uma cor aleatória RGB para cada motorista
                 color=(self.rng.integers(0, 255+1), self.rng.integers(0, 255+1), self.rng.integers(0, 255+1)),
                 reward_objective=self.reward_objective,
