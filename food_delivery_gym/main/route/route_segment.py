@@ -6,7 +6,7 @@ from food_delivery_gym.main.route.route_segment_type import RouteSegmentType
 
 class RouteSegment:
     def __init__(self, route_segment_type: RouteSegmentType, order: Order):
-        self.route_segment_id = uuid.uuid4()  # ID único global, seguro para uso em processos paralelos
+        self.route_segment_id = str(uuid.uuid4())  # ID único global, seguro para uso em processos paralelos
         self.route_segment_type = route_segment_type
         self.order = order
         self.coordinate = self.init_coordinates()

@@ -446,6 +446,16 @@ def _plot_metric_ax(
                 color_map[agent], agent_label(agent),
                 showfliers, show_means, show_mean_values,
             )
+            if annotate_n:
+                real_matrix = [
+                    d for d in data_matrix
+                    if not (len(d) == 1 and np.isnan(d[0]))
+                ]
+                real_positions = positions[
+                    [i for i, d in enumerate(data_matrix)
+                     if not (len(d) == 1 and np.isnan(d[0]))]
+                ]
+                _add_sample_annotation(ax, real_matrix, real_positions, -0.02)
     else:
         for b_idx, scenario in enumerate(scenarios):
             positions   = group_positions + offsets[b_idx]
@@ -463,6 +473,16 @@ def _plot_metric_ax(
                 color, SCENARIO_LABELS.get(scenario, scenario),
                 showfliers, show_means, show_mean_values,
             )
+            if annotate_n:
+                real_matrix = [
+                    d for d in data_matrix
+                    if not (len(d) == 1 and np.isnan(d[0]))
+                ]
+                real_positions = positions[
+                    [i for i, d in enumerate(data_matrix)
+                     if not (len(d) == 1 and np.isnan(d[0]))]
+                ]
+                _add_sample_annotation(ax, real_matrix, real_positions, -0.02)
 
     # Formatação do eixo
     ax.set_xticks(group_positions)
@@ -524,6 +544,10 @@ def _plot_single_scenario_ax(
             show_means=show_means,
             show_mean_values=show_mean_values,
         )
+        if annotate_n:
+            _add_sample_annotation(
+                ax, [vals], np.array([positions[i]]), -0.02
+            )
 
     ax.set_xticks(positions)
     ax.set_xticklabels(
@@ -891,8 +915,8 @@ Exemplos:
         "--by-scenario",
         action="store_true",
         help=(
-            "Agrupa boxes por agente no eixo X e usa cenários como grupos de boxes.\n"
-            "Padrão: agrupa por cenário no eixo X, agentes como grupos de boxes."
+            "Agrupa boxes por cenário no eixo X e usa agentes como grupos de boxes.\n"
+            "Padrão: agrupa por agente no eixo X, cenários como grupos de boxes."
         ),
     )
     layout.add_argument(
@@ -1042,6 +1066,10 @@ def main():
     )
 
     # ── Gerar figuras ──────────────────────────────────────────────────────
+    if args.split_scenarios and not args.by_scenario:
+        print("[AVISO] --split-scenarios requer --by-scenario. Adicionando automaticamente.")
+        args.by_scenario = True
+
     kwargs = dict(
         data=data,
         agents=agents,
@@ -1061,8 +1089,6 @@ def main():
     )
 
     if args.split_scenarios:
-        if not args.by_scenario:
-            print("[AVISO] --split-scenarios requer --by-scenario. Adicionando automaticamente.")
         plot_per_scenario(
             **{k: v for k, v in kwargs.items() if k not in ("by_scenario",)},
             output_dir=args.output_dir,

@@ -994,29 +994,28 @@ Gera boxplots para comparar visualmente o desempenho dos agentes em três métri
 
 ```bash
 # Gerar figura com os três boxplots (padrão: objetivo 3, todos os cenários)
-python generate_boxplots.py
+python -m scripts.generate_boxplots
 
 # Selecionar agentes e cenário específico
-python generate_boxplots.py --agents random nearest_driver lowest_marginal_route_cost \
-       --scenarios simple
+python -m scripts.generate_boxplots --agents random nearest_driver lowest_marginal_route_cost --scenarios simple
 
 # Comparar dois modelos PPO com heurísticas, objetivo 5
-python generate_boxplots.py --agents random nearest_driver ppo_18M ppo_36M --objective 5
+python -m scripts.generate_boxplots --agents random nearest_driver ppo_18M ppo_36M --objective 5
 
 # Salvar cada métrica em arquivo separado, alta resolução, formato SVG
-python generate_boxplots.py --split --dpi 600 --fmt svg
+python -m scripts.generate_boxplots --split --dpi 600 --fmt svg
 
 # Um PNG por métrica com N subplots (um por cenário), legenda unificada
-python generate_boxplots.py --by-scenario --split-scenarios
+python -m scripts.generate_boxplots --by-scenario --split-scenarios
 
 # Ocultar outliers, exibir médias e anotar N amostras
-python generate_boxplots.py --no-fliers --show-means --show-mean-values --annotate-n
+python -m scripts.generate_boxplots --no-fliers --show-means --show-mean-values --annotate-n
 
 # Adicionar entradas de mediana e média na legenda
-python generate_boxplots.py --by-scenario --split-scenarios --show-means --legend-stats
+python -m scripts.generate_boxplots --by-scenario --split-scenarios --show-means --legend-stats
 
 # Selecionar apenas recompensa e distância
-python generate_boxplots.py --metrics rewards distance
+python -m scripts.generate_boxplots --metrics rewards distance
 ```
 
 #### ⚙️ Opções de Configuração

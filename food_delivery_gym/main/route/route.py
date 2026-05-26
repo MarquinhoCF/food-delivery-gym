@@ -9,7 +9,7 @@ from food_delivery_gym.main.route.route_segment import RouteSegment
 
 class Route:
     def __init__(self, environment: FoodDeliverySimpyEnv, route_segments: List[RouteSegment]):
-        self.route_id = uuid.uuid4()  # ID único global, seguro para uso em processos paralelos
+        self.route_id = str(uuid.uuid4())  # ID único global, seguro para uso em processos paralelos
         self.environment = environment
         self.route_segments = route_segments
         self.required_capacity = self.calculate_required_capacity()
