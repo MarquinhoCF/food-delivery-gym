@@ -6,7 +6,75 @@ O **Food Delivery Simulator** é um simulador de entrega de comida desenvolvido 
 
 ![Simulador de Delivery de Comida](simulator.gif)
 
-## 📋 Requisitos
+---
+
+## Publicação no SBPO 2026
+
+Este trabalho foi **aprovado** para o **LVIII Simpósio Brasileiro de Pesquisa Operacional (SBPO 2026)**, na categoria Trabalho Completo (Oral), no eixo temático **L&T – Logística e Transportes** (com submissão também no eixo **IA – PO e IA**).
+
+| Item | Informação |
+|------|------------|
+| **Título** | *Entrega de Última Milha sob Incerteza: Simulação e Solução com Aprendizado por Reforço e Heurísticas* |
+| **Autores** | Marcos Carvalho Ferreira, Julio César Alves, Dilson Lucas Pereira |
+| **Instituição** | Universidade Federal de Lavras (UFLA) |
+| **Evento** | LVIII Simpósio Brasileiro de Pesquisa Operacional (SBPO 2026) |
+| **Categoria** | Trabalho Completo (Apresentação Oral) |
+| **Eixo Temático Principal** | L&T – Logística e Transportes |
+| **Segundo Eixo Temático** | IA – PO e IA |
+| **DOI** | *A ser adicionado após publicação nos anais.* |
+| **Artigo** | *A ser adicionado após publicação nos anais.* |
+
+### Resumo
+
+A entrega de última milha em cenários de demanda estocástica impõe desafios à logística urbana, sobretudo na alocação eficiente de motoristas em tempo real. Este trabalho investiga a aplicação do algoritmo Proximal Policy Optimization (PPO) e de heurísticas ao problema de alocação dinâmica de motoristas, formalizado como Processo de Decisão de Markov. Contribuições incluem a formalização do problema, um simulador modular de eventos discretos e a comparação sistemática entre heurísticas e agentes PPO em cenários de complexidade crescente. O PPO com otimização de hiperparâmetros supera as heurísticas nos cenários de maior demanda, com reduções de 20% e 55% no tempo efetivo de entrega.
+
+**Palavras-chave:** Aprendizado por Reforço, Entrega de Última Milha, Roteamento Dinâmico de Veículos.
+
+### Como revisar os resultados experimentais do artigo
+
+Todos os dados brutos usados para gerar as figuras e tabelas do artigo (curvas de aprendizado, boxplots de tempo efetivo de entrega, boxplots de distância percorrida e a planilha consolidada) estão disponíveis neste repositório/diretório de dados, sem necessidade de re-executar as simulações. Um revisor interessado em conferir os resultados pode seguir o roteiro abaixo.
+
+- **Link:** [Dados do Artigo](https://drive.google.com/drive/folders/1LPtYEpgLncWMga_ysa0-UeE2ng3i0UxC?usp=sharing)
+
+> **Obs.:** O acesso ao diretório de dados é concedido mediante solicitação pelo Google Drive.
+
+#### 1. Localizando os dados
+
+Os resultados usados no artigo correspondem ao objetivo de minimizar o tempo de entrega dos motoristas a partir do tempo efetivo gasto (**Objetivo 3** da função de recompensa (`obj_3`)).
+
+Na árvore de diretórios de dados (pasta `data/`), os resultados relevantes ficam organizados em dois grandes blocos:
+
+- **`data/ppo_training/<cenário>/`** — artefatos de treinamento do PPO por cenário (`simple`, `medium`, `complex`), cada um com:
+  - `otimizacao_1M_steps_200_trials/obj_3/.../optimization/trial_N/` — os 200 trials do Optuna usados na otimização de hiperparâmetros (cada um com `best_model.zip` e `evaluations.npz`), além do `report_*.csv`/`.pkl` com o resumo do estudo.
+  - `treinamento/obj_3/18M_steps/` — o modelo PPO **padrão** treinado por 18M passos (hiperparâmetros default do PPO).
+  - `treinamento/obj_3/18M_steps_otimizado/` — o modelo PPO **otimizado** treinado por 18M passos (hiperparâmetros extraídos do melhor trial do Optuna). Ambos incluem `best_model.zip`, `evaluations.npz`, os `*.monitor.csv` de treinamento e o `vecnormalize.pkl` correspondente.
+
+- **`data/runs/execucoes/obj_3/<cenário>_scenario/<agente>/`** — resultados das **avaliações finais** (30 episódios por agente, mesma seed), usados diretamente nas Figuras 2 e 3 e na Tabela do artigo. Cada subpasta de agente (`random`, `first_driver`, `nearest_driver`, `lowest_route_cost`, `lowest_marginal_route_cost`, `ppo_18M_steps`, `ppo_18M_steps_otimizado`) contém:
+  - `results.txt` — log textual das 30 execuções, com recompensa, tempo SimPy e status de truncamento por episódio, além do resumo estatístico (média, desvio padrão, mediana, moda).
+  - `metrics_data.npz` — os dados brutos estruturados (o mesmo formato lido por `SimulationStats.load()`), com séries por episódio, por motorista/estabelecimento e eventos.
+  - `figs/` — os gráficos já renderizados por episódio e agregados (`mean_results_*_other_metrics.png`, `mean_results_*_route_reordering.png`), equivalentes ao que viria de rodar `generate_plots`.
+
+  Também há `data/figuras/boxplot_*_scenarios.png` (os boxplots finais tal como aparecem no artigo, Figuras 2 e 3) e `data/tabelas/objective_table.xlsx` (a planilha consolidada de médias/desvios/mediana/moda por agente, cenário e objetivo).
+
+Para reproduzir/entender o pipeline completo por trás desses resultados, recomenda-se ler, tais seções:
+
+1. **[Configuração dos Cenários Experimentais](#-configuração-dos-cenários-experimentais)** — define os parâmetros do cenário base e dos três cenários derivados (`simple`, `medium`, `complex`), incluindo a progressão de demanda (λ) usada no artigo.
+
+2. **[Treinamento de Agentes de Aprendizado por Reforço](#-treinamento-de-agentes-de-aprendizado-por-reforço)** — explica a configuração do RL Baselines3 Zoo, o ajuste de hiperparâmetros via Optuna (correspondente às pastas `otimizacao_1M_steps_200_trials`) e o treinamento final por 18M passos (correspondente às pastas `18M_steps` e `18M_steps_otimizado`).
+
+3. **[Criação de Agentes Otimizadores com `OptimizerGym`](#-criação-de-agentes-otimizadores-com-optimizergym)** — mostra como cada heurística (`random`, `first_driver`, `nearest_driver`, `lowest_route_cost`, `lowest_marginal_route_cost`) e o agente PPO (`RLModelOptimizerGym`) são instanciados e como `run_simulations` gera exatamente os arquivos `results.txt` e `metrics_data.npz` presentes em `data/runs/execucoes`.
+
+4. **[Script `run_batch_eval`: Execução de Múltiplos Otimizadores](#-script-run_batch_eval-execução-de-múltiplos-otimizadores)** — descreve como as 30 execuções por agente/cenário/objetivo foram geradas, incluindo a opção `--objectives 3` usada para restringir ao objetivo do artigo.
+
+5. **[Script `generate_plots`](#-script-generate_plots-geração-de-gráficos-a-partir-de-métricas)** e **[Script `generate_table`](#-script-generate_table-geração-de-planilhas-excel-com-métricas)** — descrevem como reconstruir os gráficos e a planilha a partir dos `metrics_data.npz` sem re-simular.
+
+6. **[Script `convert_metrics`](#-script-convert_metrics-conversão-entre-npz-e-json)** — caso o revisor prefira inspecionar os dados brutos em JSON.
+
+---
+
+## ⚙️ Configuração do Ambiente
+
+### 0️⃣ Requisitos
 
 - Python 3.10 ou superior
 - Gymnasium
@@ -14,8 +82,6 @@ O **Food Delivery Simulator** é um simulador de entrega de comida desenvolvido 
 - Stable-Baselines3
 - RL Baselines3 Zoo
 - Outras dependências listadas em `requirements.txt`
-
-## ⚙️ Configuração do Ambiente
 
 ### 1️⃣ Criar e ativar o ambiente virtual do Python
 
