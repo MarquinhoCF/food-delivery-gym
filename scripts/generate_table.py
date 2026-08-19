@@ -43,6 +43,7 @@ KNOWN_HEURISTICS = {
     "nearest_driver":            "Motorista mais Próximo",
     "lowest_route_cost":         "Motorista de Menor Custo de Rota",
     "lowest_marginal_route_cost":"Motorista de Menor Custo Marginal de Rota",
+    "weighted_score":            "Motorista de Score Ponderado",
 }
 
 # Chaves de SimulationStats.aggregate → nome da aba

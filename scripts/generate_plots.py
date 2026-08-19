@@ -129,6 +129,7 @@ def discover_agent_dirs(results_dir: str, objectives: list, scenarios: list) -> 
     KNOWN_ORDER = [
         "random", "first_driver", "nearest_driver",
         "lowest_route_cost", "lowest_marginal_route_cost",
+        "weighted_score"
     ]
 
     dirs: list[str] = []

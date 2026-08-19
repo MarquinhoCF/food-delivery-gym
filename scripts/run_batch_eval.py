@@ -55,6 +55,10 @@ ALL_HEURISTICS = {
         "dir":   "lowest_marginal_route_cost",
         "label": "Agente do Motorista de Menor Custo de Rota Marginal",
     },
+    "weighted_score": {
+        "dir":   "weighted_score",
+        "label": "Agente do Score Ponderado",
+    },
 }
 
 

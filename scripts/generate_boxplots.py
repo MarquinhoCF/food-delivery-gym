@@ -22,6 +22,7 @@ KNOWN_AGENTS: dict[str, str] = {
     "nearest_driver":               "Mot. Próximo",
     "lowest_route_cost":            "Menor Custo",
     "lowest_marginal_route_cost":   "Menor Custo Marg.",
+    "weighted_score":               "Score Ponderado",
     "ppo_18M_steps":                "PPO Padrão",
     "ppo_18M_steps_otimizado":      "PPO Otimizado",
 }

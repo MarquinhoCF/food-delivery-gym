@@ -56,6 +56,15 @@
         "justMyCode": true
     },
     {
+        "name": "WeightedScoreDriver interactive Render",
+        "type": "python",
+        "request": "launch",
+        "module": "scripts.test_runner",
+        "args": ["--mode", "interactive", "--scenario", "medium.json", "--optimizer", "weighted", "--render"],
+        "console": "integratedTerminal",
+        "justMyCode": true
+    },
+    {
         "name": "RLModelOptimizerGym interactive Render",
         "type": "python",
         "request": "launch",

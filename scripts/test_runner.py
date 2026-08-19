@@ -18,6 +18,7 @@ from food_delivery_gym.main.optimizer.optimizer_gym.lowest_cost_driver_optimizer
 from food_delivery_gym.main.optimizer.optimizer_gym.random_driver_optimizer_gym import RandomDriverOptimizerGym
 from food_delivery_gym.main.optimizer.optimizer_gym.nearest_driver_optimizer_gym import NearestDriverOptimizerGym
 from food_delivery_gym.main.optimizer.optimizer_gym.rl_model_optimizer_gym import RLModelOptimizerGym
+from food_delivery_gym.main.optimizer.optimizer_gym.weighted_score_driver_optimizer_gym import WeightedScoreDriverOptimizerGym
 from food_delivery_gym.main.scenarios import get_all_scenarios
 from food_delivery_gym.main.statistic.statistics_view.board import Board
 
@@ -122,6 +123,8 @@ def main():
              - first: escolhe sempre o primeiro motorista
              - nearest: escolhe o motorista mais próximo
              - lowest: escolhe pelo menor custo de rota (requer --cost-function)
+             - weighted: escolhe com base em um peso (requer --weight)
+             - rollout: usa um modelo de rollout (requer --model-path)
              - rl: usa um modelo de aprendizado por reforço (requer --model-path)
             """
         ),
@@ -131,7 +134,7 @@ def main():
                         help="Arquivo de cenário dentro de food_delivery_gym.main.scenarios")
     parser.add_argument("--mode", choices=("auto", "interactive", "agent"), default="interactive",
                         help="Modo de execução")
-    parser.add_argument("--optimizer", choices=("random", "first", "nearest", "lowest", "rl"), default="random",
+    parser.add_argument("--optimizer", choices=("random", "first", "nearest", "lowest", "weighted", "rollout", "rl"), default="random",
                         help="Tipo de otimizador a usar")
     parser.add_argument("--cost-function", choices=("route", "marginal_route"), default=None,
                         help="Função de custo usada pelo LowestCostDriverOptimizerGym (apenas quando --optimizer lowest)")
@@ -202,6 +205,8 @@ def main():
                     raise ValueError(f"Cost function '{args.cost_function}' inválida")
 
                 optimizer = LowestCostDriverOptimizerGym(env, cost_function=cost_function)
+            elif args.optimizer == "weighted":
+                optimizer = WeightedScoreDriverOptimizerGym(env)
             else:
                 raise ValueError(f"Otimizador '{args.optimizer}' não reconhecido")
 
