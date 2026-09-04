@@ -4,8 +4,8 @@ from food_delivery_gym.main.environment.food_delivery_simpy_env import FoodDeliv
 from food_delivery_gym.main.order.order import Order
 
 class Cook():
-    def __init__(self, enviroment: FoodDeliverySimpyEnv):
-        self.enviroment = enviroment
+    def __init__(self, environment: FoodDeliverySimpyEnv):
+        self.environment = environment
         self.is_cooking = False
         self.orders_accepted: list[Order] = []
         self.overloaded_until: SimTime = 0
@@ -52,10 +52,10 @@ class Cook():
 
                     self.current_order_duration = estimated_time
 
-                    self.overloaded_until = self.enviroment.now + self.current_order_duration + self.order_list_duration
+                    self.overloaded_until = self.environment.now + self.current_order_duration + self.order_list_duration
                     
                 else:
-                    self.overloaded_until = max(self.overloaded_until, self.enviroment.now)
+                    self.overloaded_until = max(self.overloaded_until, self.environment.now)
 
             #   Se esse método for chamado fora do método process_accepted_orders só irá atualizar a duração do pedido atual 
             # caso seja o primeiro pedido ou o primeiro pedido depois certo tempo vazio
@@ -64,11 +64,11 @@ class Cook():
             else:
                 if self.order_list_duration == 0 and self.current_order_duration == 0:
                     self.current_order_duration = estimated_time
-                    self.overloaded_until = self.enviroment.now + self.current_order_duration
+                    self.overloaded_until = self.environment.now + self.current_order_duration
                 else:
                     self.order_list_duration += estimated_time
                     self.overloaded_until += estimated_time
         
         # Se nenhuma estimativa é passada, o tempo de sobrecarga é atualizado com o tempo atual
         else:
-            self.overloaded_until = max(self.overloaded_until, self.enviroment.now)
+            self.overloaded_until = max(self.overloaded_until, self.environment.now)

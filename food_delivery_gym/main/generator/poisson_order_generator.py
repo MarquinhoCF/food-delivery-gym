@@ -1,4 +1,6 @@
-import numpy as np
+from typing import Optional
+
+from food_delivery_gym.main.actors.resume import ResumeCursor
 from food_delivery_gym.main.base.geometry import point_in_gauss_circle
 from food_delivery_gym.main.customer.customer import Customer
 from food_delivery_gym.main.environment.food_delivery_simpy_env import FoodDeliverySimpyEnv
@@ -84,25 +86,23 @@ class PoissonOrderGenerator(Generator):
         env.state.add_orders([order])
         customer.place_order(order, establishment)
 
-    def generate(self, env: FoodDeliverySimpyEnv):
-        for arrival_time in self.arrival_times:
+    def generate(self, env: FoodDeliverySimpyEnv, *, resume: Optional[ResumeCursor] = None):
+        r = resume or ResumeCursor()
+        start_index = 0
+
+        # Se está resumindo, espera o tempo restante e processa o próximo pedido
+        if r.has_pending_remaining():
+            yield env.timeout(r.delay(0))
+            start_index = int(r.extras.get("arrival_index", 0))
+            establishment = self.rng.choice(env.state.establishments, size=None)
+            self.process_establishment(env, establishment)
+            start_index += 1
+
+        # Se não está resumindo, processa os pedidos subsequentes
+        for arrival_time in self.arrival_times[start_index:]:
             wait_time = arrival_time - env.now
             if wait_time > 0:
                 yield env.timeout(wait_time)
 
             establishment = self.rng.choice(env.state.establishments, size=None)
             self.process_establishment(env, establishment)
-
-    def resume_generate(self, env: FoodDeliverySimpyEnv, remaining, arrival_index: int):
-        yield env.timeout(remaining)
-        remaining_times = self.arrival_times[arrival_index:]
-        first = True
-        for arrival_time in remaining_times:
-            if not first:
-                wait_time = arrival_time - env.now
-                if wait_time > 0:
-                    yield env.timeout(wait_time)
-            first = False
-            establishment = self.rng.choice(env.state.establishments, size=None)
-            self.process_establishment(env, establishment)
-            

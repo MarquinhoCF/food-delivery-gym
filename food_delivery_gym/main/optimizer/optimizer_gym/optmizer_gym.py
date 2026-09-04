@@ -522,7 +522,7 @@ class OptimizerGym(Optimizer, ABC):
                 sum_reward += reward
                 
                 # Mostra feedback
-                self.gym_env.print_enviroment_state()
+                self.gym_env.print_environment_state()
                 print(f"\nAção aplicada: {action}")
                 print(f"Recompensa do passo: {reward}")
                 print(f"Recompensa acumulada: {sum_reward:.2f}")

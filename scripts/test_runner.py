@@ -232,7 +232,7 @@ def main():
         # Mostra estatísticas finais
         print("\n== FIM DA EXECUÇÃO ==")
         try:
-            env.print_enviroment_state()
+            env.print_environment_state()
             print(f"Observação final: {env.get_observation()}")
             print(f"Quantidade de rotas criadas = {env.simpy_env.state.get_length_orders()}")
             print(f"Quantidade de rotas entregues = {env.simpy_env.state.get_orders_delivered()}")

@@ -4,9 +4,8 @@ from typing import Optional, List
 from simpy.events import ProcessGenerator
 
 from food_delivery_gym.main.actors.map_actor import MapActor
-from food_delivery_gym.main.base.dimensions import Dimensions
+from food_delivery_gym.main.actors.resume import ResumeCursor
 from food_delivery_gym.main.base.types import Coordinate, Number
-from food_delivery_gym.main.driver.capacity import Capacity
 from food_delivery_gym.main.driver.driver_status import DriverStatus
 from food_delivery_gym.main.environment.food_delivery_simpy_env import FoodDeliverySimpyEnv
 from food_delivery_gym.main.events.driver_accepted_delivery import DriverAcceptedDelivery
@@ -22,7 +21,6 @@ from food_delivery_gym.main.events.driver_rejected_delivery import DriverRejecte
 from food_delivery_gym.main.events.driver_rejected_route import DriverRejectedRoute
 from food_delivery_gym.main.order.driver_delivery_rejection import DriverDeliveryRejection
 from food_delivery_gym.main.order.order import Order
-from food_delivery_gym.main.order.order_status import OrderStatus
 from food_delivery_gym.main.route.route import Route
 from food_delivery_gym.main.route.route_segment import RouteSegment
 
@@ -116,14 +114,19 @@ class Driver(MapActor):
 
         self.environment.state.increment_assigned_routes()
 
-    def process_route_requests(self) -> ProcessGenerator:
+    def process_route_requests(self, *, resume: Optional[ResumeCursor] = None) -> ProcessGenerator:
+        yield from self._resume_remaining(resume) # Se está resumindo, espera o tempo restante
+
+        # Se não está resumindo, processa as rotas requisitadas
         while True:
             if self.route_requests:
                 route = self.route_requests.popleft()
                 self.process_route_request(route)
-                yield self.timeout(self.time_to_accept_or_reject_route())
+                phase = "accept_wait"
+                yield from self._await_timeout(phase, self.time_to_accept_or_reject_route, ResumeCursor())
             else:
-                yield self.timeout(1)
+                phase = "idle"
+                yield from self._await_timeout(phase, 1, ResumeCursor())
 
     def process_route_request(self, route: Route) -> None:
         accept = self.accept_route_condition(route)
@@ -169,17 +172,33 @@ class Driver(MapActor):
         ))
         self.accept_route_segments(route.route_segments)
 
-    def sequential_processor(self) -> ProcessGenerator:
+    def sequential_processor(self, *, resume: Optional[ResumeCursor] = None,route_segment: Optional[RouteSegment] = None) -> ProcessGenerator:
+        r = resume or ResumeCursor()
+
+        # Se está resumindo, espera o tempo restante e processa o segmento de rota atual ou o segmento de rota passado como argumento
+        if r.is_resuming:
+            seg = route_segment or self.current_route_segment
+            yield self.timeout(r.delay(0))
+            if seg is not None:
+                if seg.is_pickup():
+                    self.process(self.picking_up(seg.order))
+                if seg.is_delivery():
+                    self.process(self.delivering(seg.order))
+            return
+
+        # Se não está resumindo, processa o próximo segmento de rota
         if self.current_route.has_next():
             route_segment = self.current_route.next()
             self.current_route_segment = route_segment
 
             if route_segment.is_pickup():
-                yield self.timeout(self.time_between_accept_and_start_picking_up())
+                phase = "start_pickup"
+                yield from self._await_timeout(phase, self.time_between_accept_and_start_picking_up, ResumeCursor())
                 self.process(self.picking_up(route_segment.order))
 
             if route_segment.is_delivery():
-                yield self.timeout(self.time_between_picked_up_and_start_delivery())
+                phase = "start_delivery"
+                yield from self._await_timeout(phase, self.time_between_picked_up_and_start_delivery, ResumeCursor())
                 self.process(self.delivering(route_segment.order))
 
         else:
@@ -212,35 +231,46 @@ class Driver(MapActor):
         rejection = DriverDeliveryRejection(self, self.now)
         self.environment.add_rejected_delivery(route_segment.order, rejection, event)
 
-    def picking_up(self, order: Order) -> ProcessGenerator:
-        self.status = DriverStatus.PICKING_UP
+    def picking_up(self, order: Order, *, resume: Optional[ResumeCursor] = None) -> ProcessGenerator:
+        r = resume or ResumeCursor()
 
-        order.driver_picking_up()
+        # Se está no início, processa o pedido
+        if r.at_start:
+            self.status = DriverStatus.PICKING_UP
+            order.driver_picking_up()
+            self.publish_event(DriverPickingUpOrder(
+                order=order,
+                customer_id=order.customer.customer_id,
+                establishment_id=order.establishment.establishment_id,
+                driver_id=self.driver_id,
+                distance=self.environment.map.distance(self.coordinate, order.establishment.coordinate),
+                time=self.now
+            ))
 
-        self.publish_event(DriverPickingUpOrder(
-            order=order,
-            customer_id=order.customer.customer_id,
-            establishment_id=order.establishment.establishment_id,
-            driver_id=self.driver_id,
-            distance=self.environment.map.distance(self.coordinate, order.establishment.coordinate),
-            time=self.now
-        ))
+        # Se está no meio, processa o movimento para o local de coleta
+        if r.enter("moving"):
+            phase = "moving"
+            move_resume = None
+            if r.has_pending_remaining():
+                move_resume = ResumeCursor(remaining=r.delay(0))
+            yield self.process(self.move_to(order.establishment.coordinate, resume=move_resume))
+            self.publish_event(DriverArrivedPickUpLocation(
+                order=order,
+                customer_id=order.customer.customer_id,
+                establishment_id=order.establishment.establishment_id,
+                driver_id=self.driver_id,
+                time=self.now
+            ))
 
-        yield self.process(self.move_to(order.establishment.coordinate))
-
-        self.publish_event(DriverArrivedPickUpLocation(
-            order=order,
-            customer_id=order.customer.customer_id,
-            establishment_id=order.establishment.establishment_id,
-            driver_id=self.driver_id,
-            time=self.now
-        ))
-
-        while not order.isReady:
-            self.status = DriverStatus.PICKING_UP_WAITING
-            yield self.timeout(1)
-
-        self.picked_up(order)
+        # Se está no fim, processa o tempo de espera para o pedido ficar pronto
+        if r.enter("waiting_ready"):
+            phase = "waiting_ready"
+            if r.has_pending_remaining():
+                yield self.timeout(r.delay(1))
+            while not order.isReady:
+                self.status = DriverStatus.PICKING_UP_WAITING
+                yield self.timeout(1)
+            self.picked_up(order)
 
     def picked_up(self, order: Order) -> None:
         self.publish_event(DriverPickedUpOrder(
@@ -252,38 +282,52 @@ class Driver(MapActor):
         ))
         order.picked_up(self.now)
 
-        # TODO: Logs
-        # print(f"Driver {self.driver_id} coletou o pedido no estabelecimento no tempo {self.now}")
-
         self.process(self.sequential_processor())
 
-    def delivering(self, order: Order) -> ProcessGenerator:
-        self.status = DriverStatus.DELIVERING
-        order.driver_delivering()
-        self.publish_event(DriverDeliveringOrder(
-            order=order,
-            customer_id=order.customer.customer_id,
-            establishment_id=order.establishment.establishment_id,
-            driver_id=self.driver_id,
-            distance=self.environment.map.distance(self.coordinate, order.customer.coordinate),
-            time=self.now
+    def delivering(self, order: Order, *, resume: Optional[ResumeCursor] = None) -> ProcessGenerator:
+        r = resume or ResumeCursor()
+
+        # Se está no início, processa o pedido
+        if r.at_start:
+            self.status = DriverStatus.DELIVERING
+            order.driver_delivering()
+            self.publish_event(DriverDeliveringOrder(
+                order=order,
+                customer_id=order.customer.customer_id,
+                establishment_id=order.establishment.establishment_id,
+                driver_id=self.driver_id,
+                distance=self.environment.map.distance(self.coordinate, order.customer.coordinate),
+                time=self.now
+            ))
+
+        # Processa o movimento para o local de entrega
+        yield self.process(self.move_to(
+            order.customer.coordinate,
+            resume=ResumeCursor(remaining=r.remaining) if r.is_resuming else None, # Se está resumindo, espera o tempo restante
         ))
-
-        yield self.process(self.move_to(order.customer.coordinate))
-
         self.process(self.wait_customer_pick_up_order(order))
 
-    def wait_customer_pick_up_order(self, order: Order) -> ProcessGenerator:
-        self.status = DriverStatus.DELIVERING_WAITING
-        order.driver_arrived()
-        self.publish_event(DriverArrivedDeliveryLocation(
-            order=order,
-            customer_id=order.customer.customer_id,
-            establishment_id=order.establishment.establishment_id,
-            driver_id=self.driver_id,
-            time=self.now
+    def wait_customer_pick_up_order(self, order: Order, *, resume: Optional[ResumeCursor] = None) -> ProcessGenerator:
+        r = resume or ResumeCursor()
+
+        # Se está no início, processa o pedido
+        if r.at_start:
+            self.status = DriverStatus.DELIVERING_WAITING
+            order.driver_arrived()
+            self.publish_event(DriverArrivedDeliveryLocation(
+                order=order,
+                customer_id=order.customer.customer_id,
+                establishment_id=order.establishment.establishment_id,
+                driver_id=self.driver_id,
+                time=self.now
+            ))
+        
+        # Processa o tempo de espera para o pedido ser coletado
+        yield self.process(order.customer.receive_order(
+            order,
+            self,
+            resume=ResumeCursor(phase="receive", remaining=r.remaining) if r.is_resuming else None, # Se está resumindo, espera o tempo restante
         ))
-        yield self.process(order.customer.receive_order(order, self))
         self.delivered(order)
         
     def delivered(self, order: Order) -> None:
@@ -307,9 +351,6 @@ class Driver(MapActor):
                 del self.orders_list[i]
                 break
 
-        # TODO: Logs
-        # print(f"Driver {self.driver_id} entregou o pedido ao cliente no tempo {self.now}")
-        
         self.process(self.sequential_processor())
 
     def _calculate_order_penalty(self, order: Order, start_time: Number) -> Number:
@@ -326,9 +367,11 @@ class Driver(MapActor):
         else:
             return self.now - start_time
 
-    def move_to(self, destination: Coordinate, resume_remaining: Optional[int] = None) -> ProcessGenerator:
-        if resume_remaining is not None:
-            yield self.timeout(resume_remaining)
+    def move_to(self, destination: Coordinate, *, resume: Optional[ResumeCursor] = None) -> ProcessGenerator:
+        r = resume or ResumeCursor()
+        yield from self._resume_remaining(r) # Se está resumindo, espera o tempo restante
+
+        # Se não está resumindo, processa o movimento para o destino
         while self.coordinate != destination:
             old_coordinate = self.coordinate
             self.coordinate = self.environment.map.move(
@@ -337,50 +380,8 @@ class Driver(MapActor):
                 rate=self.movement_rate
             )
             self.total_distance += self.environment.map.distance(old_coordinate, self.coordinate)
-            yield self.timeout(1)
-
-    def resume_process_route_requests(self, remaining) -> ProcessGenerator:
-        yield self.timeout(remaining)
-        yield from self.process_route_requests()
-
-    def resume_sequential_processor(self, remaining, route_segment: RouteSegment) -> ProcessGenerator:
-        yield self.timeout(remaining)
-        if route_segment.is_pickup():
-            self.process(self.picking_up(route_segment.order))
-        if route_segment.is_delivery():
-            self.process(self.delivering(route_segment.order))
-
-    def resume_picking_up(self, order: Order, phase: str, remaining=None) -> ProcessGenerator:
-        if phase == "moving":
-            yield self.process(self.move_to(order.establishment.coordinate, resume_remaining=remaining))
-            self.publish_event(DriverArrivedPickUpLocation(
-                order=order,
-                customer_id=order.customer.customer_id,
-                establishment_id=order.establishment.establishment_id,
-                driver_id=self.driver_id,
-                time=self.now
-            ))
-            phase = "waiting_ready"
-            while not order.isReady:
-                self.status = DriverStatus.PICKING_UP_WAITING
-                yield self.timeout(1)
-            self.picked_up(order)
-        elif phase == "waiting_ready":
-            yield self.timeout(remaining)
-            while not order.isReady:
-                self.status = DriverStatus.PICKING_UP_WAITING
-                yield self.timeout(1)
-            self.picked_up(order)
-        else:
-            raise ValueError(f"Fase de resume desconhecida para picking_up: {phase}")
-
-    def resume_delivering(self, order: Order, remaining) -> ProcessGenerator:
-        yield self.process(self.move_to(order.customer.coordinate, resume_remaining=remaining))
-        self.process(self.wait_customer_pick_up_order(order))
-
-    def resume_wait_customer_pick_up_order(self, order: Order, remaining) -> ProcessGenerator:
-        yield self.process(order.customer.resume_receive_order(order, self, remaining))
-        self.delivered(order)
+            phase = "step"
+            yield from self._await_timeout(phase, 1, ResumeCursor())
 
     def is_active(self) -> bool:
         return self.current_route is not None or self.current_route_segment is not None or len(self.route_requests) > 0

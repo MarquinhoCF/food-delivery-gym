@@ -1,8 +1,8 @@
-"""Deterministic clone of a live FoodDelivery SimPy/Gym environment.
+"""
+Clone determinístico de um ambiente FoodDelivery SimPy/Gym em tempo real.
 
-SimPy processes are backed by Python generators, which cannot be deep-copied.
-This module snapshots pending waits from the SimPy queue, copies domain state,
-and relaunches equivalent processes from named resume points.
+Processos SimPy são suportados por geradores Python, que não podem ser copiados profundamente.
+Este módulo captura as esperas pendentes da fila SimPy, copia o estado do domínio e reinicia processos equivalentes a partir de pontos de resumo nomeados.
 """
 
 from __future__ import annotations
@@ -17,12 +17,35 @@ import numpy as np
 from simpy.core import Environment as SimpyEnvironment
 from simpy.events import Initialize, Process, Timeout
 
+from food_delivery_gym.main.actors.resume import ResumeCursor
 from food_delivery_gym.main.environment.food_delivery_simpy_env import FoodDeliverySimpyEnv
 from food_delivery_gym.main.generator.initial_generator import InitialGenerator
 from food_delivery_gym.main.generator.poisson_order_generator import PoissonOrderGenerator
 from food_delivery_gym.main.utils.rng_factory import RngFactory
 
-ENV_REF_ATTRS = ("_environment", "environment", "enviroment")
+
+# Quais argumentos de domínio / extras cada processo auto-resumível precisa na clonagem.
+# Nomes faltantes levantam em _make_resume_generator para que novos processos não sejam esquecidos.
+PROCESS_RESUME_SPEC: dict[str, dict[str, Any]] = {
+    "process_order_requests": {},
+    "process_order_request": {"args": ("order",), "phase": "accept_wait"},
+    "process_accepted_orders": {"extras_keys": ("cook_index",)},
+    "prepare_order": {
+        "args": ("cook", "order"),
+        "use_phase": True,
+        "extras_keys": ("remaining_prep", "excess_alloc"),
+    },
+    "process_route_requests": {},
+    "sequential_processor": {"args": ("route_segment",)},
+    "picking_up": {"args": ("order",), "use_phase": True},
+    "delivering": {"args": ("order",)},
+    "move_to": {"args": ("destination",)},
+    "wait_customer_pick_up_order": {"args": ("order",)},
+    "receive_order": {"args": ("order", "driver"), "phase": "receive"},
+    "generate": {"pass_env": True, "extras_keys": ("arrival_index",)},
+}
+
+ENV_REF_ATTRS = ("_environment", "environment")
 
 
 @dataclass
@@ -340,74 +363,63 @@ def _mapped(memo: dict, object_id: Optional[int], label: str):
 
 
 def _make_resume_generator(spec: WakeSpec, owner, memo: dict, new_env: FoodDeliverySimpyEnv):
-    remaining = spec.remaining
     name = spec.co_name
+    if name not in PROCESS_RESUME_SPEC:
+        raise RuntimeError(
+            f"Processo SimPy sem registro de resume: {name} (cadeia={spec.chain_names}, "
+            f"tipo={type(owner).__name__}). Adicione-o a PROCESS_RESUME_SPEC e torne o "
+            f"método auto-resumível com ResumeCursor."
+        )
+
+    cfg = PROCESS_RESUME_SPEC[name]
     extras = spec.extras
     object_ids = spec.object_ids
 
     order = _mapped(memo, object_ids.get("order"), "order")
     cook = _mapped(memo, object_ids.get("cook"), "cook")
     route_segment = _mapped(memo, object_ids.get("route_segment"), "route_segment")
+    driver = _mapped(memo, object_ids.get("driver"), "driver")
+    destination = extras.get("destination") or _mapped(memo, object_ids.get("destination"), "destination")
 
-    if name == "process_order_requests":
-        return owner.resume_process_order_requests(remaining)
-    
-    if name == "process_order_request":
-        return owner.resume_process_order_request(order, remaining)
-    
-    if name == "process_accepted_orders":
-        return owner.resume_process_accepted_orders(remaining, extras.get("cook_index", 0))
-    
-    if name == "prepare_order":
-        return owner.resume_prepare_order(
-            cook,
-            order,
-            extras["phase"],
-            remaining,
-            remaining_prep=extras.get("remaining_prep"),
-            excess_alloc=extras.get("excess_alloc"),
-        )
-    
-    if name == "process_route_requests":
-        return owner.resume_process_route_requests(remaining)
-    
-    if name == "sequential_processor":
-        if route_segment is None:
-            route_segment = owner.current_route_segment
-        return owner.resume_sequential_processor(remaining, route_segment)
-    
-    if name == "picking_up":
-        if order is None and owner.current_route_segment is not None:
+    if name == "picking_up" and order is None and getattr(owner, "current_route_segment", None) is not None:
+        order = owner.current_route_segment.order
+    if name in ("delivering", "wait_customer_pick_up_order") and order is None:
+        if getattr(owner, "current_route_segment", None) is not None:
             order = owner.current_route_segment.order
-        return owner.resume_picking_up(order, extras["phase"], remaining)
-    
-    if name == "delivering":
-        if order is None and owner.current_route_segment is not None:
-            order = owner.current_route_segment.order
-        return owner.resume_delivering(order, remaining)
-    
-    if name == "move_to":
-        destination = extras.get("destination") or _mapped(memo, object_ids.get("destination"), "destination")
-        if destination is None and owner.current_route_segment is not None:
-            destination = owner.current_route_segment.coordinate
-        return owner.move_to(destination, resume_remaining=remaining)
-    
-    if name == "wait_customer_pick_up_order":
-        if order is None and owner.current_route_segment is not None:
-            order = owner.current_route_segment.order
-        return owner.resume_wait_customer_pick_up_order(order, remaining)
-    
-    if name == "receive_order":
-        driver = _mapped(memo, object_ids.get("driver"), "driver")
-        return owner.resume_receive_order(order, driver, remaining)
-    
-    if name == "generate" and isinstance(owner, PoissonOrderGenerator):
-        return owner.resume_generate(new_env, remaining, extras["arrival_index"])
+    if name == "sequential_processor" and route_segment is None:
+        route_segment = getattr(owner, "current_route_segment", None)
+    if name == "move_to" and destination is None and getattr(owner, "current_route_segment", None) is not None:
+        destination = owner.current_route_segment.coordinate
 
-    raise RuntimeError(
-        f"Processo SimPy sem resume implementado: {name} (cadeia={spec.chain_names}, "
-        f"tipo={type(owner).__name__})"
+    arg_values = {
+        "order": order,
+        "cook": cook,
+        "route_segment": route_segment,
+        "driver": driver,
+        "destination": destination,
+    }
+
+    kwargs: dict[str, Any] = {}
+    for arg_name in cfg.get("args", ()):
+        kwargs[arg_name] = arg_values[arg_name]
+
+    if cfg.get("pass_env"):
+        kwargs["env"] = new_env
+
+    cursor_extras = {key: extras[key] for key in cfg.get("extras_keys", ()) if key in extras}
+    phase = extras.get("phase") if cfg.get("use_phase") else cfg.get("phase")
+    kwargs["resume"] = ResumeCursor(
+        phase=phase,
+        remaining=spec.remaining,
+        extras=cursor_extras,
     )
+
+    method = getattr(owner, name, None)
+    if method is None:
+        raise RuntimeError(
+            f"Owner {type(owner).__name__} não possui método '{name}' para resume"
+        )
+    return method(**kwargs)
 
 
 def _clone_numpy_rng(state_blob: bytes) -> np.random.Generator:

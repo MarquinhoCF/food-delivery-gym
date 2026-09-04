@@ -147,7 +147,7 @@ class FoodDeliverySimpyEnv(Environment):
         if self.view is not None and not self.view.quited:
             self.view.quit()
 
-    def print_enviroment_state(self, options = None):
+    def print_environment_state(self, options = None):
         print(f'time_step = {self.now}')
         self._state.print_state(options)
 

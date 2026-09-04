@@ -594,7 +594,7 @@ class FoodDeliveryGymEnv(Env):
     def get_reward_objective(self):
         return self.reward_objective
     
-    def print_enviroment_state(self, options = None):
+    def print_environment_state(self, options = None):
         if options is None:
             options = {
                 "customers": False,
@@ -606,7 +606,7 @@ class FoodDeliveryGymEnv(Env):
             }
         if self.current_order:
             print(f'current_order:\n{self.current_order.__str__()}')
-        self.simpy_env.print_enviroment_state(options=options)
+        self.simpy_env.print_environment_state(options=options)
     
     def get_description(self):
         descricao = []
