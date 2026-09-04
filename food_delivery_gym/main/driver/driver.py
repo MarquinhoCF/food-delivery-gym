@@ -38,6 +38,7 @@ class Driver(MapActor):
             status: Optional[DriverStatus] = DriverStatus.AVAILABLE,
             movement_rate: Optional[Number] = 5,
             reward_objective: Optional[Number] = 1,
+            start_processes: bool = True,
     ):
         
         self.driver_id = id
@@ -76,7 +77,8 @@ class Driver(MapActor):
         self.idle_time: Number = 0
         self.time_waiting_for_order: Number = 0
 
-        self.process(self.process_route_requests())
+        if start_processes:
+            self.process(self.process_route_requests())
 
     def get_episode_stats(self) -> dict:
         """
@@ -324,7 +326,9 @@ class Driver(MapActor):
         else:
             return self.now - start_time
 
-    def move_to(self, destination: Coordinate) -> ProcessGenerator:
+    def move_to(self, destination: Coordinate, resume_remaining: Optional[int] = None) -> ProcessGenerator:
+        if resume_remaining is not None:
+            yield self.timeout(resume_remaining)
         while self.coordinate != destination:
             old_coordinate = self.coordinate
             self.coordinate = self.environment.map.move(
@@ -334,6 +338,49 @@ class Driver(MapActor):
             )
             self.total_distance += self.environment.map.distance(old_coordinate, self.coordinate)
             yield self.timeout(1)
+
+    def resume_process_route_requests(self, remaining) -> ProcessGenerator:
+        yield self.timeout(remaining)
+        yield from self.process_route_requests()
+
+    def resume_sequential_processor(self, remaining, route_segment: RouteSegment) -> ProcessGenerator:
+        yield self.timeout(remaining)
+        if route_segment.is_pickup():
+            self.process(self.picking_up(route_segment.order))
+        if route_segment.is_delivery():
+            self.process(self.delivering(route_segment.order))
+
+    def resume_picking_up(self, order: Order, phase: str, remaining=None) -> ProcessGenerator:
+        if phase == "moving":
+            yield self.process(self.move_to(order.establishment.coordinate, resume_remaining=remaining))
+            self.publish_event(DriverArrivedPickUpLocation(
+                order=order,
+                customer_id=order.customer.customer_id,
+                establishment_id=order.establishment.establishment_id,
+                driver_id=self.driver_id,
+                time=self.now
+            ))
+            phase = "waiting_ready"
+            while not order.isReady:
+                self.status = DriverStatus.PICKING_UP_WAITING
+                yield self.timeout(1)
+            self.picked_up(order)
+        elif phase == "waiting_ready":
+            yield self.timeout(remaining)
+            while not order.isReady:
+                self.status = DriverStatus.PICKING_UP_WAITING
+                yield self.timeout(1)
+            self.picked_up(order)
+        else:
+            raise ValueError(f"Fase de resume desconhecida para picking_up: {phase}")
+
+    def resume_delivering(self, order: Order, remaining) -> ProcessGenerator:
+        yield self.process(self.move_to(order.customer.coordinate, resume_remaining=remaining))
+        self.process(self.wait_customer_pick_up_order(order))
+
+    def resume_wait_customer_pick_up_order(self, order: Order, remaining) -> ProcessGenerator:
+        yield self.process(order.customer.resume_receive_order(order, self, remaining))
+        self.delivered(order)
 
     def is_active(self) -> bool:
         return self.current_route is not None or self.current_route_segment is not None or len(self.route_requests) > 0

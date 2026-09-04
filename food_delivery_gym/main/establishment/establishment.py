@@ -28,7 +28,8 @@ class Establishment(MapActor):
             catalog: Catalog,
             percentage_allocation_driver: Number = 0.7,
             production_capacity: Number = 4,
-            use_estimate: bool = False
+            use_estimate: bool = False,
+            start_processes: bool = True,
     ) -> None:
         
         self.establishment_id = id
@@ -42,6 +43,7 @@ class Establishment(MapActor):
 
         self.order_requests: List[Order] = []
         self.orders_rejected: List[Order] = []
+        self._processing_order_ids: set = set()
         
         self.num_cooks = production_capacity
         # Cria uma lista de instâncias de Cook
@@ -53,8 +55,9 @@ class Establishment(MapActor):
         self.idle_time: Number = 0
         self.active_time: Number = 0
 
-        self.process(self.process_order_requests())
-        self.process(self.process_accepted_orders())
+        if start_processes:
+            self.process(self.process_order_requests())
+            self.process(self.process_accepted_orders())
 
     def get_episode_stats(self) -> dict:
         """
@@ -167,6 +170,8 @@ class Establishment(MapActor):
                 yield self.timeout(self.time_check_to_start_preparation())
 
     def prepare_order(self, cook, order) -> ProcessGenerator:
+        cook.current_order = order
+        self._processing_order_ids.add(order.order_id)
         self.publish_event(EstablishmentPreparingOrder(
             order=order,
             customer_id=order.customer.customer_id,
@@ -193,9 +198,7 @@ class Establishment(MapActor):
 
         self.finish_order(cook, order)
 
-    def _handle_driver_allocation(self, order: Order, allocation_time: SimTime):
-        # Gerencia a alocação do motorista.
-        yield self.timeout(allocation_time)
+    def _publish_driver_allocation(self, order: Order) -> None:
         allocation_event = TimeForAgentAllocateDriver(
             order=order,
             customer_id=order.customer.customer_id,
@@ -204,6 +207,10 @@ class Establishment(MapActor):
         )
         self.publish_event(allocation_event)
         self.environment.add_core_event(allocation_event)
+
+    def _handle_driver_allocation(self, order: Order, allocation_time: SimTime):
+        yield self.timeout(allocation_time)
+        self._publish_driver_allocation(order)
 
     def finish_order(self, cook, order: Order) -> None:
         event = EstablishmentFinishedOrder(
@@ -216,6 +223,8 @@ class Establishment(MapActor):
         order.ready(self.now)
 
         cook.set_is_cooking(False)
+        cook.current_order = None
+        self._processing_order_ids.discard(order.order_id)
         self.orders_in_preparation -= 1
         cook.set_current_order_duration(0)
         self.orders_fulfilled += 1
@@ -279,3 +288,62 @@ class Establishment(MapActor):
 
     def get_coordinate(self) -> Coordinate:
         return self.coordinate
+
+    def resume_process_order_requests(self, remaining: SimTime) -> ProcessGenerator:
+        yield self.timeout(remaining)
+        yield from self.process_order_requests()
+
+    def resume_process_order_request(self, order: Order, remaining: SimTime) -> ProcessGenerator:
+        yield self.timeout(remaining)
+        accept = self.condition_to_accept(order)
+        self.accept_order(order) if accept else self.reject_order(order)
+
+    def resume_process_accepted_orders(self, remaining: SimTime, cook_index: int) -> ProcessGenerator:
+        yield self.timeout(remaining)
+        cooks = self.cooks
+        for cook in cooks[cook_index + 1:]:
+            if cook.get_length_orders_accepted() > 0 and not cook.get_is_cooking():
+                order = cook.pop_order()
+                cook.update_overload_time(order.estimated_preparation_duration, True)
+
+                if cook.get_length_orders_accepted() == 0:
+                    updated_estimated_time = cook.get_overloaded_until()
+                else:
+                    updated_estimated_time = self.now + order.estimated_preparation_duration
+
+                cook.set_is_cooking(True)
+                self.orders_in_preparation += 1
+                order.preparation_started(self.now, updated_estimated_time)
+                self.process(self.prepare_order(cook, order))
+
+            yield self.timeout(self.time_check_to_start_preparation())
+        yield from self.process_accepted_orders()
+
+    def resume_prepare_order(
+        self,
+        cook,
+        order: Order,
+        phase: str,
+        remaining: SimTime,
+        remaining_prep: SimTime | None = None,
+        excess_alloc: SimTime | None = None,
+    ) -> ProcessGenerator:
+        if phase == "alloc_wait":
+            yield self.timeout(remaining)
+            self._publish_driver_allocation(order)
+            phase = "remaining_prep"
+            yield self.timeout(remaining_prep)
+            self.finish_order(cook, order)
+        elif phase == "remaining_prep":
+            yield self.timeout(remaining)
+            self.finish_order(cook, order)
+        elif phase == "prep_before_excess":
+            yield self.timeout(remaining)
+            yield from self._handle_driver_allocation(order, excess_alloc)
+            self.finish_order(cook, order)
+        elif phase == "excess_alloc":
+            yield self.timeout(remaining)
+            self._publish_driver_allocation(order)
+            self.finish_order(cook, order)
+        else:
+            raise ValueError(f"Fase de resume desconhecida para prepare_order: {phase}")

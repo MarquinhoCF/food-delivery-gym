@@ -6,8 +6,8 @@ from food_delivery_gym.main.generator.generator import Generator
 
 class InitialGenerator(Generator, ABC):
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, rng=None):
+        super().__init__(rng=rng)
 
     @abstractmethod
     def run(self, env: FoodDeliverySimpyEnv): pass

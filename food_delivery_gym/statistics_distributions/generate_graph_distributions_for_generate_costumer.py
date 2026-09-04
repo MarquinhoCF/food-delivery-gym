@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from food_delivery_gym.main.utils.random_manager import RandomManager
 from food_delivery_gym.main.base.geometry import point_in_gauss_circle  # Importando sua função
+from food_delivery_gym.main.utils.rng_factory import RngFactory
 
 # Parâmetros
 centroid = (10, 20)  # Posição do Estabelecimento
@@ -10,10 +10,10 @@ limit = 50           # Grid Map Size
 num_points = 1000    # Número de pontos gerados
 
 # Criando gerador de números aleatórios
-rng_generator = RandomManager().get_random_instance()
+rng = RngFactory().next()
 
 # Gerando pontos
-points = [point_in_gauss_circle(centroid, radius, limit, rng_generator) for _ in range(num_points)]
+points = [point_in_gauss_circle(centroid, radius, limit, rng) for _ in range(num_points)]
 x_vals, y_vals = zip(*points)  # Separando coordenadas X e Y
 
 # Criando o gráfico

@@ -7,8 +7,8 @@ from food_delivery_gym.main.establishment.establishment_order_rate import Establ
 
 
 class InitialEstablishmentOrderRateGenerator(InitialGenerator):
-    def __init__(self, num_establishments, prepare_time, operating_radius, production_capacity, percentage_allocation_driver):
-        super().__init__()
+    def __init__(self, num_establishments, prepare_time, operating_radius, production_capacity, percentage_allocation_driver, rng=None):
+        super().__init__(rng=rng)
         self.num_establishments = num_establishments
         self.prepare_time = prepare_time
         self.operating_radius = operating_radius

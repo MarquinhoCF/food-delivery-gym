@@ -11,6 +11,7 @@ class Cook():
         self.overloaded_until: SimTime = 0
         self.current_order_duration: SimTime = 0
         self.order_list_duration: SimTime = 0
+        self.current_order: Order | None = None
 
     def add_order_to_list(self, order: Order):
         self.orders_accepted.append(order)

@@ -21,8 +21,8 @@ class PoissonOrderGenerator(Generator):
         Se None, será calculada como estimated_num_orders / time_window.
     """
 
-    def __init__(self, estimated_num_orders: int, time_window: float, lambda_rate: float = None):
-        super().__init__()
+    def __init__(self, estimated_num_orders: int, time_window: float, lambda_rate: float = None, rng=None):
+        super().__init__(rng=rng)
 
         if estimated_num_orders <= 0:
             raise ValueError("estimated_num_orders deve ser maior que 0")
@@ -90,6 +90,19 @@ class PoissonOrderGenerator(Generator):
             if wait_time > 0:
                 yield env.timeout(wait_time)
 
+            establishment = self.rng.choice(env.state.establishments, size=None)
+            self.process_establishment(env, establishment)
+
+    def resume_generate(self, env: FoodDeliverySimpyEnv, remaining, arrival_index: int):
+        yield env.timeout(remaining)
+        remaining_times = self.arrival_times[arrival_index:]
+        first = True
+        for arrival_time in remaining_times:
+            if not first:
+                wait_time = arrival_time - env.now
+                if wait_time > 0:
+                    yield env.timeout(wait_time)
+            first = False
             establishment = self.rng.choice(env.state.establishments, size=None)
             self.process_establishment(env, establishment)
             

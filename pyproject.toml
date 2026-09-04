@@ -26,3 +26,10 @@ Repository = "https://github.com/MarquinhoCF/food-delivery-gym"
 
 [tool.hatch.build.targets.wheel]
 packages = ["food_delivery_gym"]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

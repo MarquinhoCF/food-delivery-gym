@@ -21,6 +21,7 @@ class EstablishmentOrderRate(Establishment):
             min_prepare_time: Number = 20,
             id: Number = None,
             use_estimate: bool = False,
+            start_processes: bool = True,
     ):
         super().__init__(
             id=id, 
@@ -30,7 +31,8 @@ class EstablishmentOrderRate(Establishment):
             catalog=catalog, 
             percentage_allocation_driver=percentage_allocation_driver,
             production_capacity=production_capacity, 
-            use_estimate=use_estimate
+            use_estimate=use_estimate,
+            start_processes=start_processes,
         )
         self.order_production_time_rate = order_production_time_rate
         self.operating_radius = operating_radius

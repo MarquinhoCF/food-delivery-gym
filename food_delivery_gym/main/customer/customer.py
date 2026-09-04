@@ -49,3 +49,16 @@ class Customer(MapActor):
 
     def get_coordinate(self) -> Coordinate:
         return self.coordinate
+
+    def resume_receive_order(self, order: Order, driver: Driver, remaining) -> ProcessGenerator:
+        yield self.timeout(remaining)
+        self.publish_event(CustomerReceivedOrder(
+            order=order,
+            customer_id=self.customer_id,
+            establishment_id=order.establishment.establishment_id,
+            driver_id=driver.driver_id,
+            time=self.now
+        ))
+        if self.single_order:
+            self.status = CustumerStatus.DELIVERED
+        order.update_status(OrderStatus.RECEIVED)

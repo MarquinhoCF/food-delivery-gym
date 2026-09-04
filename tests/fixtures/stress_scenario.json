@@ -1,0 +1,26 @@
+{
+  "order_generator": {
+    "type": "poisson",
+    "estimated_num_orders": 20,
+    "time_window": 80
+  },
+  "simpy_env": {
+    "max_time_step": 800
+  },
+  "grid_map": {
+    "size": 30
+  },
+  "drivers": {
+    "num": 4,
+    "vel": [3, 4],
+    "tolerance_percentage": 0.5,
+    "max_capacity": 2
+  },
+  "establishments": {
+    "num": 3,
+    "prepare_time": [10, 20],
+    "operating_radius": [5, 15],
+    "production_capacity": [2, 3],
+    "percentage_allocation_driver": 0.7
+  }
+}

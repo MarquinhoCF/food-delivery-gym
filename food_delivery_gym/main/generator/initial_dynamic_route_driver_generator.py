@@ -5,8 +5,8 @@ from food_delivery_gym.main.generator.initial_generator import InitialGenerator
 
 
 class InitialDynamicRouteDriverGenerator(InitialGenerator):
-    def __init__(self, num_drivers, vel_drivers, tolerance_percentage, max_capacity, reward_objective):
-        super().__init__()
+    def __init__(self, num_drivers, vel_drivers, tolerance_percentage, max_capacity, reward_objective, rng=None):
+        super().__init__(rng=rng)
         self.num_drivers = num_drivers
         self.vel_drivers = vel_drivers
         self.tolerance_percentage = tolerance_percentage

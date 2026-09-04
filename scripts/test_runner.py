@@ -19,6 +19,7 @@ from food_delivery_gym.main.optimizer.optimizer_gym.random_driver_optimizer_gym 
 from food_delivery_gym.main.optimizer.optimizer_gym.nearest_driver_optimizer_gym import NearestDriverOptimizerGym
 from food_delivery_gym.main.optimizer.optimizer_gym.rl_model_optimizer_gym import RLModelOptimizerGym
 from food_delivery_gym.main.optimizer.optimizer_gym.weighted_score_driver_optimizer_gym import WeightedScoreDriverOptimizerGym
+from food_delivery_gym.main.optimizer.optimizer_gym.rollout_optimizer_gym import RolloutOptimizerGym
 from food_delivery_gym.main.scenarios import get_all_scenarios
 from food_delivery_gym.main.statistic.statistics_view.board import Board
 
@@ -207,6 +208,8 @@ def main():
                 optimizer = LowestCostDriverOptimizerGym(env, cost_function=cost_function)
             elif args.optimizer == "weighted":
                 optimizer = WeightedScoreDriverOptimizerGym(env)
+            elif args.optimizer == "rollout":
+                optimizer = RolloutOptimizerGym(env, base_optimizer_cls=NearestDriverOptimizerGym, alpha=0.9, horizon=None)
             else:
                 raise ValueError(f"Otimizador '{args.optimizer}' não reconhecido")
 

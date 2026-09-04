@@ -6,8 +6,8 @@ from food_delivery_gym.main.map.map import Map
 
 
 class GridMap(Map):
-    def __init__(self, size):
-        super().__init__(size)
+    def __init__(self, size, rng=None):
+        super().__init__(size, rng=rng)
         self.generated_points = {}
 
     def distance(self, coord1: Coordinate, coord2: Coordinate) -> Number:

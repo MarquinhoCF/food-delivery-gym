@@ -23,6 +23,7 @@ class CapacityDriver(Driver):
         status: Optional[DriverStatus] = DriverStatus.AVAILABLE,
         movement_rate: Optional[Number] = 5,
         reward_objective: Optional[Number] = 1,
+        start_processes: bool = True,
     ):
         # Define capacidade padrão se não fornecida
         if capacity is None:
@@ -37,6 +38,7 @@ class CapacityDriver(Driver):
             status=status,
             movement_rate=movement_rate,
             reward_objective=reward_objective,
+            start_processes=start_processes,
         )
     
     def receive_route_requests(self, route: Route) -> None:

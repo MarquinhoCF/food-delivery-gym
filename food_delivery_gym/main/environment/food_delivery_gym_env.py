@@ -20,7 +20,7 @@ from food_delivery_gym.main.order.order import Order
 from food_delivery_gym.main.route.delivery_route_segment import DeliveryRouteSegment
 from food_delivery_gym.main.route.pickup_route_segment import PickupRouteSegment
 from food_delivery_gym.main.route.route import Route
-from food_delivery_gym.main.utils.random_manager import RandomManager
+from food_delivery_gym.main.utils.rng_factory import RngFactory
 from food_delivery_gym.main.view.grid_view_pygame import GridViewPygame
 
 class FoodDeliveryGymEnv(Env):
@@ -188,7 +188,7 @@ class FoodDeliveryGymEnv(Env):
         self.production_capacity = est["production_capacity"]
         self.percentage_allocation_driver = est["percentage_allocation_driver"]
     
-    def _create_order_generator(self) -> PoissonOrderGenerator | NonHomogeneousPoissonOrderGenerator:
+    def _create_order_generator(self, rng=None) -> PoissonOrderGenerator | NonHomogeneousPoissonOrderGenerator:
         generator_type = self.order_generator_config["type"]
         estimated_num_orders = self.order_generator_config["estimated_num_orders"]
         time_window = self.order_generator_config["time_window"]
@@ -197,7 +197,8 @@ class FoodDeliveryGymEnv(Env):
             return PoissonOrderGenerator(
                 estimated_num_orders=estimated_num_orders,
                 time_window=time_window,
-                lambda_rate=self.order_generator_config.get("lambda_rate", None)
+                lambda_rate=self.order_generator_config.get("lambda_rate", None),
+                rng=rng,
             )
         
         elif generator_type == "non_homogeneous_poisson":
@@ -208,7 +209,8 @@ class FoodDeliveryGymEnv(Env):
                 estimated_num_orders=estimated_num_orders,
                 time_window=time_window,
                 rate_function=rate_function,
-                max_rate=self.order_generator_config.get("max_rate", None)
+                max_rate=self.order_generator_config.get("max_rate", None),
+                rng=rng,
             )
 
     def get_observation(self):
@@ -317,7 +319,8 @@ class FoodDeliveryGymEnv(Env):
         if seed is not None:
             super().reset(seed=seed)
             self.action_space.seed(seed=seed)
-            RandomManager().set_seed(seed=seed)
+
+        rng_factory = RngFactory(seed=seed)
 
         # Lê as opções adicionais
         render_mode = None
@@ -333,12 +336,12 @@ class FoodDeliveryGymEnv(Env):
 
         self.render_mode = render_mode
 
-        poisson_order_generator = self._create_order_generator()
+        poisson_order_generator = self._create_order_generator(rng=rng_factory.next())
         self.orders_generated = poisson_order_generator.get_number_of_orders_generated()
 
         # Cria o ambiente SimPy
         self.simpy_env = FoodDeliverySimpyEnv(
-            map=GridMap(self.grid_map_size),
+            map=GridMap(self.grid_map_size, rng=rng_factory.next()),
             generators=[
                 InitialEstablishmentOrderRateGenerator(
                     self.num_establishments,
@@ -346,13 +349,15 @@ class FoodDeliveryGymEnv(Env):
                     self.operating_radius,
                     self.production_capacity,
                     self.percentage_allocation_driver,
+                    rng=rng_factory.next(),
                 ),
                 InitialDynamicRouteDriverGenerator(
                     self.num_drivers,
                     self.vel_drivers,
                     self.tolerance_percentage,
                     self.max_capacity,
-                    self.reward_objective
+                    self.reward_objective,
+                    rng=rng_factory.next(),
                 ),
                 poisson_order_generator
             ],
@@ -362,7 +367,8 @@ class FoodDeliveryGymEnv(Env):
                 draw_grid=draw_grid,
                 window_size=window_size,
                 fps=fps
-            ) if render_mode == "human" else None
+            ) if render_mode == "human" else None,
+            rng_factory=rng_factory,
         )
 
         self.simpy_env.set_env_mode(self.env_mode)
@@ -563,6 +569,10 @@ class FoodDeliveryGymEnv(Env):
     def close(self):
         if self.simpy_env is not None:
             self.simpy_env.close()
+
+    def clone(self) -> "FoodDeliveryGymEnv":
+        from food_delivery_gym.main.environment.env_clone import clone_gym_env
+        return clone_gym_env(self)
 
     def get_simpy_env(self):
         if self.last_simpy_env is not None:

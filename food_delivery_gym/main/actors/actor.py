@@ -6,13 +6,15 @@ from simpy.core import SimTime
 from simpy.events import ProcessGenerator, Timeout
 
 from food_delivery_gym.main.environment.food_delivery_simpy_env import FoodDeliverySimpyEnv
-from food_delivery_gym.main.utils.random_manager import RandomManager
+
 
 class Actor(ABC):
 
     def __init__(self, environment: FoodDeliverySimpyEnv) -> None:
         self._environment = environment
-        self.rng = RandomManager().get_random_instance()
+        if environment.rng_factory is None:
+            raise RuntimeError("FoodDeliverySimpyEnv requer rng_factory para criar atores")
+        self.rng = environment.rng_factory.next()
 
     def publish_event(self, event) -> None:
         self._environment.add_event(event)
