@@ -5,7 +5,7 @@ import os
 import sys
 import traceback
 
-from food_delivery_gym.main.statistic.simulation_stats import (
+from food_delivery_gym.main.statistics.simulation_stats import (
     npz_to_json,
     json_to_npz,
 )

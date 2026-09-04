@@ -8,14 +8,14 @@ import matplotlib
 from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
 
-from food_delivery_gym.main.statistic.statistics_view.board import Board
-from food_delivery_gym.main.statistic.metrics.route_reordering_metric import RouteReorderingMetric
-from food_delivery_gym.main.statistic.metrics.establishment_metrics import (
+from food_delivery_gym.main.statistics.boards.board import Board
+from food_delivery_gym.main.statistics.metrics.route_reordering_metric import RouteReorderingMetric
+from food_delivery_gym.main.statistics.metrics.establishment_metrics import (
     EstablishmentOrdersFulfilledMetric,
     EstablishmentMaxOrdersInQueueMetric,
     EstablishmentActiveTimeMetric,
 )
-from food_delivery_gym.main.statistic.metrics.driver_metrics import (
+from food_delivery_gym.main.statistics.metrics.driver_metrics import (
     DriverTimeSpentOnDelivery,
     DriverOrdersDeliveredMetric,
     DriverTotalDistanceMetric,
@@ -24,7 +24,7 @@ from food_delivery_gym.main.statistic.metrics.driver_metrics import (
 )
 
 if TYPE_CHECKING:
-    from food_delivery_gym.main.statistic.simulation_stats import SimulationStats
+    from food_delivery_gym.main.statistics.simulation_stats import SimulationStats
 
 
 class BatchStatsBoard(Board):

@@ -5,13 +5,13 @@ from food_delivery_gym.main.generator.time_shift_order_generator import TimeShif
 from food_delivery_gym.main.generator.time_shift_establishment_generator import TimeShiftEstablishmentGenerator
 from food_delivery_gym.main.map.grid_map import GridMap
 from food_delivery_gym.main.optimizer.nearest_driver_optimizer import NearestDriverOptimizer
-from food_delivery_gym.main.statistic.default_board import DefaultBoard
-from food_delivery_gym.main.statistic.delay_metric import DelayMetric
-from food_delivery_gym.main.statistic.distance_metric import DistanceMetric
-from food_delivery_gym.main.statistic.driver_status_metric import DriverStatusMetric
-from food_delivery_gym.main.statistic.order_curve_metric import OrderCurveMetric
-from food_delivery_gym.main.statistic.order_status_metric import OrderStatusMetric
-from food_delivery_gym.main.statistic.total_metric import TotalMetric
+from food_delivery_gym.main.statistics.boards.default_board import DefaultBoard
+from food_delivery_gym.main.statistics.metrics.legacy.delay_metric import DelayMetric
+from food_delivery_gym.main.statistics.metrics.legacy.distance_metric import DistanceMetric
+from food_delivery_gym.main.statistics.metrics.legacy.driver_status_metric import DriverStatusMetric
+from food_delivery_gym.main.statistics.metrics.legacy.order_curve_metric import OrderCurveMetric
+from food_delivery_gym.main.statistics.metrics.legacy.order_status_metric import OrderStatusMetric
+from food_delivery_gym.main.statistics.metrics.legacy.total_metric import TotalMetric
 
 
 def main():

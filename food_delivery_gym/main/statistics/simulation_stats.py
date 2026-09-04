@@ -74,8 +74,8 @@ from typing import IO, Literal
 
 import numpy as np
 
-from food_delivery_gym.main.statistic.statistics_view.batch_stats_board import BatchStatsBoard
-from food_delivery_gym.main.statistic.statistics_view.episode_stats_board import EpisodeStatsBoard
+from food_delivery_gym.main.statistics.boards.batch_stats_board import BatchStatsBoard
+from food_delivery_gym.main.statistics.boards.episode_stats_board import EpisodeStatsBoard
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -434,7 +434,7 @@ class SimulationStats:
 
     def get_episode_board(self, episode_idx: int,) -> "EpisodeStatsBoard":
         # Importação lazy — evita ciclo de imports entre stats ↔ boards
-        from food_delivery_gym.main.statistic.statistics_view.episode_stats_board import (
+        from food_delivery_gym.main.statistics.boards.episode_stats_board import (
             EpisodeStatsBoard,
         )
         return EpisodeStatsBoard(sim_stats=self, episode_idx=episode_idx)
@@ -443,7 +443,7 @@ class SimulationStats:
         if not self.aggregate:
             raise ValueError("Agregados não computados. Chame finalize() antes de obter o batch board.")
         # Importação lazy — evita ciclo de imports entre stats ↔ boards
-        from food_delivery_gym.main.statistic.statistics_view.batch_stats_board import (
+        from food_delivery_gym.main.statistics.boards.batch_stats_board import (
             BatchStatsBoard,
         )
         return BatchStatsBoard(sim_stats=self)

@@ -6,7 +6,7 @@ Não importar diretamente — use as subclasses específicas.
 
 from matplotlib.ticker import FuncFormatter
 
-from food_delivery_gym.main.statistic.metrics.metric import Metric
+from food_delivery_gym.main.statistics.metrics.metric import Metric
 
 
 class _MapActorBarMetric(Metric):

@@ -7,7 +7,7 @@ import traceback
 
 from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
 from food_delivery_gym.main.scenarios import get_all_scenarios, get_defaults_scenarios
-from food_delivery_gym.main.statistic.simulation_stats import SimulationStats
+from food_delivery_gym.main.statistics.simulation_stats import SimulationStats
 
 DEFAULT_RESULTS_DIR = "./data/runs/execucoes"
 ALL_OBJECTIVES      = FoodDeliveryGymEnv.REWARD_OBJECTIVES

@@ -1,7 +1,7 @@
 from collections import defaultdict
 
 from food_delivery_gym.main.environment.food_delivery_simpy_env import FoodDeliverySimpyEnv
-from food_delivery_gym.main.statistic.metrics.legacy import MetricEnvData
+from food_delivery_gym.main.statistics.metrics.legacy import MetricEnvData
 
 
 class OrderStatusMetric(MetricEnvData):

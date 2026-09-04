@@ -5,13 +5,13 @@ from food_delivery_gym.main.generator.initial_establishment_order_rate_generator
 from food_delivery_gym.main.generator.time_shift_order_establishment_rate_generator import TimeShiftOrderEstablishmentRateGenerator
 from food_delivery_gym.main.map.grid_map import GridMap
 from food_delivery_gym.main.optimizer.or_tools_optimizer import OrToolsOptimizer
-from food_delivery_gym.main.statistic.custom_board import CustomBoard
-from food_delivery_gym.main.statistic.delay_metric import DelayMetric
-from food_delivery_gym.main.statistic.distance_metric import DistanceMetric
-from food_delivery_gym.main.statistic.driver_status_metric import DriverStatusMetric
-from food_delivery_gym.main.statistic.order_curve_metric import OrderCurveMetric
-from food_delivery_gym.main.statistic.order_status_metric import OrderStatusMetric
-from food_delivery_gym.main.statistic.total_metric import TotalMetric
+from food_delivery_gym.main.statistics.boards.custom_board import CustomBoard
+from food_delivery_gym.main.statistics.metrics.legacy.delay_metric import DelayMetric
+from food_delivery_gym.main.statistics.metrics.legacy.distance_metric import DistanceMetric
+from food_delivery_gym.main.statistics.metrics.legacy.driver_status_metric import DriverStatusMetric
+from food_delivery_gym.main.statistics.metrics.legacy.order_curve_metric import OrderCurveMetric
+from food_delivery_gym.main.statistics.metrics.legacy.order_status_metric import OrderStatusMetric
+from food_delivery_gym.main.statistics.metrics.legacy.total_metric import TotalMetric
 from food_delivery_gym.main.view.grid_view_pygame import GridViewPygame
 
 

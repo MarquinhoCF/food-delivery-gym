@@ -15,8 +15,8 @@ from food_delivery_gym.main.order.order import Order
 from food_delivery_gym.main.route.delivery_route_segment import DeliveryRouteSegment
 from food_delivery_gym.main.route.pickup_route_segment import PickupRouteSegment
 from food_delivery_gym.main.route.route import Route
-from food_delivery_gym.main.statistic.simulation_stats import SimulationStats
-from food_delivery_gym.main.statistic.statistics_view.board import Board
+from food_delivery_gym.main.statistics.simulation_stats import SimulationStats
+from food_delivery_gym.main.statistics.boards.board import Board
 
 
 class OptimizerGym(Optimizer, ABC):

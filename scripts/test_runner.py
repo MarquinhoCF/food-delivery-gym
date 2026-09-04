@@ -21,7 +21,7 @@ from food_delivery_gym.main.optimizer.optimizer_gym.rl_model_optimizer_gym impor
 from food_delivery_gym.main.optimizer.optimizer_gym.weighted_score_driver_optimizer_gym import WeightedScoreDriverOptimizerGym
 from food_delivery_gym.main.optimizer.optimizer_gym.rollout_optimizer_gym import RolloutOptimizerGym
 from food_delivery_gym.main.scenarios import get_all_scenarios
-from food_delivery_gym.main.statistic.statistics_view.board import Board
+from food_delivery_gym.main.statistics.boards.board import Board
 
 # --- Config padrão ---
 DEFAULT_SEED = 5434

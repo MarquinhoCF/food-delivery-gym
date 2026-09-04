@@ -1,4 +1,4 @@
-from food_delivery_gym.main.statistic.metrics._map_actor_bar_metric import _MapActorBarMetric
+from food_delivery_gym.main.statistics.metrics._map_actor_bar_metric import _MapActorBarMetric
 
 class DriverTimeSpentOnDelivery(_MapActorBarMetric):
     _metric_key        = "time_spent_on_delivery"

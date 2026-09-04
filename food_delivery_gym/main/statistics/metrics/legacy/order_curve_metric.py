@@ -4,7 +4,7 @@ from matplotlib.ticker import MultipleLocator
 
 from food_delivery_gym.main.environment.food_delivery_simpy_env import FoodDeliverySimpyEnv
 from food_delivery_gym.main.events.event_type import EventType
-from food_delivery_gym.main.statistic.metrics.legacy.metric_env_data import MetricEnvData
+from food_delivery_gym.main.statistics.metrics.legacy.metric_env_data import MetricEnvData
 
 
 class OrderCurveMetric(MetricEnvData):
