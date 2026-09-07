@@ -4,30 +4,12 @@ import argparse
 import os
 import textwrap
 from importlib.resources import files
-from typing import Type
 
-from food_delivery_gym.main.cost.marginal_route_cost_function import MarginalRouteCostFunction
-from food_delivery_gym.main.cost.route_cost_function import RouteCostFunction
 from food_delivery_gym.main.environment.env_mode import EnvMode
 from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
-from food_delivery_gym.main.optimizer.optimizer_gym.first_driver_optimizer_gym import (
-    FirstDriverOptimizerGym,
-)
-from food_delivery_gym.main.optimizer.optimizer_gym.lowest_cost_driver_optimizer_gym import (
-    LowestCostDriverOptimizerGym,
-)
-from food_delivery_gym.main.optimizer.optimizer_gym.nearest_driver_optimizer_gym import (
-    NearestDriverOptimizerGym,
-)
-from food_delivery_gym.main.optimizer.optimizer_gym.optmizer_gym import OptimizerGym
-from food_delivery_gym.main.optimizer.optimizer_gym.random_driver_optimizer_gym import (
-    RandomDriverOptimizerGym,
-)
+from food_delivery_gym.main.optimizer import catalog as optimizer_catalog
 from food_delivery_gym.main.optimizer.optimizer_gym.rollout_optimizer_gym import (
     RolloutOptimizerGym,
-)
-from food_delivery_gym.main.optimizer.optimizer_gym.weighted_score_driver_optimizer_gym import (
-    WeightedScoreDriverOptimizerGym,
 )
 from food_delivery_gym.main.statistics.lookahead.rollout_decision_board import (
     RolloutDecisionBoard,
@@ -40,7 +22,7 @@ DEFAULT_BASE_OPTIMIZER = "nearest"
 DEFAULT_HORIZON = 5
 DEFAULT_OUT_DIR = "data/visualization/rollout_viz"
 ALL_OBJECTIVES = FoodDeliveryGymEnv.REWARD_OBJECTIVES
-BASE_OPTIMIZER_CHOICES = ("nearest", "first", "random", "weighted", "lowest")
+BASE_OPTIMIZER_CHOICES = optimizer_catalog.cli_choices(rollout_base=True)
 
 
 def prepare_env(scenario_filename: str, reward_objective: int, seed: int) -> FoodDeliveryGymEnv:
@@ -60,31 +42,16 @@ def resolve_base_optimizer(
     name: str,
     objective: int,
     cost_function_name: str | None,
-) -> tuple[Type[OptimizerGym], dict]:
+):
     """Retorna (classe, kwargs) da política de base do rollout."""
-    if name == "nearest":
-        return NearestDriverOptimizerGym, {}
-    if name == "first":
-        return FirstDriverOptimizerGym, {}
-    if name == "random":
-        return RandomDriverOptimizerGym, {}
-    if name == "weighted":
-        return WeightedScoreDriverOptimizerGym, {}
-    if name == "lowest":
-        if cost_function_name == "route":
-            cost_obj = RouteCostFunction.get_cost_objective(objective)
-            cost_function = RouteCostFunction(objective=cost_obj)
-        elif cost_function_name == "marginal_route":
-            cost_obj = MarginalRouteCostFunction.get_cost_objective(objective)
-            cost_function = MarginalRouteCostFunction(objective=cost_obj)
-        else:
-            raise SystemExit(
-                "--base-optimizer lowest requer --cost-function "
-                "{route|marginal_route}"
-            )
-        return LowestCostDriverOptimizerGym, {"cost_function": cost_function}
-
-    raise SystemExit(f"base-optimizer desconhecido: {name}")
+    try:
+        return optimizer_catalog.constructor_args(
+            name,
+            objective=objective,
+            cost_function=cost_function_name,
+        )
+    except (KeyError, ValueError) as exc:
+        raise SystemExit(str(exc)) from exc
 
 
 def parse_args() -> argparse.Namespace:
@@ -97,14 +64,18 @@ def parse_args() -> argparse.Namespace:
             Executa um episódio, grava o decision_log (Q por motorista + trajetória
             da política base) e salva PNGs + JSON em --out-dir.
 
-            Políticas de base (--base-optimizer):
-              nearest   NearestDriverOptimizerGym (default)
-              first     FirstDriverOptimizerGym
-              random    RandomDriverOptimizerGym
-              weighted  WeightedScoreDriverOptimizerGym
-              lowest    LowestCostDriverOptimizerGym (requer --cost-function)
+            Políticas de base (--base-optimizer), cadastradas em optimizer/catalog.py:
+              {base_lines}
             """
-        ),
+        ).format(base_lines="\n".join(
+            f"  {name:<8} {optimizer_catalog.cli_label(name)}"
+            + (
+                " (requer --cost-function)"
+                if "cost_function" in optimizer_catalog.requires(name)
+                else ""
+            )
+            for name in BASE_OPTIMIZER_CHOICES
+        )),
     )
     parser.add_argument(
         "--scenario",
@@ -126,7 +97,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--cost-function",
-        choices=("route", "marginal_route"),
+        choices=optimizer_catalog.COST_FUNCTION_CHOICES,
         default=None,
         help="Função de custo (obrigatório se --base-optimizer lowest)",
     )
@@ -164,10 +135,11 @@ def main() -> None:
             f"--objective deve ser um inteiro em {ALL_OBJECTIVES}"
         )
 
-    if args.cost_function and args.base_optimizer != "lowest":
+    needed = optimizer_catalog.requires(args.base_optimizer)
+    if args.cost_function and "cost_function" not in needed:
         raise SystemExit("--cost-function só pode ser usado com --base-optimizer lowest")
 
-    if args.base_optimizer == "lowest" and not args.cost_function:
+    if "cost_function" in needed and not args.cost_function:
         raise SystemExit("--base-optimizer lowest requer --cost-function")
 
     base_optimizer_cls, base_optimizer_kwargs = resolve_base_optimizer(

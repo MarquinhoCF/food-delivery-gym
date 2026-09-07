@@ -21,6 +21,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
 from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
+from food_delivery_gym.main.optimizer import catalog as optimizer_catalog
 from food_delivery_gym.main.scenarios import get_all_scenarios, get_defaults_scenarios
 
 # ── Configuração de diretórios ────────────────────────────────────────────────
@@ -36,15 +37,8 @@ METRIC_LABELS       = ["Média", "Desvio Padrão", "Mediana", "Moda"]
 ROWS_PER_OBJECTIVE  = len(METRICS)   # 4 linhas por objetivo
 HEADER_ROWS         = 2              # linhas de cabeçalho antes dos dados
 
-# Heurísticas conhecidas: dir_name → label legível
-KNOWN_HEURISTICS = {
-    "random":                    "Motorista Aleatório",
-    "first_driver":              "Primeiro Motorista",
-    "nearest_driver":            "Motorista mais Próximo",
-    "lowest_route_cost":         "Motorista de Menor Custo de Rota",
-    "lowest_marginal_route_cost":"Motorista de Menor Custo Marginal de Rota",
-    "weighted_score":            "Motorista de Score Ponderado",
-}
+# Heurísticas conhecidas: dir_name → label legível (ver optimizer/catalog.py)
+KNOWN_HEURISTICS = optimizer_catalog.labels()
 
 # Chaves de SimulationStats.aggregate → nome da aba
 # Deve corresponder ao que finalize() grava em self.aggregate
@@ -221,9 +215,9 @@ def agent_label(dir_name: str) -> str:
     """Converte nome de diretório em label legível."""
     if dir_name in KNOWN_HEURISTICS:
         return KNOWN_HEURISTICS[dir_name]
-    if dir_name.startswith("ppo_"):
-        suffix = dir_name[4:]   # remove "ppo_"
-        return f"PPO — {suffix}"
+    rl_label = optimizer_catalog.rl_result_label(dir_name)
+    if rl_label:
+        return rl_label
     return dir_name
 
 

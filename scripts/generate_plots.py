@@ -6,6 +6,7 @@ import os
 import traceback
 
 from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
+from food_delivery_gym.main.optimizer import catalog as optimizer_catalog
 from food_delivery_gym.main.scenarios import get_all_scenarios, get_defaults_scenarios
 from food_delivery_gym.main.statistics.simulation_stats import SimulationStats
 
@@ -126,11 +127,7 @@ def _has_metrics_file(agent_dir: str) -> bool:
 # ── Descoberta de agentes ─────────────────────────────────────────────────────
 
 def discover_agent_dirs(results_dir: str, objectives: list, scenarios: list) -> list[str]:
-    KNOWN_ORDER = [
-        "random", "first_driver", "nearest_driver",
-        "lowest_route_cost", "lowest_marginal_route_cost",
-        "weighted_score"
-    ]
+    known_order = optimizer_catalog.keys()
 
     dirs: list[str] = []
 
@@ -142,8 +139,8 @@ def discover_agent_dirs(results_dir: str, objectives: list, scenarios: list) -> 
 
             entries = [e for e in os.scandir(base) if e.is_dir() and _has_metrics_file(e.path)]
 
-            known = [e for k in KNOWN_ORDER for e in entries if e.name == k]
-            ppo   = sorted([e for e in entries if e.name not in KNOWN_ORDER], key=lambda e: e.name)
+            known = [e for k in known_order for e in entries if e.name == k]
+            ppo   = sorted([e for e in entries if e.name not in known_order], key=lambda e: e.name)
 
             for entry in known + ppo:
                 dirs.append(entry.path)

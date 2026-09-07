@@ -12,22 +12,20 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.ticker import FuncFormatter
 
+from food_delivery_gym.main.optimizer import catalog as optimizer_catalog
+
 DEFAULT_RESULTS_DIR = "./data/runs/execucoes"
 DEFAULT_OUTPUT_DIR  = "./data/runs/figuras"
 DEFAULT_OBJECTIVE   = 3
 
-KNOWN_AGENTS: dict[str, str] = {
-    "random":                       "Aleatório",
-    "first_driver":                 "Primeiro Mot.",
-    "nearest_driver":               "Mot. Próximo",
-    "lowest_route_cost":            "Menor Custo",
-    "lowest_marginal_route_cost":   "Menor Custo Marg.",
-    "weighted_score":               "Score Ponderado",
-    "ppo_18M_steps":                "PPO Padrão",
-    "ppo_18M_steps_otimizado":      "PPO Otimizado",
+# Apelidos curtos de modelos PPO. Heurísticas vêm do catálogo de optimizers.
+PPO_LABELS: dict[str, str] = {
+    "ppo_18M_steps":           "PPO Padrão",
+    "ppo_18M_steps_otimizado": "PPO Otimizado",
 }
 
-HEURISTIC_DIRS = set(KNOWN_AGENTS.keys())
+KNOWN_AGENTS: dict[str, str] = {**optimizer_catalog.labels(short=True), **PPO_LABELS}
+HEURISTIC_DIRS = set(optimizer_catalog.keys())
 
 ALL_SCENARIOS     = ["simple", "medium", "complex"]
 SCENARIO_LABELS   = {"simple": "Simples", "medium": "Médio", "complex": "Complexo"}
@@ -258,7 +256,9 @@ def discover_agents(results_dir: str, scenarios: list[str], objective: int) -> l
 
 
 def agent_label(agent: str) -> str:
-    return KNOWN_AGENTS.get(agent, agent.replace("_", " ").title())
+    if agent in KNOWN_AGENTS:
+        return KNOWN_AGENTS[agent]
+    return optimizer_catalog.rl_result_label(agent) or agent.replace("_", " ").title()
 
 
 def build_color_map(agents: list[str]) -> dict[str, str]:

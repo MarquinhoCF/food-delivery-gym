@@ -5,21 +5,9 @@ import sys
 import textwrap
 
 from dotenv import load_dotenv
-from stable_baselines3 import PPO
-from stable_baselines3.common.vec_env import DummyVecEnv
-from stable_baselines3.common.vec_env import VecNormalize
-from food_delivery_gym.main.cost.marginal_route_cost_function import MarginalRouteCostFunction
-from food_delivery_gym.main.cost.route_cost_function import RouteCostFunction
 from food_delivery_gym.main.environment.env_mode import EnvMode
 from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
-
-from food_delivery_gym.main.optimizer.optimizer_gym.first_driver_optimizer_gym import FirstDriverOptimizerGym
-from food_delivery_gym.main.optimizer.optimizer_gym.lowest_cost_driver_optimizer_gym import LowestCostDriverOptimizerGym
-from food_delivery_gym.main.optimizer.optimizer_gym.random_driver_optimizer_gym import RandomDriverOptimizerGym
-from food_delivery_gym.main.optimizer.optimizer_gym.nearest_driver_optimizer_gym import NearestDriverOptimizerGym
-from food_delivery_gym.main.optimizer.optimizer_gym.rl_model_optimizer_gym import RLModelOptimizerGym
-from food_delivery_gym.main.optimizer.optimizer_gym.weighted_score_driver_optimizer_gym import WeightedScoreDriverOptimizerGym
-from food_delivery_gym.main.optimizer.optimizer_gym.rollout_optimizer_gym import RolloutOptimizerGym
+from food_delivery_gym.main.optimizer import catalog as optimizer_catalog
 from food_delivery_gym.main.scenarios import get_all_scenarios
 from food_delivery_gym.main.statistics.boards.board import Board
 
@@ -59,52 +47,16 @@ def prepare_env(scenario_filename: str, reward_objective: int, seed: int, render
     return env
 
 
-def find_vecnormalize(model_dir: str) -> str | None:
-    """Procura o vecnormalize.pkl no diretório do modelo.
-
-    O rl_zoo3 salva o arquivo em um subdiretório com o nome do ambiente
-    registrado. Como o nome pode variar, a busca é feita recursivamente
-    para ser resiliente a variações no nome do subdiretório.
-    """
-    for root, _dirs, files_found in os.walk(model_dir):
-        if "vecnormalize.pkl" in files_found:
-            return os.path.join(root, "vecnormalize.pkl")
-    return None
+def _scenario_name(scenario_filename: str) -> str:
+    return scenario_filename[:-5] if scenario_filename.endswith(".json") else scenario_filename
 
 
-def load_rl_model(model_path: str, scenario_filename: str, reward_objective: int, seed: int, render: bool):
-    """Carrega o modelo PPO e monta o ambiente adequado.
-
-    Casos tratados:
-    - Com vecnormalize.pkl  → VecNormalize carregado do arquivo (ambiente normalizado)
-    - Sem vecnormalize.pkl  → DummyVecEnv simples (ambiente sem normalização)
-    """
-    model_dir = os.path.dirname(model_path)
-
-    if not os.path.isfile(model_path):
-        raise FileNotFoundError(f"Modelo não encontrado: {model_path}")
-
-    print(f"  [PPO] Carregando modelo: {model_path}")
-    model = PPO.load(model_path)
-
-    base_env = prepare_env(scenario_filename, reward_objective, seed=seed, render=render)
-
-    # Captura o valor atual de base_env no default do argumento para evitar
-    # o bug clássico de closure em loop.
-    vec_env = DummyVecEnv([lambda env=base_env: env])
-
-    vecnormalize_path = find_vecnormalize(model_dir)
-
-    if vecnormalize_path:
-        print(f"  [VecNormalize] Carregando: {vecnormalize_path}")
-        rl_env = VecNormalize.load(vecnormalize_path, vec_env)
-        rl_env.training = False
-        rl_env.norm_reward = False
-    else:
-        print("  [VecNormalize] Não encontrado — usando ambiente sem normalização.")
-        rl_env = vec_env
-
-    return model, rl_env
+def _is_catalog_optimizer(name: str) -> bool:
+    try:
+        optimizer_catalog.requires(name)
+        return True
+    except KeyError:
+        return False
 
 
 def main():
@@ -117,32 +69,43 @@ def main():
             Modos:
              - auto: executa até o fim automaticamente
              - interactive: passo-a-passo controlado pelo usuário
-             - agent: usa um modelo PPO salvo para decidir ações
+             - agent: usa um modelo salvo para decidir ações
 
-            Otimizadores:
-             - random: escolhe motoristas aleatoriamente
-             - first: escolhe sempre o primeiro motorista
-             - nearest: escolhe o motorista mais próximo
-             - lowest: escolhe pelo menor custo de rota (requer --cost-function)
-             - weighted: escolhe com base em um peso (requer --weight)
-             - rollout: usa um modelo de rollout (requer --model-path)
-             - rl: usa um modelo de aprendizado por reforço (requer --model-path)
+            Otimizadores (cadastrados em optimizer/catalog.py):
+            {optimizer_lines}
+
+            Modelos RL descobertos em {model_root}/<cenário>/treinamento/obj_N/
+            também são aceitos em --optimizer (ex.: ppo_18M_steps, sac_1M).
+            --optimizer rl ainda aceita --model-path com um zip avulso.
             """
-        ),
+        ).format(optimizer_lines="\n".join(
+            f" - {name}: {optimizer_catalog.cli_label(name)}"
+            + (
+                " (requer --cost-function)"
+                if "cost_function" in optimizer_catalog.requires(name)
+                else " (aceita --model-path)"
+                if "model" in optimizer_catalog.requires(name)
+                else ""
+            )
+            for name in optimizer_catalog.cli_choices()
+        ), model_root=optimizer_catalog.DEFAULT_MODEL_ROOT),
     )
 
     parser.add_argument("--scenario", default="medium.json",
                         help="Arquivo de cenário dentro de food_delivery_gym.main.scenarios")
     parser.add_argument("--mode", choices=("auto", "interactive", "agent"), default="interactive",
                         help="Modo de execução")
-    parser.add_argument("--optimizer", choices=("random", "first", "nearest", "lowest", "weighted", "rollout", "rl"), default="random",
-                        help="Tipo de otimizador a usar")
-    parser.add_argument("--cost-function", choices=("route", "marginal_route"), default=None,
-                        help="Função de custo usada pelo LowestCostDriverOptimizerGym (apenas quando --optimizer lowest)")
+    parser.add_argument("--optimizer", default="random",
+                        help="Otimizador do catálogo ou chave de modelo descoberta (ex.: ppo_18M_steps)")
+    parser.add_argument("--cost-function", choices=optimizer_catalog.COST_FUNCTION_CHOICES, default=None,
+                        help="Função de custo (obrigatória com --optimizer lowest, ou com --optimizer rollout e --base-optimizer lowest)")
+    parser.add_argument("--base-optimizer", choices=optimizer_catalog.cli_choices(rollout_base=True), default=None,
+                        help="Política de base do rollout (apenas com --optimizer rollout; padrão: nearest)")
     parser.add_argument("--model-path", default=None,
                         help=(
-                            "Caminho para o arquivo best_model.zip do PPO (necessário para --optimizer rl).\n"
-                            "O vecnormalize.pkl será procurado automaticamente no mesmo diretório."
+                            "Caminho para um best_model.zip avulso (atalho com --optimizer rl).\n"
+                            "O algoritmo é detectado automaticamente. O vecnormalize.pkl é "
+                            "procurado no mesmo diretório."
                         ))
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     parser.add_argument("--objective", type=int, default=1,
@@ -158,14 +121,50 @@ def main():
     if args.objective not in ALL_OBJECTIVES:
         parser.error("O argumento --objective deve ser um inteiro entre {} e {}.".format(min(ALL_OBJECTIVES), max(ALL_OBJECTIVES)))
 
-    if args.cost_function and args.optimizer != "lowest":
-        parser.error("Erro: --cost-function só pode ser usado com --optimizer lowest")
+    scenario_name = _scenario_name(args.scenario)
+    discovered = optimizer_catalog.discover_rl_models(
+        optimizer_catalog.DEFAULT_MODEL_ROOT,
+        scenario_name,
+        args.objective,
+    )
+    rl_model = optimizer_catalog.match_rl_model(discovered, args.optimizer)
+    is_catalog = _is_catalog_optimizer(args.optimizer)
+    uses_model_path = args.optimizer == "rl" or (args.model_path and not is_catalog and rl_model is None)
 
-    if not args.cost_function and args.optimizer == "lowest":
+    if not is_catalog and rl_model is None and not args.model_path:
+        known = ", ".join(
+            optimizer_catalog.cli_choices()
+            + [model.key for model in discovered]
+        )
+        parser.error(f"Otimizador '{args.optimizer}' não reconhecido. Opções: {known}")
+
+    if is_catalog:
+        needed = optimizer_catalog.requires(args.optimizer)
+        is_rollout = optimizer_catalog.resolve_key(args.optimizer) == "rollout"
+    else:
+        needed = ()
+        is_rollout = False
+
+    base_name = args.base_optimizer or "nearest"
+    base_needs_cost = is_rollout and "cost_function" in optimizer_catalog.requires(base_name)
+
+    if args.base_optimizer and not is_rollout:
+        parser.error("Erro: --base-optimizer só pode ser usado com --optimizer rollout")
+
+    if args.cost_function and "cost_function" not in needed and not base_needs_cost:
+        parser.error("Erro: --cost-function só pode ser usado com --optimizer lowest, ou com --optimizer rollout e --base-optimizer lowest")
+
+    if "cost_function" in needed and not args.cost_function:
         parser.error("Erro: --optimizer lowest requer --cost-function")
 
-    if args.optimizer == "rl" and not args.model_path:
+    if base_needs_cost and not args.cost_function:
+        parser.error("Erro: --base-optimizer lowest requer --cost-function")
+
+    if uses_model_path and not args.model_path:
         parser.error("Erro: --optimizer rl requer --model-path com o caminho para best_model.zip")
+
+    if args.model_path and not uses_model_path and rl_model is None and args.optimizer != "rl":
+        parser.error("Erro: --model-path só pode ser usado com --optimizer rl")
 
     if args.save_log:
         log_file = open("log.txt", "w", encoding="utf-8")
@@ -176,42 +175,24 @@ def main():
 
     try:
         # Cria o otimizador apropriado
-        if args.optimizer == "rl":
-            model, rl_env = load_rl_model(
-                model_path=args.model_path,
-                scenario_filename=args.scenario,
-                reward_objective=args.objective,
-                seed=args.seed,
-                render=args.render,
+        if rl_model is not None or uses_model_path:
+            env = prepare_env(args.scenario, args.objective, seed=args.seed, render=args.render)
+            model_path = args.model_path if uses_model_path else rl_model.path
+            optimizer = optimizer_catalog.load_rl_optimizer(
+                env,
+                model_path,
+                search_root=optimizer_catalog.DEFAULT_MODEL_ROOT,
             )
-            optimizer = RLModelOptimizerGym(rl_env, model)
             env = optimizer.gym_env
         else:
             env = prepare_env(args.scenario, args.objective, seed=args.seed, render=args.render)
-
-            if args.optimizer == "random":
-                optimizer = RandomDriverOptimizerGym(env)
-            elif args.optimizer == "first":
-                optimizer = FirstDriverOptimizerGym(env)
-            elif args.optimizer == "nearest":
-                optimizer = NearestDriverOptimizerGym(env)
-            elif args.optimizer == "lowest":
-                if args.cost_function == "route":
-                    cost_obj = RouteCostFunction.get_cost_objective(args.objective)
-                    cost_function = RouteCostFunction(objective=cost_obj)
-                elif args.cost_function == "marginal_route":
-                    cost_obj = MarginalRouteCostFunction.get_cost_objective(args.objective)
-                    cost_function = MarginalRouteCostFunction(objective=cost_obj)
-                else:
-                    raise ValueError(f"Cost function '{args.cost_function}' inválida")
-
-                optimizer = LowestCostDriverOptimizerGym(env, cost_function=cost_function)
-            elif args.optimizer == "weighted":
-                optimizer = WeightedScoreDriverOptimizerGym(env)
-            elif args.optimizer == "rollout":
-                optimizer = RolloutOptimizerGym(env, base_optimizer_cls=NearestDriverOptimizerGym, alpha=0.9, horizon=None)
-            else:
-                raise ValueError(f"Otimizador '{args.optimizer}' não reconhecido")
+            optimizer = optimizer_catalog.build(
+                args.optimizer,
+                env,
+                args.objective,
+                cost_function=args.cost_function,
+                base_optimizer=base_name,
+            )
 
         print(f"=== Ambiente pronto com otimizador: {optimizer.get_title()} ===")
         print()
@@ -223,7 +204,7 @@ def main():
         # Executa baseado no modo
         board: Board = None
         if args.mode in ("auto", "agent"):
-            if args.mode == "agent" and args.optimizer != "rl":
+            if args.mode == "agent" and rl_model is None and not uses_model_path:
                 print("AVISO: Modo 'agent' funciona melhor com --optimizer rl")
             board = optimizer.run_auto(max_steps=args.max_steps)
         elif args.mode == "interactive":

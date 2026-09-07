@@ -3,18 +3,9 @@ import os
 import traceback
 import argparse
 
-from stable_baselines3 import PPO
-from stable_baselines3.common.vec_env import DummyVecEnv
-from stable_baselines3.common.vec_env import VecNormalize
 from food_delivery_gym.main.environment.env_mode import EnvMode
-from food_delivery_gym.main.cost.route_cost_function import RouteCostFunction
-from food_delivery_gym.main.cost.marginal_route_cost_function import MarginalRouteCostFunction
 from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
-from food_delivery_gym.main.optimizer.optimizer_gym.first_driver_optimizer_gym import FirstDriverOptimizerGym
-from food_delivery_gym.main.optimizer.optimizer_gym.lowest_cost_driver_optimizer_gym import LowestCostDriverOptimizerGym
-from food_delivery_gym.main.optimizer.optimizer_gym.nearest_driver_optimizer_gym import NearestDriverOptimizerGym
-from food_delivery_gym.main.optimizer.optimizer_gym.random_driver_optimizer_gym import RandomDriverOptimizerGym
-from food_delivery_gym.main.optimizer.optimizer_gym.rl_model_optimizer_gym import RLModelOptimizerGym
+from food_delivery_gym.main.optimizer import catalog as optimizer_catalog
 from food_delivery_gym.main.scenarios import get_all_scenarios, get_defaults_scenarios
 
 ALL_SCENARIOS = get_all_scenarios()
@@ -31,40 +22,10 @@ DEFAULT_RESULTS_BASE_DIR = "./data/runs/execucoes/obj_{}/{}_scenario/"
 METRICS_FMT_OPTIONS = ["npz", "json"]
 DEFAULT_METRICS_FMT = "npz"
 
-# Chave = identificador do argumento --heuristics
-#   "dir"   = subdiretório de saída (results_dir/<dir>/)
-#   "label" = nome legível usado nos logs
-ALL_HEURISTICS = {
-    "random": {
-        "dir":   "random",
-        "label": "Agente Aleatório",
-    },
-    "first_driver": {
-        "dir":   "first_driver",
-        "label": "Agente do Primeiro Motorista",
-    },
-    "nearest_driver": {
-        "dir":   "nearest_driver",
-        "label": "Agente do Motorista mais Próximo",
-    },
-    "lowest_route_cost": {
-        "dir":   "lowest_route_cost",
-        "label": "Agente do Motorista de Menor Custo de Rota",
-    },
-    "lowest_marginal_route_cost": {
-        "dir":   "lowest_marginal_route_cost",
-        "label": "Agente do Motorista de Menor Custo de Rota Marginal",
-    },
-    "weighted_score": {
-        "dir":   "weighted_score",
-        "label": "Agente do Score Ponderado",
-    },
-}
-
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Avalia agentes otimizadores (heurísticas e PPO) no ambiente de entrega de última milha.",
+        description="Avalia agentes otimizadores (heurísticas e modelos de RL) no ambiente de entrega de última milha.",
         formatter_class=argparse.RawTextHelpFormatter,
     )
 
@@ -97,35 +58,62 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--agents", "-a",
+        nargs="+",
+        default=None,
+        metavar="AGENT",
+        help=(
+            "Agentes a executar: heurísticas do catálogo ou modelos descobertos.\n"
+            f"Heurísticas: {optimizer_catalog.keys(is_heuristic=True)}\n"
+            "Modelos: chaves descobertas em --model-base-dir (ex.: ppo_18M_steps, sac_1M).\n"
+            "Padrão: todos os disponíveis para o objetivo e o cenário de treino."
+        ),
+    )
+
+    parser.add_argument(
         "--models", "-m",
         nargs="+",
         default=None,
         metavar="MODEL_NAME",
         help=(
-            "Nomes dos modelos RL a executar (subdiretórios de obj_N/ que contêm best_model.zip).\n"
-            "Padrão: descoberta automática a partir de --model-base-dir\n"
-            "Exemplo: --models 18M_steps meu_experimento_v2"
+            "Filtra os modelos RL (chave ppo_18M_steps ou pasta 18M_steps).\n"
+            "Padrão: todos os descobertos, salvo se --agents já restringir a lista."
         ),
     )
 
     parser.add_argument(
         "--heuristics",
         nargs="+",
-        choices=list(ALL_HEURISTICS),
-        default=list(ALL_HEURISTICS),
+        default=None,
         metavar="HEURISTIC",
         help=(
-            "Heurísticas a executar. Aceita múltiplos valores.\n"
-            f"Opções: {list(ALL_HEURISTICS)}\n"
-            "Padrão: todas\n"
-            "Exemplo: --heuristics random nearest_driver"
+            "Filtra as heurísticas.\n"
+            f"Opções: {optimizer_catalog.keys(is_heuristic=True)}\n"
+            "Padrão: todas, salvo se --agents já restringir a lista."
         ),
+    )
+
+    parser.add_argument(
+        "--base-optimizer",
+        choices=optimizer_catalog.cli_choices(rollout_base=True),
+        default=None,
+        help=(
+            "Política de base do rollout (apenas se rollout estiver entre os agentes).\n"
+            "Padrão: nearest"
+        ),
+    )
+
+    parser.add_argument(
+        "--cost-function",
+        choices=optimizer_catalog.COST_FUNCTION_CHOICES,
+        default=None,
+        help="Função de custo (obrigatória se --base-optimizer lowest)",
     )
 
     parser.add_argument(
         "--no-rl",
         action="store_true",
-        help="Desativa a execução dos modelos de Aprendizado por Reforço (PPO).",
+        help="Desativa a execução dos modelos de Aprendizado por Reforço.",
     )
 
     parser.add_argument(
@@ -153,7 +141,7 @@ def parse_args():
         type=str,
         default=DEFAULT_MODEL_BASE_DIR,
         help=(
-            "Diretório raiz dos modelos PPO treinados.\n"
+            "Diretório raiz dos modelos treinados.\n"
             f"Estrutura esperada: <model-base-dir>/<scenario>/{DEFAULT_MODEL_SUBDIR}/obj_N/<model_name>/best_model.zip\n"
             f"Padrão: {DEFAULT_MODEL_BASE_DIR}"
         ),
@@ -235,134 +223,85 @@ def create_environment(reward_objective: int, scenario_name: str):
     return gym_env
 
 
-def find_vecnormalize(model_dir: str) -> str | None:
-    """Procura o vecnormalize.pkl no diretório do modelo.
+def select_agents_for_run(
+    available: list,
+    agents: list[str] | None,
+    heuristics: list[str] | None,
+    models: list[str] | None,
+    no_heuristics: bool,
+    no_rl: bool,
+) -> list:
+    """Aplica --agents, --heuristics, --models, --no-heuristics e --no-rl sobre a lista unificada."""
+    selected = list(available)
+    if agents:
+        selected = optimizer_catalog.select_agents(available, agents)
 
-    O rl_zoo3 salva o arquivo em um subdiretório com o nome do ambiente
-    registrado. Como o nome pode variar (ex: diferentes versões ou cenários
-    de treino), a busca é feita de forma recursiva para ser resiliente a
-    variações no nome do subdiretório.
-    """
-    for root, _dirs, files_found in os.walk(model_dir):
-        if "vecnormalize.pkl" in files_found:
-            return os.path.join(root, "vecnormalize.pkl")
-    return None
-
-
-def load_rl_model(model_path: str, model_dir: str, reward_objective: int, scenario_name: str):
-    """Carrega o modelo PPO e monta o ambiente adequado.
-
-    Casos tratados:
-    - Com vecnormalize.pkl  → VecNormalize carregado do arquivo (ambiente normalizado)
-    - Sem vecnormalize.pkl  → DummyVecEnv simples (ambiente sem normalização)
-    """
-    model = PPO.load(model_path)
-
-    base_env = create_environment(reward_objective=reward_objective, scenario_name=scenario_name)
-    
-    # Captura o valor atual de base_env no default do argumento para evitar o bug de closure em loop.
-    vec_env = DummyVecEnv([lambda env=base_env: env])
-
-    vecnormalize_path = find_vecnormalize(model_dir)
-
-    if vecnormalize_path:
-        print(f"  [VecNormalize] Carregando: {vecnormalize_path}")
-        env = VecNormalize.load(vecnormalize_path, vec_env)
-        env.training = False
-        env.norm_reward = False
-    else:
-        print("  [VecNormalize] Não encontrado — usando ambiente sem normalização.")
-        env = vec_env
-
-    return model, env
-
-
-def discover_models(model_base_dir: str, objective: int) -> list:
-    """Descobre automaticamente subdiretórios que contêm best_model.zip
-    dentro de model_base_dir/obj_{objective}/."""
-    search_root = os.path.join(model_base_dir, f"obj_{objective}")
-    found = []
-    if not os.path.isdir(search_root):
-        return found
-    for entry in sorted(os.scandir(search_root), key=lambda e: e.name):
-        if entry.is_dir() and os.path.isfile(os.path.join(entry.path, "best_model.zip")):
-            found.append(entry.name)
-    return found
-
-
-def build_heuristic_optimizer(key: str, base_env, objective):
-    """Instancia o otimizador correspondente à chave da heurística."""
-    if key == "random":
-        return RandomDriverOptimizerGym(base_env)
-    if key == "first_driver":
-        return FirstDriverOptimizerGym(base_env)
-    if key == "nearest_driver":
-        return NearestDriverOptimizerGym(base_env)
-    if key == "lowest_route_cost":
-        cost_obj = RouteCostFunction.get_cost_objective(objective)
-        return LowestCostDriverOptimizerGym(base_env, cost_function=RouteCostFunction(objective=cost_obj))
-    if key == "lowest_marginal_route_cost":
-        cost_obj = MarginalRouteCostFunction.get_cost_objective(objective)
-        return LowestCostDriverOptimizerGym(base_env, cost_function=MarginalRouteCostFunction(objective=cost_obj))
-    raise ValueError(f"Heurística desconhecida: '{key}'")
-
-
-def run_heuristics(
-    base_env, scenario: str, heuristics: list, objective: int,
-    results_dir: str, num_runs: int, seed: int,
-    save_individual_plots: bool, save_mean_plots: bool,
-    metrics_fmt: str,
-):
-    for key in heuristics:
-        meta = ALL_HEURISTICS[key]
-        output_dir = os.path.join(results_dir, meta["dir"]) + "/"
-        print(f"\n=== Executando simulações com o {meta['label']} no cenário '{scenario}' ===")
-        build_heuristic_optimizer(key, base_env, objective).run_simulations(
-            num_runs, output_dir, seed=seed,
-            save_individual_plots=save_individual_plots,
-            save_mean_plots=save_mean_plots,
-            metrics_fmt=metrics_fmt,
-        )
-
-
-def run_rl_models(
-    objective: int, scenario: str, models: list, model_base_dir: str,
-    results_dir: str, num_runs: int, seed: int,
-    save_individual_plots: bool, save_mean_plots: bool,
-    metrics_fmt: str,
-):
-    print("\n=== Tentando executar modelos de Aprendizado por Reforço ===")
-
-    if not models:
-        print(f"[AVISO] Nenhum modelo encontrado em '{model_base_dir}/obj_{objective}/'.")
-        return
-
-    for model_name in models:
-        model_dir = os.path.join(model_base_dir, f"obj_{objective}", model_name)
-        model_path = os.path.join(model_dir, "best_model.zip")
-
-        if not os.path.exists(model_path):
-            print(f"\n[AVISO] Modelo não encontrado: {model_path}")
-            continue
-
-        print(f"\nExecutando PPO — Objetivo {objective}, cenário '{scenario}', modelo '{model_name}'")
-        try:
-            model, rl_env = load_rl_model(
-                model_path, model_dir,
-                reward_objective=objective,
-                scenario_name=scenario,
+    if heuristics:
+        wanted = {
+            spec.key
+            for spec in optimizer_catalog.select_agents(
+                [spec for spec in available if spec.is_heuristic],
+                heuristics,
             )
-            rl_optimizer = RLModelOptimizerGym(rl_env, model)
-            rl_optimizer.run_simulations(
-                num_runs,
-                os.path.join(results_dir, f"ppo_{model_name}") + "/",
-                seed=seed,
+        }
+        selected = [
+            spec for spec in selected
+            if not spec.is_heuristic or spec.key in wanted
+        ]
+
+    if models:
+        wanted_models = {
+            spec.key
+            for spec in optimizer_catalog.select_agents(
+                [spec for spec in available if not spec.is_heuristic],
+                models,
+            )
+        }
+        selected = [
+            spec for spec in selected
+            if spec.is_heuristic or spec.key in wanted_models
+        ]
+
+    if no_heuristics:
+        selected = [spec for spec in selected if not spec.is_heuristic]
+    if no_rl:
+        selected = [spec for spec in selected if spec.is_heuristic]
+    return selected
+
+
+def output_name(spec, base_optimizer: str, cost_function: str | None) -> str:
+    if spec.key == "rollout":
+        base_key = optimizer_catalog.resolve_key(base_optimizer, cost_function)
+        return f"rollout_{base_key}"
+    return spec.key
+
+
+def run_agents(
+    scenario: str, agents: list, objective: int,
+    results_dir: str, num_runs: int, seed: int,
+    save_individual_plots: bool, save_mean_plots: bool,
+    metrics_fmt: str, base_optimizer: str, cost_function: str | None,
+):
+    for spec in agents:
+        output_dir = os.path.join(results_dir, output_name(spec, base_optimizer, cost_function)) + "/"
+        print(f"\n=== Executando {spec.label} no cenário '{scenario}' ===")
+        try:
+            env = create_environment(reward_objective=objective, scenario_name=scenario)
+            optimizer = optimizer_catalog.instantiate(
+                spec,
+                env,
+                objective,
+                base_optimizer=base_optimizer,
+                cost_function=cost_function,
+            )
+            optimizer.run_simulations(
+                num_runs, output_dir, seed=seed,
                 save_individual_plots=save_individual_plots,
                 save_mean_plots=save_mean_plots,
                 metrics_fmt=metrics_fmt,
             )
         except Exception as e:
-            print(f"Erro ao executar PPO — objetivo {objective}, cenário '{scenario}', modelo '{model_name}': {e}")
+            print(f"Erro ao executar {spec.label} — objetivo {objective}, cenário '{scenario}': {e}")
             traceback.print_exc()
 
 
@@ -380,9 +319,14 @@ def main():
     print("=== Avaliando Agentes no Ambiente de Entrega de Última Milha ===")
     print(f"  Objetivos    : {args.objectives}")
     print(f"  Cenários     : {args.scenarios}")
-    print(f"  Modelos RL   : {args.models if args.models else 'descoberta automática'}")
-    print(f"  Heurísticas  : {args.heuristics if not args.no_heuristics else 'desativadas'}")
-    print(f"  RL (PPO)     : {'desativado' if args.no_rl else 'ativado'}")
+    print(f"  Agentes      : {args.agents if args.agents else 'todos os disponíveis'}")
+    print(f"  Heurísticas  : {args.heuristics if args.heuristics else 'todas'}"
+          f"{' (desativadas)' if args.no_heuristics else ''}")
+    print(f"  Modelos RL   : {args.models if args.models else 'descoberta automática'}"
+          f"{' (desativados)' if args.no_rl else ''}")
+    print(f"  Base rollout : {args.base_optimizer or 'nearest'}")
+    if args.cost_function:
+        print(f"  Cost function: {args.cost_function}")
     print(f"  Runs         : {args.num_runs} | Seed: {args.seed}")
     print(f"  Modo experim.: {args.experiment_mode}")
     print(f"  Model base   : {args.model_base_dir}")
@@ -393,7 +337,33 @@ def main():
     print(f"  Plot médias  : {'desativado' if not save_mean_plots else 'ativado'}")
     print(f"  Formato métr.: {args.metrics_fmt}")
 
-    if not args.no_rl and args.experiment_mode == "cross_scenario":
+    base_name = args.base_optimizer or "nearest"
+    rollout_names = {"rollout"}
+    heuristics_filter = set(args.heuristics or [])
+    agents_filter = set(args.agents or [])
+    rollout_selected = (
+        not args.no_heuristics
+        and (not agents_filter or bool(agents_filter & rollout_names))
+        and (not heuristics_filter or bool(heuristics_filter & rollout_names))
+    )
+    if args.base_optimizer and not rollout_selected:
+        parser.error("Erro: --base-optimizer só pode ser usado se rollout estiver entre os agentes")
+    if args.cost_function and not rollout_selected:
+        parser.error("Erro: --cost-function só pode ser usado com rollout e --base-optimizer lowest")
+    if rollout_selected:
+        base_needs_cost = "cost_function" in optimizer_catalog.requires(base_name)
+        if base_needs_cost and not args.cost_function:
+            parser.error("Erro: --base-optimizer lowest requer --cost-function")
+        if args.cost_function and not base_needs_cost:
+            parser.error("Erro: --cost-function só pode ser usado com --base-optimizer lowest")
+
+    heuristic_names = set(optimizer_catalog.keys(is_heuristic=True)) | set(
+        optimizer_catalog.cli_choices(is_heuristic=True)
+    )
+    may_run_rl = not args.no_rl and (
+        not args.agents or any(name not in heuristic_names for name in args.agents)
+    )
+    if may_run_rl and args.experiment_mode == "cross_scenario":
         expected_dir = os.path.join(
             args.model_base_dir, args.train_scenario, DEFAULT_MODEL_SUBDIR
         )
@@ -409,37 +379,43 @@ def main():
             results_dir = args.results_base_dir.format(objective, scenario)
 
             print(f"\n\n=== Iniciando avaliações para Objetivo {objective} no cenário '{scenario}' ===")
-            base_env = create_environment(reward_objective=objective, scenario_name=scenario)
 
-            if not args.no_heuristics:
-                print("\n=== Executando Heurísticas ===")
-                run_heuristics(
-                    base_env, scenario, args.heuristics, objective, results_dir,
-                    args.num_runs, args.seed,
-                    save_individual_plots=save_individual_plots,
-                    save_mean_plots=save_mean_plots,
-                    metrics_fmt=args.metrics_fmt,
+            if args.experiment_mode == "same_scenario":
+                train_scenario = scenario
+            else:
+                train_scenario = args.train_scenario
+
+            try:
+                available = optimizer_catalog.available_agents(
+                    args.model_base_dir,
+                    train_scenario,
+                    objective,
                 )
-
-            if not args.no_rl:
-                # Resolve o diretório de modelos de acordo com o modo de experimento.
-                if args.experiment_mode == "same_scenario":
-                    train_scenario = scenario          # modelo treinado no próprio cenário
-                else:                                  # cross_scenario
-                    train_scenario = args.train_scenario
-
-                effective_model_dir = os.path.join(
-                    args.model_base_dir, train_scenario, DEFAULT_MODEL_SUBDIR
+                agents = select_agents_for_run(
+                    available,
+                    args.agents,
+                    args.heuristics,
+                    args.models,
+                    args.no_heuristics,
+                    args.no_rl,
                 )
+            except KeyError as exc:
+                parser.error(str(exc))
 
-                models = args.models if args.models else discover_models(effective_model_dir, objective)
-                run_rl_models(
-                    objective, scenario, models, effective_model_dir, results_dir,
-                    args.num_runs, args.seed,
-                    save_individual_plots=save_individual_plots,
-                    save_mean_plots=save_mean_plots,
-                    metrics_fmt=args.metrics_fmt,
-                )
+            if not agents:
+                print("[AVISO] Nenhum agente selecionado para este objetivo.")
+                continue
+
+            print(f"  Agentes neste objetivo: {[spec.key for spec in agents]}")
+            run_agents(
+                scenario, agents, objective, results_dir,
+                args.num_runs, args.seed,
+                save_individual_plots=save_individual_plots,
+                save_mean_plots=save_mean_plots,
+                metrics_fmt=args.metrics_fmt,
+                base_optimizer=base_name,
+                cost_function=args.cost_function,
+            )
 
     print("\n=== Avaliação concluída ===")
 
