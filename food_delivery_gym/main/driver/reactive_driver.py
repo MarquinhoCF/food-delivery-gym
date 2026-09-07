@@ -1,5 +1,8 @@
-from food_delivery_gym.main.driver.capacity import Capacity
-from food_delivery_gym.main.driver.driver import Driver, DriverStatus
+from typing import Optional
+
+from food_delivery_gym.main.base.types import Coordinate, Number
+from food_delivery_gym.main.driver.driver import Driver
+from food_delivery_gym.main.driver.driver_status import DriverStatus
 from food_delivery_gym.main.environment.food_delivery_simpy_env import FoodDeliverySimpyEnv
 from food_delivery_gym.main.route.route import Route
 
@@ -7,16 +10,29 @@ from food_delivery_gym.main.route.route import Route
 class ReactiveDriver(Driver):
     def __init__(
             self,
+            id: Number,
             environment: FoodDeliverySimpyEnv,
-            coordinate, capacity: Capacity,
+            coordinate: Coordinate,
             available: bool,
-            status: DriverStatus,
-            movement_rate,
-            max_distance
+            max_distance: Number,
+            status: Optional[DriverStatus] = DriverStatus.AVAILABLE,
+            movement_rate: Optional[Number] = 5,
+            reward_objective: Optional[Number] = 1,
+            start_processes: bool = True,
     ):
-        super().__init__(environment, coordinate, available, capacity, status, movement_rate)
+        super().__init__(
+            id=id,
+            environment=environment,
+            coordinate=coordinate,
+            available=available,
+            status=status,
+            movement_rate=movement_rate,
+            reward_objective=reward_objective,
+            start_processes=False,
+        )
         self.max_distance = max_distance
-        self.process(self.search_order())
+        if start_processes:
+            self.process(self.search_order())
 
     def accept_route_condition(self, route: Route):
         default_condition = super().accept_route_condition(route)
@@ -31,9 +47,5 @@ class ReactiveDriver(Driver):
                 order_request = self.environment.ready_orders.get(self.accept_route_condition)
                 search_result = yield self.environment.any_of([order_request, search_timeout])
                 if order_request in search_result:
-                    # print(self.now, f"Driver {self.driver_id} get order {order_request.value.order_id}")
                     self.accept_route(order_request.value)
-                    # yield self.timeout(5)
-                # else:
-                #     print(self.now, f"Driver {self.driver_id} failure search order")
             yield self.timeout(1)

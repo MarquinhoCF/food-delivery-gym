@@ -3,7 +3,7 @@ import pytest
 from food_delivery_gym.main.optimizer.optimizer_gym.first_driver_optimizer_gym import FirstDriverOptimizerGym
 from food_delivery_gym.main.optimizer.optimizer_gym.rollout_optimizer_gym import RolloutOptimizerGym
 
-from tests.conftest import (
+from food_delivery_gym.test.conftest import (
     STRESS,
     TINY,
     assert_envs_consistent,

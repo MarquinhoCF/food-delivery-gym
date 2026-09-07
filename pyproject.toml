@@ -31,5 +31,5 @@ packages = ["food_delivery_gym"]
 test = ["pytest"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["food_delivery_gym/test"]
 pythonpath = ["."]
