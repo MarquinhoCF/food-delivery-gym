@@ -15,6 +15,7 @@ from food_delivery_gym.main.order.order import Order
 from food_delivery_gym.main.route.delivery_route_segment import DeliveryRouteSegment
 from food_delivery_gym.main.route.pickup_route_segment import PickupRouteSegment
 from food_delivery_gym.main.route.route import Route
+from food_delivery_gym.main.environment.state_log import format_step_result
 from food_delivery_gym.main.statistics.simulation_stats import SimulationStats
 from food_delivery_gym.main.statistics.boards.board import Board
 
@@ -424,9 +425,8 @@ class OptimizerGym(Optimizer, ABC):
         
         while step < max_steps and not (self.done or self.truncated):
             step += 1
-            print(f"\n{'='*60}")
-            print(f"--- Step {step} ---")
-            print(f"Observação atual: {np.array(self.state)}")
+            print(f"\n{'─'*76}")
+            print(f" STEP {step}")
             
             # Reduz contador se estiver em modo limitado
             if mode == "auto_limited":
@@ -523,10 +523,7 @@ class OptimizerGym(Optimizer, ABC):
                 
                 # Mostra feedback
                 self.gym_env.print_environment_state()
-                print(f"\nAção aplicada: {action}")
-                print(f"Recompensa do passo: {reward}")
-                print(f"Recompensa acumulada: {sum_reward:.2f}")
-                print(f"Info: {info}")
+                print(format_step_result(action, reward, sum_reward, info))
                 
             except Exception as e:
                 print(f"Erro ao executar passo: {e}")

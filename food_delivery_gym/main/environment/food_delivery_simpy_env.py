@@ -147,9 +147,8 @@ class FoodDeliverySimpyEnv(Environment):
         if self.view is not None and not self.view.quited:
             self.view.quit()
 
-    def print_environment_state(self, options = None):
-        print(f'time_step = {self.now}')
-        self._state.print_state(options)
+    def print_environment_state(self, options=None, current_order=None):
+        self._state.print_state(options, time_step=self.now, current_order=current_order)
 
     def update_statistics_variables(self):
         for establishment in self._state.establishments:
@@ -157,8 +156,4 @@ class FoodDeliverySimpyEnv(Environment):
         
         for driver in self._state.drivers:
             driver.update_statistics_variables()
-    
-    def update_spent_drivers(self):
-        for driver in self._state.drivers:
-            driver.update_spent_time()
             

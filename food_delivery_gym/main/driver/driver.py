@@ -206,6 +206,37 @@ class Driver(MapActor):
             self.current_route_segment = None
 
     def reject_route(self, route: Route) -> None:
+        # TODO: rejeição de rota não é usada hoje (accept_route_condition aceita
+        # sempre que o motorista está disponível). Antes de habilitar, analisar:
+        #
+        # Tempo gasto (sum_penalty_for_time_spent / get_penality_for_time_spent_for_delivery):
+        # - process_route_requests já remove a rota de route_requests antes desta
+        #   chamada, então o intervalo alocação -> rejeição não entra em
+        #   orders_list nem em route_requests e se perde, salvo o pedaço que os
+        #   objetivos 3/9 já tiverem fechado num passo anterior.
+        # - Decidir se esse intervalo conta como gasto e, se sim, acumular aqui
+        #   com start = max(time_that_driver_was_allocated, last_time_check)
+        #   antes de soltar o pedido.
+        # - Reatribuição chama driver_allocated de novo e sobrescreve
+        #   time_that_driver_was_allocated; o intervalo do motorista anterior
+        #   não pode ser recuperado depois.
+        # - Objetivos 9/10 multiplicam por 5 o tempo ainda não coletado; definir
+        #   se esse fator vale para o trecho rejeitado.
+        # - get_episode_stats / time_spent_on_delivery / ep__delivery_time só
+        #   veem o que foi fechado; rejeição sem flush distorce o batch eval.
+        #
+        # Fluxo da rejeição em si:
+        # - DriverRejectedRoute usa self.current_route.route_id, mas a rota
+        #   rejeitada ainda não foi aceita; current_route pode ser None.
+        # - add_rejected_delivery devolve o pedido a orders_awaiting_delivery,
+        #   não a rejected_deliveries. get_rejected_deliveries lê a segunda e
+        #   hoje não vê esse retorno.
+        # - reject_route_segments emite um evento e reenfileira o pedido por
+        #   segmento (coleta e entrega do mesmo pedido).
+        # - receive_route_requests incrementa assigned_routes; a rejeição não
+        #   decrementa. Conferir status do pedido (DRIVER_REJECTED e variantes)
+        #   e se o gym volta a oferecê-lo, além do efeito na recompensa e na
+        #   penalidade de truncamento dos objetivos 3, 7, 9 e 10.
         route.get_current_order().driver_rejected()
         self.publish_event(DriverRejectedRoute(
             driver_id=self.driver_id,

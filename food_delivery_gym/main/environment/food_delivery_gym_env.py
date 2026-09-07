@@ -288,29 +288,14 @@ class FoodDeliveryGymEnv(Env):
         while (not terminated) and (not truncated) and (core_event is None):
             if self.simpy_env.state.get_orders_delivered() < self.orders_generated:
                 self.simpy_env.step(self.render_mode)
-                
-                # TODO: Logs
-                # # Verifica se um pedido foi entregue
-                # if self.simpy_env.state.get_orders_delivered() > self.last_num_orders_delivered:
-                    # print("Pedido entregue!")
-                    # print(f"Número de pedidos entregues: {self.simpy_env.state.get_orders_delivered()}")
-                    # self.last_num_orders_delivered = self.simpy_env.state.get_orders_delivered()
 
                 # Verifica o próximo evento principal
                 core_event = self.simpy_env.dequeue_core_event()
-
-                # TODO: Logs
-                # if core_event is not None:
-                #     print('\n----> Pedido atual para alocação do motorista <----')
-                #     print(core_event.order)
                 
                 # Verifica se atingiu o limite de tempo
                 if self.simpy_env.now >= self.max_time_step - 1:
-                    # print("Limite de tempo atingido!")
                     truncated = True
             else:
-                # TODO: Logs
-                # print("Todos os pedidos foram entregues!")
                 terminated = True
 
         return core_event, terminated, truncated
@@ -602,11 +587,14 @@ class FoodDeliveryGymEnv(Env):
                 "drivers": True,
                 "orders": False,
                 "events": False,
-                "orders_delivered": True
+                "orders_delivered": True,
+                "orders_awaiting": True,
+                "current_order": True,
             }
-        if self.current_order:
-            print(f'current_order:\n{self.current_order.__str__()}')
-        self.simpy_env.print_environment_state(options=options)
+        self.simpy_env.print_environment_state(
+            options=options,
+            current_order=self.current_order,
+        )
     
     def get_description(self):
         descricao = []

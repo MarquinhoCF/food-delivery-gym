@@ -50,8 +50,6 @@ class TimeShiftOrderEstablishmentRateGenerator(TimeShiftGenerator):
         for _ in self.range(env):
             # Verificar se o número de pedidos foi atingido
             if self.max_orders and (env.state.get_length_orders() >= self.max_orders):
-                # TODO: Logs
-                # print(f'Número máximo de pedidos atingido: {self.max_orders}')
                 return
 
             establishment = self.rng.choice(env.state.establishments, size=None)
