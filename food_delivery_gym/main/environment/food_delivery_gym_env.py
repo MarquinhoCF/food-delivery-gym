@@ -27,6 +27,7 @@ class FoodDeliveryGymEnv(Env):
 
     REWARD_OBJECTIVES = list(range(1, 14))
     SCENARIO: dict | None = None
+    SCENARIO_NAME: str | None = None
 
     @classmethod
     def set_scenario(cls, scenario_json_file_path: str) -> None:
@@ -42,6 +43,7 @@ class FoodDeliveryGymEnv(Env):
             raise FileNotFoundError(f"Arquivo de cenário não encontrado: {path}")
         with open(path, "r", encoding="utf-8") as f:
             cls.SCENARIO = json.load(f)
+        cls.SCENARIO_NAME = path.stem
     
     def set_reward_objective(self, reward_objective: int):
         if reward_objective not in self.REWARD_OBJECTIVES:

@@ -71,6 +71,9 @@ class RolloutOptimizerGym(OptimizerGym):
         self.scenario_seed = int(scenario_seed)
         self._scenario_rng = np.random.default_rng(self.scenario_seed)
         self.decision_log: list[dict] = []
+        # Modelo linear de custo terminal: carregado uma vez no primeiro uso.
+        # None = ainda não tentado; False = indisponível (fica em 0.0).
+        self._terminal_cost_model = None
 
     def get_title(self):
         base_name = self.base_optimizer_cls.__name__
@@ -87,17 +90,51 @@ class RolloutOptimizerGym(OptimizerGym):
             "scenario_seed": jsonable_hyperparameter(self.scenario_seed),
         }
 
-    # Aproximação de custo terminal (TODO)
+    def _load_terminal_cost_model(self):
+        """
+        Localiza o modelo linear treinado por scripts/collect_terminal_cost.py
+        para (cenário, objetivo, base). Sem artefato compatível, o custo
+        terminal permanece 0.
+        """
+        from food_delivery_gym.main.optimizer import catalog
+        from food_delivery_gym.main.optimizer.terminal_cost.linear_model import (
+            LinearTerminalCostModel,
+            linear_model_path,
+        )
+
+        scenario = FoodDeliveryGymEnv.SCENARIO_NAME
+        base_key = catalog.base_variant_key_for_instance(
+            self.base_optimizer_cls, self.base_optimizer_kwargs
+        )
+        if scenario is None or base_key is None:
+            return False
+
+        path = linear_model_path(scenario, self.gym_env.get_reward_objective(), base_key)
+        if not path.is_file():
+            return False
+
+        model = LinearTerminalCostModel.load(path)
+        if abs(model.alpha - self.alpha) > 1e-9:
+            return False
+        return model
+
     def terminal_cost_to_go(self, cloned_env: FoodDeliveryGymEnv) -> float:
         """
-        Aproximação do valor (recompensa) a partir do estado atual do
-        ambiente clonado até o fim do episódio, usada para compensar o
-        truncamento do rollout em `self.horizon` passos.
+        Valor estimado (retorno descontado restante) da política de base a
+        partir do estado atual do clone, usado para compensar o truncamento
+        do rollout em `self.horizon` passos.
 
-        TODO: substituir por uma aproximação real (rede neural treinada,
-        heurística de custo, etc). Por enquanto retorna 0.
+        Usa a regressão linear treinada sobre episódios da própria base
+        (scripts/collect_terminal_cost.py). Sem modelo, retorna 0.
         """
-        return 0.0
+        if self._terminal_cost_model is None:
+            self._terminal_cost_model = self._load_terminal_cost_model()
+        if self._terminal_cost_model is False:
+            return 0.0
+
+        from food_delivery_gym.main.optimizer.terminal_cost.features import extract_features
+
+        return self._terminal_cost_model.predict(extract_features(cloned_env))
 
     def _next_scenario_seed(self) -> int:
         return int(self._scenario_rng.integers(0, 2**31 - 1))
@@ -105,15 +142,19 @@ class RolloutOptimizerGym(OptimizerGym):
     def _clone_env(self, scenario_seed: int) -> FoodDeliveryGymEnv:
         return self.gym_env.clone(future="resample", scenario_seed=scenario_seed)
 
-    def _rollout_from(self, cloned_env: FoodDeliveryGymEnv, obs, done: bool, truncated: bool) -> Tuple[float, list[dict]]:
+    def _rollout_from(self, cloned_env: FoodDeliveryGymEnv, obs, done: bool, truncated: bool) -> Tuple[float, list[dict], dict | None]:
         """
         Executa a política de base no clone e retorna
-        (valor_descontado, trajetória_de_passos).
+        (valor_descontado, trajetória_de_passos, custo_terminal).
+
+        `custo_terminal` é None se o horizonte não truncou a trajetória.
+        Quando presente, `estimate` é o valor cru de `terminal_cost_to_go` e
+        `discounted` é o que foi somado ao valor do rollout.
         """
         trajectory: list[dict] = []
 
         if done or truncated:
-            return 0.0, trajectory
+            return 0.0, trajectory, None
 
         base_optimizer = self.base_optimizer_cls(cloned_env, **self.base_optimizer_kwargs)
         base_optimizer.state = obs
@@ -126,8 +167,13 @@ class RolloutOptimizerGym(OptimizerGym):
 
         while not (base_optimizer.done or base_optimizer.truncated):
             if self.horizon is not None and steps >= self.horizon:
-                total_reward += discount * self.terminal_cost_to_go(cloned_env)
-                break
+                estimate = float(self.terminal_cost_to_go(cloned_env))
+                discounted = discount * estimate
+                total_reward += discounted
+                return total_reward, trajectory, {
+                    "estimate": estimate,
+                    "discounted": float(discounted),
+                }
 
             order = cloned_env.get_current_order()
             action = base_optimizer.assign_driver_to_order(base_optimizer.state, order)
@@ -158,7 +204,7 @@ class RolloutOptimizerGym(OptimizerGym):
             discount *= self.alpha
             steps += 1
 
-        return total_reward, trajectory
+        return total_reward, trajectory, None
 
     # Seleção da ação (motorista) via rollout
     def select_driver(self, obs: dict, drivers: List[Driver], route: Route):
@@ -173,7 +219,7 @@ class RolloutOptimizerGym(OptimizerGym):
             order_before = self.gym_env.get_current_order()
             obs_after, reward, terminated, truncated, info = cloned_env.step(action)
 
-            rollout_value, trajectory = self._rollout_from(
+            rollout_value, trajectory, terminal = self._rollout_from(
                 cloned_env, obs_after, terminated, truncated
             )
             q_value = reward + self.alpha * rollout_value
@@ -187,6 +233,10 @@ class RolloutOptimizerGym(OptimizerGym):
                     "order_id": int(order_before.order_id) if order_before is not None else None,
                     "immediate_reward": float(reward),
                     "rollout_value": float(rollout_value),
+                    "terminal_cost": None if terminal is None else float(terminal["estimate"]),
+                    "terminal_cost_discounted": (
+                        None if terminal is None else float(terminal["discounted"])
+                    ),
                     "q_value": float(q_value),
                     "terminated_after_action": bool(terminated),
                     "truncated_after_action": bool(truncated),

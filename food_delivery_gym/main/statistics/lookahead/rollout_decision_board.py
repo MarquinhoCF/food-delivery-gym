@@ -17,9 +17,9 @@ class RolloutDecisionBoard(Board):
     Visualização pós-episódio das decisões do RolloutOptimizerGym.
 
     Para cada decisão gera uma figura 1x2:
-      - esquerda: barras immediate_reward vs alpha*rollout_value (Q = soma)
-      - direita: árvore de decisão com trajetórias internas do rollout
-        (ação candidata → passos da política base ao longo do horizonte)
+      - esquerda: árvore de decisão com trajetórias internas do rollout
+        (ação candidata → passos da política base → estimativa de custo terminal)
+      - direita: barras immediate_reward, rollout simulado e custo terminal (Q = soma)
     """
 
     # Layout da árvore (coordenadas em eixos abstratos)
@@ -71,8 +71,9 @@ class RolloutDecisionBoard(Board):
         horizon = decision.get("horizon")
 
         max_traj = max((len(c.get("trajectory") or []) for c in candidates), default=0)
+        has_terminal = any(c.get("terminal_cost") is not None for c in candidates)
         n_cand = max(len(candidates), 1)
-        tree_w = 2 + max_traj
+        tree_w = 2 + max_traj + (1 if has_terminal else 0)
         fig_w = max(14.0, 4.5 + tree_w * 1.6)
         fig_h = max(6.0, 2.5 + n_cand * 1.1)
 
@@ -107,7 +108,16 @@ class RolloutDecisionBoard(Board):
 
         actions = [c["action"] for c in candidates]
         immediate = [c["immediate_reward"] for c in candidates]
-        discounted_rollout = [alpha * c["rollout_value"] for c in candidates]
+        terminal_in_q = [
+            alpha * float(c["terminal_cost_discounted"])
+            if c.get("terminal_cost") is not None
+            else 0.0
+            for c in candidates
+        ]
+        simulated_rollout = [
+            alpha * c["rollout_value"] - term
+            for c, term in zip(candidates, terminal_in_q)
+        ]
         q_values = [c["q_value"] for c in candidates]
         labels = [f"a={c['action']}\nid={c['driver_id']}" for c in candidates]
 
@@ -117,22 +127,30 @@ class RolloutDecisionBoard(Board):
         bars_imm = ax.bar(x, immediate, width, label="immediate_reward", color="#4C78A8")
         bars_roll = ax.bar(
             x,
-            discounted_rollout,
+            simulated_rollout,
             width,
             bottom=immediate,
-            label=f"α·rollout_value (α={alpha:g})",
+            label=f"α·rollout simulado (α={alpha:g})",
             color="#F58518",
         )
+        bars_term = ax.bar(
+            x,
+            terminal_in_q,
+            width,
+            bottom=[imm + sim for imm, sim in zip(immediate, simulated_rollout)],
+            label="custo terminal estimado",
+            color="#B279A2",
+        )
 
-        for i, (imm_bar, roll_bar, q) in enumerate(zip(bars_imm, bars_roll, q_values)):
+        for i, (imm_bar, roll_bar, term_bar, q) in enumerate(
+            zip(bars_imm, bars_roll, bars_term, q_values)
+        ):
             if actions[i] == chosen_action:
-                imm_bar.set_edgecolor("black")
-                imm_bar.set_linewidth(2.5)
-                imm_bar.set_hatch("//")
-                roll_bar.set_edgecolor("black")
-                roll_bar.set_linewidth(2.5)
-                roll_bar.set_hatch("//")
-            top = imm_bar.get_height() + roll_bar.get_height()
+                for bar in (imm_bar, roll_bar, term_bar):
+                    bar.set_edgecolor("black")
+                    bar.set_linewidth(2.5)
+                    bar.set_hatch("//")
+            top = imm_bar.get_height() + roll_bar.get_height() + term_bar.get_height()
             ax.text(
                 imm_bar.get_x() + imm_bar.get_width() / 2,
                 top,
@@ -199,6 +217,7 @@ class RolloutDecisionBoard(Board):
             self._draw_edge(ax, root_xy, (x, y), label=f"try a={cand['action']}")
 
             traj = cand.get("trajectory") or []
+            terminal = cand.get("terminal_cost")
             prev = (x, y)
             for step in traj:
                 depth = int(step["step"]) + 1
@@ -218,7 +237,22 @@ class RolloutDecisionBoard(Board):
                 self._draw_edge(ax, prev, (nx, ny), label=edge_lbl)
                 prev = (nx, ny)
 
-            if not traj:
+            if terminal is not None:
+                depth = len(traj) + 1
+                nx = (depth + 1) * self._X_GAP
+                ny = y
+                positions[(i, depth)] = (nx, ny)
+                discounted = cand.get("terminal_cost_discounted")
+                label_t = (
+                    f"terminal\n"
+                    f"V̂={float(terminal):.2f}\n"
+                    f"αᵏV̂={float(discounted or 0.0):.2f}"
+                )
+                self._draw_node(
+                    ax, (nx, ny), label_t, face="#E5D4EF", edge="#6B3FA0", lw=1.4, square=True
+                )
+                self._draw_edge(ax, prev, (nx, ny), label="V̂")
+            elif not traj:
                 # folha vazia: episódio já terminou após a ação candidata
                 nx = 2 * self._X_GAP
                 self._draw_node(
@@ -246,7 +280,7 @@ class RolloutDecisionBoard(Board):
         ax.text(
             0.01,
             0.01,
-            "Green = chosen candidate  |  Orange = base-policy rollout steps",
+            "Green = chosen  |  Orange = rollout steps  |  Purple = terminal cost",
             transform=ax.transAxes,
             fontsize=8,
             color="#555555",
@@ -261,13 +295,14 @@ class RolloutDecisionBoard(Board):
         face: str,
         edge: str,
         lw: float,
+        square: bool = False,
     ) -> None:
         x, y = xy
         box = FancyBboxPatch(
             (x - self._NODE_W / 2, y - self._NODE_H / 2),
             self._NODE_W,
             self._NODE_H,
-            boxstyle="round,pad=0.04,rounding_size=0.08",
+            boxstyle="square,pad=0.02" if square else "round,pad=0.04,rounding_size=0.08",
             facecolor=face,
             edgecolor=edge,
             linewidth=lw,

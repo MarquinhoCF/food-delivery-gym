@@ -358,6 +358,38 @@ def rollout_result_key(base_optimizer: str, cost_function: str | None = None) ->
     return f"rollout_{base.key}"
 
 
+def base_variant_key(base_optimizer: str, cost_function: str | None = None) -> str:
+    """Chave da variante da política de base (ex.: nearest_driver, lowest_weighted_score)."""
+    base = get(base_optimizer)
+    if needs_cost_function(base.key):
+        if not cost_function:
+            raise ValueError(f"Base '{base.key}' requer cost_function")
+        return lowest_result_key(cost_function)
+    return base.key
+
+
+def base_variant_key_for_instance(base_cls: type, base_kwargs: dict[str, Any]) -> str | None:
+    """
+    Chave da variante a partir da classe/kwargs usados pelo rollout.
+
+    Retorna None se a classe não estiver no catálogo ou a cost function
+    não for reconhecida.
+    """
+    spec = next((s for s in CATALOG.values() if s.cls is base_cls), None)
+    if spec is None:
+        return None
+    if not needs_cost_function(spec.key):
+        return spec.key
+    cost_function = base_kwargs.get("cost_function")
+    cost_spec = next(
+        (c for c in _COST_FUNCTIONS if cost_function is not None and type(cost_function) is c.cls),
+        None,
+    )
+    if cost_spec is None:
+        return None
+    return cost_spec.result_key
+
+
 def _normalize_cost_functions(names: list[str]) -> list[str]:
     selected: list[str] = []
     for name in names:

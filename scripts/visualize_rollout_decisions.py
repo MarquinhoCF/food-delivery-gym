@@ -61,8 +61,8 @@ def parse_args() -> argparse.Namespace:
             """
             Visualização pós-episódio da seleção de ações do RolloutOptimizerGym.
 
-            Executa um episódio, grava o decision_log (Q por motorista + trajetória
-            da política base) e salva PNGs + JSON em --out-dir.
+            Executa um episódio, grava o decision_log (Q por motorista, trajetória
+            da política base e custo terminal estimado) e salva PNGs + JSON em --out-dir.
 
             Políticas de base (--base-optimizer), cadastradas em optimizer/catalog.py:
               {base_lines}
