@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 import traceback
-from typing import Optional
+from typing import Literal, Optional
 
 from food_delivery_gym.main.utils.rate_function_utils import build_rate_function, validate_rate_function
 import numpy as np
@@ -555,9 +555,18 @@ class FoodDeliveryGymEnv(Env):
         if self.simpy_env is not None:
             self.simpy_env.close()
 
-    def clone(self) -> "FoodDeliveryGymEnv":
+    def clone(
+        self,
+        *,
+        future: Literal["copy", "resample"] = "copy",
+        scenario_seed: int | None = None,
+    ) -> "FoodDeliveryGymEnv":
+        """
+        `future="copy"` reproduz o mesmo RNG (testes de trajetória).
+        `future="resample"` reamostra o ruído ainda não realizado a partir de `scenario_seed`.
+        """
         from food_delivery_gym.main.environment.env_clone import clone_gym_env
-        return clone_gym_env(self)
+        return clone_gym_env(self, future=future, scenario_seed=scenario_seed)
 
     def get_simpy_env(self):
         if self.last_simpy_env is not None:

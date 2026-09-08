@@ -10,8 +10,8 @@ from __future__ import annotations
 import copy
 import pickle
 from collections import deque
-from dataclasses import dataclass, field
-from typing import Any, Optional
+from dataclasses import dataclass, field, replace
+from typing import Any, Literal, Optional
 
 import numpy as np
 from simpy.core import Environment as SimpyEnvironment
@@ -444,7 +444,39 @@ def _apply_rng_states(owners_and_clones, states: dict[int, dict]) -> None:
         cloned.rng = _clone_numpy_rng(states[source_id])
 
 
-def clone_simpy_env(src: FoodDeliverySimpyEnv) -> tuple[dict, FoodDeliverySimpyEnv]:
+def _reseed_clone_rngs(env: FoodDeliverySimpyEnv, scenario_seed: int) -> None:
+    """Troca a fábrica e os RNGs do clone por um cenário independente do ambiente real."""
+    factory = RngFactory(seed=scenario_seed)
+    env.rng_factory = factory
+    for owner in _collect_rng_owners(env):
+        owner.rng = factory.next()
+
+
+def _resample_unrealized_demand(env: FoodDeliverySimpyEnv) -> dict[int, float | None]:
+    """
+    Reamostra chegadas ainda não criadas.
+
+    Retorna, por id do gerador clonado, a espera até a primeira chegada nova
+    (None se o cenário não tiver mais pedidos).
+    """
+    waits: dict[int, float | None] = {}
+    for generator in env.generators:
+        if isinstance(generator, PoissonOrderGenerator):
+            waits[id(generator)] = generator.replace_unrealized_arrivals(env.now)
+    return waits
+
+
+def clone_simpy_env(
+    src: FoodDeliverySimpyEnv,
+    *,
+    future: Literal["copy", "resample"] = "copy",
+    scenario_seed: int | None = None,
+) -> tuple[dict, FoodDeliverySimpyEnv]:
+    if future not in ("copy", "resample"):
+        raise ValueError("future deve ser 'copy' ou 'resample'")
+    if future == "resample" and scenario_seed is None:
+        raise ValueError("clone(future='resample') requer scenario_seed")
+
     # Captura um "retrato" de todos os processos SimPy pendentes (quem são, em que fase, quanto tempo falta)
     wakes = capture_wakes(src)
 
@@ -496,20 +528,42 @@ def clone_simpy_env(src: FoodDeliverySimpyEnv) -> tuple[dict, FoodDeliverySimpyE
     # `new_env`, não a `src`.
     _bind_new_env(copied, new_env)
 
-    # Restaura, nos objetos JÁ CLONADOS, o estado dos RNGs salvo no início, assim o clone tem RNGs com o mesmo estado que o 
-    # original tinha no momento da captura, garantindo geração de números aleatórios determinística e independente
-    # a partir daqui.
-    _apply_rng_states(
-        ((id(owner), memo[id(owner)]) for owner in _collect_rng_owners(src) if id(owner) in memo),
-        rng_states,
-    )
+    # copy: mesmos bit-generators do instante da captura (replay determinístico).
+    # resample: cenário hipotético, independente do fluxo que o ambiente real ainda vai consumir.
+    resampled_waits: dict[int, float | None] = {}
+    if future == "resample":
+        _reseed_clone_rngs(new_env, int(scenario_seed))
+        resampled_waits = _resample_unrealized_demand(new_env)
+    else:
+        _apply_rng_states(
+            ((id(owner), memo[id(owner)]) for owner in _collect_rng_owners(src) if id(owner) in memo),
+            rng_states,
+        )
 
     # Para cada processo capturado em `wakes`, recria um generator equivalente a partir do ponto de execução salvo (fase, tempo 
     # restante, objetos referenciados) e o agenda no novo ambiente.
+    scheduled_generate: set[int] = set()
     for spec in wakes:
         owner = _mapped(memo, spec.owner_id, spec.co_name)
+        if future == "resample" and spec.co_name == "generate" and isinstance(owner, PoissonOrderGenerator):
+            wait = resampled_waits.get(id(owner))
+            if wait is None:
+                continue
+            spec = replace(spec, remaining=wait)
+            scheduled_generate.add(id(owner))
         resume_gen = _make_resume_generator(spec, owner, memo, new_env)
         new_env.process(resume_gen)
+
+    if future == "resample":
+        for generator in new_env.generators:
+            if not isinstance(generator, PoissonOrderGenerator) or id(generator) in scheduled_generate:
+                continue
+            if resampled_waits.get(id(generator)) is None:
+                continue
+            new_env.process(generator.generate(
+                new_env,
+                resume=ResumeCursor(extras={"arrival_index": generator.current_order_id - 1}),
+            ))
 
     # `env.process()` só agenda um evento `Initialize` urgente para cada processo; aqui esses eventos são "descarregados" sem avançar 
     # o relógio da simulação, fazendo os processos recém-criados chegarem até o mesmo ponto de espera (ex.: aguardando um timeout) 
@@ -533,7 +587,19 @@ def _flush_initialize_events(env: FoodDeliverySimpyEnv) -> None:
         env.step()
 
 
-def clone_gym_env(env):
+def _orders_generated_from_demand(env: FoodDeliverySimpyEnv) -> int | None:
+    generators = [generator for generator in env.generators if isinstance(generator, PoissonOrderGenerator)]
+    if not generators:
+        return None
+    return sum(generator.get_number_of_orders_generated() for generator in generators)
+
+
+def clone_gym_env(
+    env,
+    *,
+    future: Literal["copy", "resample"] = "copy",
+    scenario_seed: int | None = None,
+):
     from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
 
     if env.simpy_env is None:
@@ -547,7 +613,7 @@ def clone_gym_env(env):
 
     # A partir daqui, o clone precisa de um SimPy Environment separado
     # Para não compartilhar a mesma referência
-    memo, new_simpy = clone_simpy_env(env.simpy_env)
+    memo, new_simpy = clone_simpy_env(env.simpy_env, future=future, scenario_seed=scenario_seed)
     cloned.simpy_env = new_simpy
     cloned.last_simpy_env = None
     cloned.render_mode = None
@@ -560,5 +626,10 @@ def clone_gym_env(env):
 
     if env._cached_busy_times is not None:
         cloned._cached_busy_times = np.copy(env._cached_busy_times)
+
+    if future == "resample":
+        orders_generated = _orders_generated_from_demand(new_simpy)
+        if orders_generated is not None:
+            cloned.orders_generated = orders_generated
 
     return cloned

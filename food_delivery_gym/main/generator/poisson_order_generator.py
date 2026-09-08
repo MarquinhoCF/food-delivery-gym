@@ -44,8 +44,12 @@ class PoissonOrderGenerator(Generator):
 
     # Geração de chegadas (Poisson homogêneo)
     def generate_arrival_times(self) -> list:
+        return self.sample_arrivals_after(0)
+
+    def sample_arrivals_after(self, now: float) -> list:
+        """Amostra chegadas em (now, time_window] com o RNG atual do gerador."""
         arrival_times = []
-        current_time = 0
+        current_time = now
 
         while current_time < self.time_window:
             interarrival = self.rng.exponential(1.0 / self.lambda_rate)
@@ -54,6 +58,20 @@ class PoissonOrderGenerator(Generator):
                 arrival_times.append(current_time)
 
         return arrival_times
+
+    def replace_unrealized_arrivals(self, now: float) -> float | None:
+        """
+        Substitui chegadas ainda não criadas por uma amostra independente a partir de `now`.
+
+        O prefixo já realizado permanece para o índice coincidir com `current_order_id`.
+        Retorna a espera até a primeira chegada nova, ou None se não houver futuro.
+        """
+        pending_index = max(0, self.current_order_id - 1)
+        future = self.sample_arrivals_after(now)
+        self.arrival_times = list(self.arrival_times[:pending_index]) + future
+        if not future:
+            return None
+        return float(future[0] - now)
 
     # Lógica de criação dos pedidos
     def process_establishment(self, env: FoodDeliverySimpyEnv, establishment):
@@ -88,17 +106,16 @@ class PoissonOrderGenerator(Generator):
 
     def generate(self, env: FoodDeliverySimpyEnv, *, resume: Optional[ResumeCursor] = None):
         r = resume or ResumeCursor()
-        start_index = 0
+        start_index = int(r.extras.get("arrival_index", 0))
 
-        # Se está resumindo, espera o tempo restante e processa o próximo pedido
+        # Espera já iniciada (clone copy, ou retarget do próximo pedido): cria esse pedido
+        # e só depois segue a lista. Sem remaining, arrival_index só posiciona o loop.
         if r.has_pending_remaining():
             yield env.timeout(r.delay(0))
-            start_index = int(r.extras.get("arrival_index", 0))
             establishment = self.rng.choice(env.state.establishments, size=None)
             self.process_establishment(env, establishment)
             start_index += 1
 
-        # Se não está resumindo, processa os pedidos subsequentes
         for arrival_time in self.arrival_times[start_index:]:
             wait_time = arrival_time - env.now
             if wait_time > 0:

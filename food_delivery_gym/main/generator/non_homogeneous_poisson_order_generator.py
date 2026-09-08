@@ -35,8 +35,11 @@ class NonHomogeneousPoissonOrderGenerator(PoissonOrderGenerator):
         return self.rate_function
 
     def generate_arrival_times(self) -> list:
+        return self.sample_arrivals_after(0)
+
+    def sample_arrivals_after(self, now: float) -> list:
         arrival_times = []
-        current_time = 0
+        current_time = now
 
         while current_time < self.time_window:
             interarrival = self.rng.exponential(1.0 / self.max_rate)

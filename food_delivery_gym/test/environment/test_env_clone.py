@@ -1,5 +1,9 @@
+import copy
+
 import pytest
 
+from food_delivery_gym.main.environment.env_clone import capture_wakes
+from food_delivery_gym.main.generator.poisson_order_generator import PoissonOrderGenerator
 from food_delivery_gym.main.optimizer.optimizer_gym.first_driver_optimizer_gym import FirstDriverOptimizerGym
 from food_delivery_gym.main.optimizer.optimizer_gym.rollout_optimizer_gym import RolloutOptimizerGym
 
@@ -9,6 +13,7 @@ from food_delivery_gym.test.conftest import (
     assert_envs_consistent,
     assert_obs_equal,
     make_env,
+    rng_snapshot,
     structural_snapshot,
 )
 
@@ -200,3 +205,99 @@ def test_clone_of_clone_matches_source(seed):
         return step_idx % current_env.num_drivers
 
     _lockstep_until_done(env, second, action_fn, context=f"seed={seed} clone-de-clone")
+
+
+def _poisson_generator(env):
+    generators = [generator for generator in env.simpy_env.generators if isinstance(generator, PoissonOrderGenerator)]
+    assert len(generators) == 1
+    return generators[0]
+
+
+def _future_arrivals(env) -> list:
+    generator = _poisson_generator(env)
+    pending_index = generator.current_order_id - 1
+    return list(generator.arrival_times[pending_index:])
+
+
+def _non_generate_wakes(env) -> list[tuple]:
+    return sorted(
+        (wake.co_name, round(wake.remaining, 10))
+        for wake in capture_wakes(env.simpy_env)
+        if wake.co_name != "generate"
+    )
+
+
+def test_resample_requires_scenario_seed():
+    env = make_env(TINY, seed=7)
+    with pytest.raises(ValueError, match="scenario_seed"):
+        env.clone(future="resample")
+
+
+def test_resample_does_not_touch_source_future():
+    env = make_env(TINY, seed=11)
+    assert _future_arrivals(env), "o instante do clone ainda precisa ter demanda não realizada"
+
+    arrivals_before = copy.deepcopy(_poisson_generator(env).arrival_times)
+    rng_before = rng_snapshot(env)
+
+    cloned = env.clone(future="resample", scenario_seed=99)
+
+    assert _poisson_generator(env).arrival_times == arrivals_before
+    assert rng_snapshot(env) == rng_before
+    assert _future_arrivals(cloned) != _future_arrivals(env)
+    assert rng_snapshot(cloned) != rng_before
+
+
+def test_resample_same_seed_shares_scenario_and_diverges_across_seeds():
+    env = make_env(TINY, seed=21)
+    _step_first_driver(env, n_steps=1)
+
+    clone_a = env.clone(future="resample", scenario_seed=5)
+    clone_b = env.clone(future="resample", scenario_seed=5)
+    clone_c = env.clone(future="resample", scenario_seed=6)
+
+    assert _future_arrivals(clone_a) == _future_arrivals(clone_b)
+    assert _future_arrivals(clone_a) != _future_arrivals(clone_c)
+    assert clone_a.orders_generated == clone_b.orders_generated
+    assert clone_a.orders_generated == _poisson_generator(clone_a).get_number_of_orders_generated()
+
+    def action_fn(step_idx, current_env):
+        return step_idx % current_env.num_drivers
+
+    steps = _lockstep_until_done(clone_a, clone_b, action_fn, context="resample mesma semente")
+    assert steps >= 1
+
+
+def test_resample_keeps_realized_timeouts():
+    env = make_env(STRESS, seed=3)
+    _step_first_driver(env, n_steps=4)
+
+    source_waits = _non_generate_wakes(env)
+    assert source_waits, "esperava algum timeout já realizado além do gerador de pedidos"
+
+    cloned = env.clone(future="resample", scenario_seed=8)
+    assert _non_generate_wakes(cloned) == source_waits
+
+
+def test_rollout_shares_one_resampled_scenario_per_decision():
+    env = make_env(TINY, seed=4)
+    optimizer = RolloutOptimizerGym(env, horizon=0, record_decisions=True, scenario_seed=123)
+    calls = []
+    original_clone = env.clone
+
+    def tracking_clone(*, future="copy", scenario_seed=None):
+        calls.append((future, scenario_seed))
+        return original_clone(future=future, scenario_seed=scenario_seed)
+
+    optimizer.gym_env.clone = tracking_clone
+    optimizer.select_driver({}, env.get_drivers(), None)
+
+    assert len(calls) == env.num_drivers
+    assert {future for future, _ in calls} == {"resample"}
+    assert len({seed for _, seed in calls}) == 1
+    assert optimizer.decision_log[-1]["scenario_seed"] == calls[0][1]
+
+    optimizer.select_driver({}, env.get_drivers(), None)
+    first_seed = calls[0][1]
+    second_seed = calls[env.num_drivers][1]
+    assert first_seed != second_seed

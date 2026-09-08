@@ -76,8 +76,8 @@ class RolloutDecisionBoard(Board):
         fig_w = max(14.0, 4.5 + tree_w * 1.6)
         fig_h = max(6.0, 2.5 + n_cand * 1.1)
 
-        fig, (ax_bars, ax_tree) = plt.subplots(
-            1, 2, figsize=(fig_w, fig_h), gridspec_kw={"width_ratios": [1.0, 2.2]}
+        fig, (ax_tree, ax_bars) = plt.subplots(
+            1, 2, figsize=(fig_w, fig_h), gridspec_kw={"width_ratios": [2.2, 1.0]}
         )
         fig.suptitle(
             f"Decision {int(decision.get('decision_idx', 0)) + 1}  |  "
@@ -87,8 +87,8 @@ class RolloutDecisionBoard(Board):
             fontweight="bold",
         )
 
-        self._draw_q_bars(ax_bars, candidates, chosen_action, alpha)
         self._draw_decision_tree(ax_tree, decision, candidates, chosen_action, alpha)
+        self._draw_q_bars(ax_bars, candidates, chosen_action, alpha)
 
         fig.tight_layout()
         return fig
@@ -190,9 +190,8 @@ class RolloutDecisionBoard(Board):
             face = "#C7E9C0" if is_chosen else "#DEEBF7"
             edge = "#006D2C" if is_chosen else "#3182BD"
             lw = 2.4 if is_chosen else 1.2
-            chosen_tag = " ★ CHOSEN" if is_chosen else ""
             label = (
-                f"a={cand['action']}  drv={cand['driver_id']}{chosen_tag}\n"
+                f"a={cand['action']}  drv={cand['driver_id']}\n"
                 f"r₀={cand['immediate_reward']:.2f}\n"
                 f"Q={cand['q_value']:.2f}"
             )

@@ -1,5 +1,7 @@
 from typing import List, Optional, Type, Tuple
 
+import numpy as np
+
 from food_delivery_gym.main.driver.driver import Driver
 from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
 from food_delivery_gym.main.optimizer.optimizer_gym.optmizer_gym import (
@@ -20,6 +22,8 @@ class RolloutOptimizerGym(OptimizerGym):
 
     Para o pedido/estado atual, e para cada motorista candidato (ação):
       1. Clona o ambiente real (snapshot/restore SimPy), preservando-o intacto.
+         O futuro ainda não realizado é reamostrado: todos os candidatos da
+         mesma decisão compartilham um cenário independente do RNG real.
       2. Aplica a ação candidata no ambiente clonado (1 passo real).
       3. A partir daí, executa a política de base (base_optimizer) no
          ambiente clonado, acumulando recompensa descontada por α, até:
@@ -39,6 +43,7 @@ class RolloutOptimizerGym(OptimizerGym):
         alpha: float = 1.0,
         horizon: Optional[int] = None,
         record_decisions: bool = True,
+        scenario_seed: int = 0,
     ):
         """
         Args:
@@ -53,6 +58,9 @@ class RolloutOptimizerGym(OptimizerGym):
                 None, o rollout roda até o episódio terminar.
             record_decisions: se True, grava Q-values e trajetórias de
                 rollout em `decision_log` a cada chamada de select_driver.
+            scenario_seed: semente do RNG próprio do rollout. Cada decisão
+                sorteia um cenário hipotético independente do ambiente real;
+                todos os candidatos dessa decisão compartilham o mesmo cenário.
         """
         super().__init__(environment)
         self.base_optimizer_cls = base_optimizer_cls
@@ -60,6 +68,8 @@ class RolloutOptimizerGym(OptimizerGym):
         self.alpha = alpha
         self.horizon = horizon
         self.record_decisions = record_decisions
+        self.scenario_seed = int(scenario_seed)
+        self._scenario_rng = np.random.default_rng(self.scenario_seed)
         self.decision_log: list[dict] = []
 
     def get_title(self):
@@ -74,6 +84,7 @@ class RolloutOptimizerGym(OptimizerGym):
             "alpha": jsonable_hyperparameter(self.alpha),
             "horizon": jsonable_hyperparameter(self.horizon),
             "record_decisions": jsonable_hyperparameter(self.record_decisions),
+            "scenario_seed": jsonable_hyperparameter(self.scenario_seed),
         }
 
     # Aproximação de custo terminal (TODO)
@@ -88,8 +99,11 @@ class RolloutOptimizerGym(OptimizerGym):
         """
         return 0.0
 
-    def _clone_env(self) -> FoodDeliveryGymEnv:
-        return self.gym_env.clone()
+    def _next_scenario_seed(self) -> int:
+        return int(self._scenario_rng.integers(0, 2**31 - 1))
+
+    def _clone_env(self, scenario_seed: int) -> FoodDeliveryGymEnv:
+        return self.gym_env.clone(future="resample", scenario_seed=scenario_seed)
 
     def _rollout_from(self, cloned_env: FoodDeliveryGymEnv, obs, done: bool, truncated: bool) -> Tuple[float, list[dict]]:
         """
@@ -151,9 +165,10 @@ class RolloutOptimizerGym(OptimizerGym):
         best_action = None
         best_value = float("-inf")
         candidates: list[dict] = []
+        scenario_seed = self._next_scenario_seed()
 
         for action in range(len(drivers)):
-            cloned_env = self._clone_env()
+            cloned_env = self._clone_env(scenario_seed)
 
             order_before = self.gym_env.get_current_order()
             obs_after, reward, terminated, truncated, info = cloned_env.step(action)
@@ -197,6 +212,7 @@ class RolloutOptimizerGym(OptimizerGym):
                 "best_q": float(best_value) if best_action is not None else None,
                 "alpha": float(self.alpha),
                 "horizon": self.horizon,
+                "scenario_seed": int(scenario_seed),
                 "candidates": candidates,
             })
 
