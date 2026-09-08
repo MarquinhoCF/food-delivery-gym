@@ -1,8 +1,9 @@
 from abc import ABC, abstractmethod
 from collections import defaultdict
+import math
 import os
 import traceback
-from typing import List, Union
+from typing import Any, List, Union
 
 import numpy as np
 from stable_baselines3.common.vec_env import VecEnv, VecEnvWrapper
@@ -18,6 +19,44 @@ from food_delivery_gym.main.route.route import Route
 from food_delivery_gym.main.environment.state_log import format_step_result
 from food_delivery_gym.main.statistics.simulation_stats import SimulationStats
 from food_delivery_gym.main.statistics.boards.board import Board
+
+
+def jsonable_hyperparameter(value: Any) -> Any:
+    """Converte um hiperparâmetro recebido em valor serializável (JSON/NPZ)."""
+    if value is None or isinstance(value, (bool, int, str)):
+        return value
+    if isinstance(value, float):
+        if math.isnan(value):
+            return None
+        if math.isinf(value):
+            return "inf" if value > 0 else "-inf"
+        return value
+    if isinstance(value, type):
+        return value.__name__
+    if isinstance(value, dict):
+        return {str(key): jsonable_hyperparameter(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [jsonable_hyperparameter(item) for item in value]
+
+    described: dict[str, Any] = {"class": type(value).__name__}
+    label = getattr(value, "label", None)
+    if isinstance(label, str) and label:
+        described["label"] = label
+    for name, attr in vars(value).items():
+        if name.startswith("_") or callable(attr):
+            continue
+        described[name] = jsonable_hyperparameter(attr)
+    return described
+
+
+def _write_hyperparameters(results_file, params: dict, indent: int = 0) -> None:
+    prefix = "  " * indent
+    for key, value in params.items():
+        if isinstance(value, dict):
+            results_file.write(f"{prefix}* {key}:\n")
+            _write_hyperparameters(results_file, value, indent + 1)
+        else:
+            results_file.write(f"{prefix}* {key}: {value}\n")
 
 
 class OptimizerGym(Optimizer, ABC):
@@ -100,6 +139,10 @@ class OptimizerGym(Optimizer, ABC):
     @abstractmethod
     def get_title(self):
         pass
+
+    def get_hyperparameters(self) -> dict:
+        """Hiperparâmetros recebidos na construção, em formato serializável."""
+        return {}
     
     # =======================================================================
     #     Funções para execução do otimizador e coleta de estatísticas
@@ -189,6 +232,7 @@ class OptimizerGym(Optimizer, ABC):
         file_path = os.path.join(dir_path, "results.txt")
 
         stats = SimulationStats()
+        stats.hyperparameters = self.get_hyperparameters()
 
         with open(file_path, "w", encoding="utf-8") as results_file:
             self._write_run_header(results_file, num_runs, seed)
@@ -281,6 +325,12 @@ class OptimizerGym(Optimizer, ABC):
             results_file.write(self._call_env_method('get_description'))
         except Exception as e:
             results_file.write(f"Erro ao obter descrição: {e}")
+
+        hyperparameters = self.get_hyperparameters()
+        if hyperparameters:
+            results_file.write("\n\n---> Hiperparâmetros do Otimizador:\n")
+            _write_hyperparameters(results_file, hyperparameters)
+
         results_file.write("\n\n---> Registro de execuções:\n")
 
     # ========================================================

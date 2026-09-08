@@ -8,6 +8,8 @@ from food_delivery_gym.main.route.route_segment import RouteSegment
 
 
 class RouteCostFunction(CostFunction):
+    label = "Custo de Rota"
+
     def __init__(self, objective: int = 1):
         """
         :param objective: Define o critério de custo.

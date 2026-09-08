@@ -127,7 +127,7 @@ def _has_metrics_file(agent_dir: str) -> bool:
 # ── Descoberta de agentes ─────────────────────────────────────────────────────
 
 def discover_agent_dirs(results_dir: str, objectives: list, scenarios: list) -> list[str]:
-    known_order = optimizer_catalog.keys()
+    known_order = optimizer_catalog.result_keys()
 
     dirs: list[str] = []
 

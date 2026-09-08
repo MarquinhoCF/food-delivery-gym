@@ -24,8 +24,8 @@ PPO_LABELS: dict[str, str] = {
     "ppo_18M_steps_otimizado": "PPO Otimizado",
 }
 
-KNOWN_AGENTS: dict[str, str] = {**optimizer_catalog.labels(short=True), **PPO_LABELS}
-HEURISTIC_DIRS = set(optimizer_catalog.keys())
+KNOWN_AGENTS: dict[str, str] = {**optimizer_catalog.result_labels(short=True), **PPO_LABELS}
+HEURISTIC_DIRS = set(optimizer_catalog.result_keys())
 
 ALL_SCENARIOS     = ["simple", "medium", "complex"]
 SCENARIO_LABELS   = {"simple": "Simples", "medium": "Médio", "complex": "Complexo"}

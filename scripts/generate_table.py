@@ -38,7 +38,7 @@ ROWS_PER_OBJECTIVE  = len(METRICS)   # 4 linhas por objetivo
 HEADER_ROWS         = 2              # linhas de cabeçalho antes dos dados
 
 # Heurísticas conhecidas: dir_name → label legível (ver optimizer/catalog.py)
-KNOWN_HEURISTICS = optimizer_catalog.labels()
+KNOWN_HEURISTICS = optimizer_catalog.result_labels()
 
 # Chaves de SimulationStats.aggregate → nome da aba
 # Deve corresponder ao que finalize() grava em self.aggregate

@@ -2,7 +2,10 @@ from typing import List, Optional, Type, Tuple
 
 from food_delivery_gym.main.driver.driver import Driver
 from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
-from food_delivery_gym.main.optimizer.optimizer_gym.optmizer_gym import OptimizerGym
+from food_delivery_gym.main.optimizer.optimizer_gym.optmizer_gym import (
+    OptimizerGym,
+    jsonable_hyperparameter,
+)
 from food_delivery_gym.main.optimizer.optimizer_gym.nearest_driver_optimizer_gym import NearestDriverOptimizerGym
 from food_delivery_gym.main.route.route import Route
 
@@ -63,6 +66,15 @@ class RolloutOptimizerGym(OptimizerGym):
         base_name = self.base_optimizer_cls.__name__
         horizon_str = f"H={self.horizon}" if self.horizon is not None else "H=inf"
         return f"Rollout({base_name}, alpha={self.alpha}, {horizon_str})"
+
+    def get_hyperparameters(self):
+        return {
+            "base_optimizer": self.base_optimizer_cls.__name__,
+            "base_optimizer_kwargs": jsonable_hyperparameter(self.base_optimizer_kwargs),
+            "alpha": jsonable_hyperparameter(self.alpha),
+            "horizon": jsonable_hyperparameter(self.horizon),
+            "record_decisions": jsonable_hyperparameter(self.record_decisions),
+        }
 
     # Aproximação de custo terminal (TODO)
     def terminal_cost_to_go(self, cloned_env: FoodDeliveryGymEnv) -> float:

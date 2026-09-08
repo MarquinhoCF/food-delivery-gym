@@ -1,11 +1,12 @@
 from typing import List
 
 from food_delivery_gym.main.cost.cost_function import CostFunction
-from food_delivery_gym.main.cost.route_cost_function import RouteCostFunction
-from food_delivery_gym.main.cost.marginal_route_cost_function import MarginalRouteCostFunction
 from food_delivery_gym.main.driver.driver import Driver
 from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
-from food_delivery_gym.main.optimizer.optimizer_gym.optmizer_gym import OptimizerGym
+from food_delivery_gym.main.optimizer.optimizer_gym.optmizer_gym import (
+    OptimizerGym,
+    jsonable_hyperparameter,
+)
 from food_delivery_gym.main.route.route import Route
 
 
@@ -20,11 +21,13 @@ class LowestCostDriverOptimizerGym(OptimizerGym):
         return self.cost_function.cost(map, driver, route.route_segments[0])
     
     def get_title(self):
-        if isinstance(self.cost_function, RouteCostFunction):
-            return "Otimizador do Motorista com Menor Custo de Rota"
-        elif isinstance(self.cost_function, MarginalRouteCostFunction):
-            return "Otimizador do Motorista com Menor Custo Marginal de Rota"
+        label = getattr(self.cost_function, "label", None)
+        if label:
+            return f"Otimizador do Motorista com Menor {label}"
         return "Otimizador do Motorista com Menor Custo"
+
+    def get_hyperparameters(self):
+        return {"cost_function": jsonable_hyperparameter(self.cost_function)}
 
     def select_driver(self, obs: dict, drivers: List[Driver], route: Route):
         # drivers = list(filter(lambda driver: driver.current_route is None or

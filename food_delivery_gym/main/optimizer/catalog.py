@@ -14,6 +14,7 @@ from typing import Any, Callable
 
 from food_delivery_gym.main.cost.marginal_route_cost_function import MarginalRouteCostFunction
 from food_delivery_gym.main.cost.route_cost_function import RouteCostFunction
+from food_delivery_gym.main.cost.weighted_score_cost_function import WeightedScoreCostFunction
 from food_delivery_gym.main.optimizer.optimizer_gym.first_driver_optimizer_gym import (
     FirstDriverOptimizerGym,
 )
@@ -33,29 +34,88 @@ from food_delivery_gym.main.optimizer.optimizer_gym.rl_model_optimizer_gym impor
 from food_delivery_gym.main.optimizer.optimizer_gym.rollout_optimizer_gym import (
     RolloutOptimizerGym,
 )
-from food_delivery_gym.main.optimizer.optimizer_gym.weighted_score_driver_optimizer_gym import (
-    WeightedScoreDriverOptimizerGym,
-)
 
-COST_FUNCTION_CHOICES = ("route", "marginal_route")
-
-_COST_CLASSES = {
-    "route": RouteCostFunction,
-    "marginal_route": MarginalRouteCostFunction,
-}
+DEFAULT_ROLLOUT_ALPHA = 0.9
+DEFAULT_ROLLOUT_HORIZON = 5
+DEFAULT_ROLLOUT_RECORD_DECISIONS = False
+DEFAULT_ROLLOUT_BASE = "nearest"
 
 Builder = Callable[..., OptimizerGym]
 
 
-def make_cost_function(name: str, objective: int):
-    """Instancia a cost function a partir do nome de CLI e do objetivo do ambiente."""
+@dataclass(frozen=True)
+class CostFunctionSpec:
+    key: str
+    label: str
+    short_label: str
+    cls: type
+    result_key: str
+    result_label: str
+    result_short_label: str
+    uses_objective: bool = True
+
+
+_COST_FUNCTIONS: tuple[CostFunctionSpec, ...] = (
+    CostFunctionSpec(
+        key="route",
+        label="Custo de Rota",
+        short_label="Custo Rota",
+        cls=RouteCostFunction,
+        result_key="lowest_route_cost",
+        result_label="Motorista de Menor Custo de Rota",
+        result_short_label="Menor Custo",
+    ),
+    CostFunctionSpec(
+        key="marginal_route",
+        label="Custo Marginal de Rota",
+        short_label="Custo Marg.",
+        cls=MarginalRouteCostFunction,
+        result_key="lowest_marginal_route_cost",
+        result_label="Motorista de Menor Custo Marginal de Rota",
+        result_short_label="Menor Custo Marg.",
+    ),
+    CostFunctionSpec(
+        key="weighted_score",
+        label="Score Ponderado",
+        short_label="Score Ponderado",
+        cls=WeightedScoreCostFunction,
+        result_key="lowest_weighted_score",
+        result_label="Motorista de Score Ponderado",
+        result_short_label="Score Ponderado",
+        uses_objective=False,
+    ),
+)
+
+COST_FUNCTION_CHOICES = tuple(spec.key for spec in _COST_FUNCTIONS)
+_COST_BY_KEY: dict[str, CostFunctionSpec] = {spec.key: spec for spec in _COST_FUNCTIONS}
+
+
+def cost_function_choices() -> list[str]:
+    return list(COST_FUNCTION_CHOICES)
+
+
+def get_cost_function(name: str) -> CostFunctionSpec:
     try:
-        cost_cls = _COST_CLASSES[name]
+        return _COST_BY_KEY[name]
     except KeyError as exc:
         raise ValueError(
             f"Cost function '{name}' inválida. Opções: {COST_FUNCTION_CHOICES}"
         ) from exc
-    return cost_cls(objective=cost_cls.get_cost_objective(objective))
+
+
+def make_cost_function(name: str, objective: int | None = None):
+    """Instancia a cost function a partir do nome de CLI e do objetivo do ambiente."""
+    spec = get_cost_function(name)
+    if spec.uses_objective:
+        if objective is None:
+            raise ValueError(
+                f"objective é obrigatório para a cost function '{spec.key}'"
+            )
+        instance = spec.cls(objective=spec.cls.get_cost_objective(objective))
+    else:
+        instance = spec.cls()
+    instance.label = spec.label
+    return instance
 
 
 def _env_only(cls: type[OptimizerGym]) -> Builder:
@@ -65,35 +125,32 @@ def _env_only(cls: type[OptimizerGym]) -> Builder:
     return build
 
 
-def _lowest(cost_function_name: str) -> Builder:
-    def build(env, objective: int | None = None, **_extras) -> OptimizerGym:
-        if objective is None:
-            raise ValueError(
-                "objective é obrigatório para LowestCostDriverOptimizerGym"
-            )
-        return LowestCostDriverOptimizerGym(
-            env,
-            cost_function=make_cost_function(cost_function_name, objective),
-        )
-
-    return build
+def _lowest(env, objective: int | None = None, **extras) -> OptimizerGym:
+    cost_function_name = extras.get("cost_function")
+    if not cost_function_name:
+        raise ValueError("LowestCostDriverOptimizerGym requer cost_function")
+    return LowestCostDriverOptimizerGym(
+        env,
+        cost_function=make_cost_function(cost_function_name, objective),
+    )
 
 
 def _rollout(env, objective: int | None = None, **extras) -> OptimizerGym:
-    base_name = extras.get("base_optimizer", "nearest")
+    base_name = extras.get("base_optimizer", DEFAULT_ROLLOUT_BASE)
     cost_function = extras.get("cost_function")
     base_cls, base_kwargs = constructor_args(
         base_name,
         objective=objective,
         cost_function=cost_function,
     )
+    horizon = extras["horizon"] if "horizon" in extras else DEFAULT_ROLLOUT_HORIZON
     return RolloutOptimizerGym(
         env,
         base_optimizer_cls=base_cls,
         base_optimizer_kwargs=base_kwargs,
-        alpha=extras.get("alpha", 0.9),
-        horizon=extras.get("horizon"),
-        record_decisions=extras.get("record_decisions", False),
+        alpha=extras.get("alpha", DEFAULT_ROLLOUT_ALPHA),
+        horizon=horizon,
+        record_decisions=extras.get("record_decisions", DEFAULT_ROLLOUT_RECORD_DECISIONS),
     )
 
 
@@ -115,9 +172,13 @@ class OptimizerSpec:
     requires: tuple[str, ...] = ()
     is_heuristic: bool = True
     rollout_base: bool = True
-    # Quando vários specs compartilham um alias (ex.: "lowest"), este valor
-    # de --cost-function seleciona esta entrada.
-    cost_function: str | None = None
+
+
+@dataclass(frozen=True)
+class EvalVariant:
+    spec: OptimizerSpec
+    result_key: str
+    extras: dict[str, Any]
 
 
 # Ordem de inserção é a ordem canônica de relatórios (plots, tabelas, boxplots).
@@ -147,30 +208,13 @@ _SPECS: tuple[OptimizerSpec, ...] = (
         builder=_env_only(NearestDriverOptimizerGym),
     ),
     OptimizerSpec(
-        key="lowest_route_cost",
-        aliases=("lowest", "lowest_route_cost"),
-        label="Motorista de Menor Custo de Rota",
+        key="lowest",
+        aliases=("lowest",),
+        label="Motorista de Menor Custo",
         short_label="Menor Custo",
         cls=LowestCostDriverOptimizerGym,
-        builder=_lowest("route"),
-        cost_function="route",
-    ),
-    OptimizerSpec(
-        key="lowest_marginal_route_cost",
-        aliases=("lowest", "lowest_marginal_route_cost"),
-        label="Motorista de Menor Custo Marginal de Rota",
-        short_label="Menor Custo Marg.",
-        cls=LowestCostDriverOptimizerGym,
-        builder=_lowest("marginal_route"),
-        cost_function="marginal_route",
-    ),
-    OptimizerSpec(
-        key="weighted_score",
-        aliases=("weighted", "weighted_score"),
-        label="Motorista de Score Ponderado",
-        short_label="Score Ponderado",
-        cls=WeightedScoreDriverOptimizerGym,
-        builder=_env_only(WeightedScoreDriverOptimizerGym),
+        builder=_lowest,
+        requires=("cost_function",),
     ),
     OptimizerSpec(
         key="rollout",
@@ -208,30 +252,17 @@ def _matching(name: str) -> list[OptimizerSpec]:
 def resolve_key(name: str, cost_function: str | None = None) -> str:
     """Traduz um nome de CLI ou alias para a chave canônica do catálogo.
 
-    `lowest` + `--cost-function route|marginal_route` vira
-    `lowest_route_cost` ou `lowest_marginal_route_cost`.
+    `cost_function` é ignorado: `lowest` é um único optimizer e a função
+    de custo é parâmetro de instanciação, não de seleção do spec.
     """
+    del cost_function
     matches = _matching(name)
     if not matches:
         known = ", ".join(cli_choices())
         raise KeyError(f"Otimizador '{name}' não reconhecido. Opções: {known}")
-
-    if len(matches) == 1:
-        return matches[0].key
-
-    if not cost_function:
-        raise ValueError(
-            f"Otimizador '{name}' requer --cost-function "
-            f"{{{'|'.join(COST_FUNCTION_CHOICES)}}}"
-        )
-
-    for spec in matches:
-        if spec.cost_function == cost_function:
-            return spec.key
-
-    raise ValueError(
-        f"Cost function '{cost_function}' inválida. Opções: {COST_FUNCTION_CHOICES}"
-    )
+    if len(matches) > 1:
+        raise KeyError(f"Otimizador '{name}' é ambíguo: {[spec.key for spec in matches]}")
+    return matches[0].key
 
 
 def get(name: str, cost_function: str | None = None) -> OptimizerSpec:
@@ -239,27 +270,13 @@ def get(name: str, cost_function: str | None = None) -> OptimizerSpec:
 
 
 def cli_label(name: str) -> str:
-    """Label para help de CLI. Alias compartilhado não exige --cost-function."""
-    matches = _matching(name)
-    if not matches:
-        raise KeyError(f"Otimizador '{name}' não reconhecido")
-    if len(matches) == 1:
-        return matches[0].label
-    return "Motorista de Menor Custo"
+    """Label para help de CLI."""
+    return get(name).label
 
 
 def requires(name: str) -> tuple[str, ...]:
-    """Dependências da CLI para `name` (alias ou chave).
-
-    Um alias compartilhado (ex.: `lowest`) exige `cost_function` para
-    desambiguar. A chave canônica (`lowest_route_cost`) já implica a função.
-    """
-    matches = _matching(name)
-    if not matches:
-        raise KeyError(f"Otimizador '{name}' não reconhecido")
-    if len(matches) > 1:
-        return ("cost_function",)
-    return matches[0].requires
+    """Dependências da CLI para `name` (alias ou chave)."""
+    return get(name).requires
 
 
 def instantiate(spec: OptimizerSpec, env, objective: int | None = None, **extras) -> OptimizerGym:
@@ -280,16 +297,14 @@ def constructor_args(
     cost_function: str | None = None,
 ) -> tuple[type[OptimizerGym], dict[str, Any]]:
     """Retorna (classe, kwargs) sem o ambiente, usado como política de base do rollout."""
-    spec = get(name, cost_function=cost_function)
+    spec = get(name)
     if spec.cls is None:
         raise ValueError(f"Otimizador '{spec.key}' não tem classe registrada")
     kwargs: dict[str, Any] = {}
-    if spec.cost_function is not None:
-        if objective is None:
-            raise ValueError(
-                "objective é obrigatório para construir a cost function"
-            )
-        kwargs["cost_function"] = make_cost_function(spec.cost_function, objective)
+    if "cost_function" in spec.requires:
+        if not cost_function:
+            raise ValueError(f"Otimizador '{spec.key}' requer cost_function")
+        kwargs["cost_function"] = make_cost_function(cost_function, objective)
     return spec.cls, kwargs
 
 
@@ -324,6 +339,140 @@ def cli_choices(
         if name not in seen:
             seen.append(name)
     return seen
+
+
+def needs_cost_function(name: str) -> bool:
+    return "cost_function" in requires(name)
+
+
+def lowest_result_key(cost_function: str) -> str:
+    return get_cost_function(cost_function).result_key
+
+
+def rollout_result_key(base_optimizer: str, cost_function: str | None = None) -> str:
+    base = get(base_optimizer)
+    if needs_cost_function(base.key):
+        if not cost_function:
+            raise ValueError(f"Base '{base.key}' requer cost_function")
+        return f"rollout_{lowest_result_key(cost_function)}"
+    return f"rollout_{base.key}"
+
+
+def _normalize_cost_functions(names: list[str]) -> list[str]:
+    selected: list[str] = []
+    for name in names:
+        spec = get_cost_function(name)
+        if spec.key not in selected:
+            selected.append(spec.key)
+    return selected
+
+
+def normalize_base_optimizers(names: list[str]) -> list[str]:
+    selected: list[str] = []
+    known = ", ".join(cli_choices(rollout_base=True))
+    for name in names:
+        spec = get(name)
+        if not spec.rollout_base:
+            raise ValueError(
+                f"Otimizador '{name}' não pode ser base do rollout. Opções: {known}"
+            )
+        if spec.key not in selected:
+            selected.append(spec.key)
+    return selected
+
+
+def expand_evaluations(
+    specs: list[OptimizerSpec],
+    *,
+    cost_functions: list[str],
+    base_optimizers: list[str],
+    rollout_alpha: float = DEFAULT_ROLLOUT_ALPHA,
+    rollout_horizon: int | None = DEFAULT_ROLLOUT_HORIZON,
+    record_decisions: bool = DEFAULT_ROLLOUT_RECORD_DECISIONS,
+) -> list[EvalVariant]:
+    """Expande lowest e rollout em uma execução por cost function e/ou base."""
+    cost_names = _normalize_cost_functions(cost_functions)
+    bases = normalize_base_optimizers(base_optimizers)
+    variants: list[EvalVariant] = []
+
+    for spec in specs:
+        if spec.key == "lowest":
+            for cost_name in cost_names:
+                variants.append(
+                    EvalVariant(
+                        spec=spec,
+                        result_key=lowest_result_key(cost_name),
+                        extras={"cost_function": cost_name},
+                    )
+                )
+            continue
+
+        if spec.key == "rollout":
+            rollout_extras = {
+                "alpha": rollout_alpha,
+                "horizon": rollout_horizon,
+                "record_decisions": record_decisions,
+            }
+            for base_key in bases:
+                if needs_cost_function(base_key):
+                    for cost_name in cost_names:
+                        variants.append(
+                            EvalVariant(
+                                spec=spec,
+                                result_key=rollout_result_key(base_key, cost_name),
+                                extras={
+                                    **rollout_extras,
+                                    "base_optimizer": base_key,
+                                    "cost_function": cost_name,
+                                },
+                            )
+                        )
+                else:
+                    variants.append(
+                        EvalVariant(
+                            spec=spec,
+                            result_key=rollout_result_key(base_key),
+                            extras={**rollout_extras, "base_optimizer": base_key},
+                        )
+                    )
+            continue
+
+        variants.append(EvalVariant(spec=spec, result_key=spec.key, extras={}))
+
+    return variants
+
+
+def result_labels(*, short: bool = False) -> dict[str, str]:
+    """Chaves de pasta de resultado → label. Inclui variantes de lowest e rollout."""
+    labels_by_key: dict[str, str] = {}
+    for spec in CATALOG.values():
+        if spec.key == "lowest":
+            for cost in _COST_FUNCTIONS:
+                labels_by_key[cost.result_key] = (
+                    cost.result_short_label if short else cost.result_label
+                )
+            continue
+        if spec.key == "rollout":
+            for base in CATALOG.values():
+                if not base.rollout_base:
+                    continue
+                if needs_cost_function(base.key):
+                    for cost in _COST_FUNCTIONS:
+                        key = rollout_result_key(base.key, cost.key)
+                        cost_label = (
+                            cost.result_short_label if short else cost.result_label
+                        )
+                        labels_by_key[key] = f"Rollout ({cost_label})"
+                else:
+                    base_label = base.short_label if short else base.label
+                    labels_by_key[rollout_result_key(base.key)] = f"Rollout ({base_label})"
+            continue
+        labels_by_key[spec.key] = spec.short_label if short else spec.label
+    return labels_by_key
+
+
+def result_keys() -> list[str]:
+    return list(result_labels().keys())
 
 
 # ── Modelos de aprendizado por reforço ───────────────────────────────────────

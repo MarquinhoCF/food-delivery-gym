@@ -46,6 +46,9 @@ Estrutura de chaves — separador '__', tudo float64, None → NaN:
   Estatísticas agregadas (arrays de tamanho 1):
     agg__<metric>__avg / __std_dev / __median / __n
 
+  Hiperparâmetros do otimizador (string JSON, escalar unicode):
+    hparams
+
 Formato JSON (conversão via npz_to_json / json_to_npz)
 ────────────────────────────────────────────────────────
 {
@@ -59,7 +62,8 @@ Formato JSON (conversão via npz_to_json / json_to_npz)
   ],
   "aggregate": {
     "rewards": { "avg": 40.0, "std_dev": 2.0, "median": 41.0, "n": 20 }, ...
-  }
+  },
+  "hyperparameters": { "alpha": 0.9, "horizon": 5, ... }
 }
 """
 
@@ -137,6 +141,9 @@ def _json_default(obj):
 
 def _write_json(stats: "SimulationStats", path: str) -> None:
     data = {"sim": stats.sim, "aggregate": stats.aggregate}
+    hyperparameters = getattr(stats, "hyperparameters", None) or {}
+    if hyperparameters:
+        data["hyperparameters"] = hyperparameters
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, default=_json_default)
 
@@ -233,7 +240,21 @@ def _json_data_to_npz_arrays(data: dict) -> dict[str, np.ndarray]:
             except (TypeError, ValueError):
                 pass
 
+    hyperparameters = data.get("hyperparameters") or {}
+    if hyperparameters:
+        arrays["hparams"] = np.array(json.dumps(hyperparameters, ensure_ascii=False))
+
     return arrays
+
+
+def _load_hyperparameters(raw) -> dict:
+    if "hparams" not in getattr(raw, "files", []):
+        return {}
+    text = raw["hparams"].item()
+    if not text:
+        return {}
+    loaded = json.loads(str(text))
+    return loaded if isinstance(loaded, dict) else {}
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -257,6 +278,7 @@ class SimulationStats:
         stats.episodes["events"]             # lista de N listas de eventos
         stats.drivers["0"]["distance"]       # lista de N distâncias do driver 0
         stats.aggregate["rewards"]["avg"]
+        stats.hyperparameters["alpha"]       # hiperparâmetros do otimizador
         stats.sim[i]["reward"]               # visão por episódio (lazy)
         stats.sim[i]["events"]               # eventos do episódio i
         stats.sim[i]["driver"]["0"]["distance"]
@@ -287,6 +309,7 @@ class SimulationStats:
         self.drivers: dict                  = {}
         self.establishments: dict           = {}
         self.aggregate: dict                = {}
+        self.hyperparameters: dict          = {}
         self._num_runs: int                 = 0
         self._sim: list[dict] | None        = None
     
@@ -620,6 +643,7 @@ class SimulationStats:
         result.drivers           = {}
         result.establishments    = {}
         result.aggregate         = {}
+        result.hyperparameters   = _load_hyperparameters(raw)
 
         _EP_MAP = {
             "ep__rewards":          "rewards",
@@ -752,5 +776,10 @@ class SimulationStats:
                     arrays[f"agg__{metric}__{stat_name}"] = np.array([val], dtype=dtype)
                 except (TypeError, ValueError):
                     pass
+
+        if self.hyperparameters:
+            arrays["hparams"] = np.array(
+                json.dumps(self.hyperparameters, ensure_ascii=False)
+            )
 
         return arrays

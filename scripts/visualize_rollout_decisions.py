@@ -17,9 +17,9 @@ from food_delivery_gym.main.statistics.lookahead.rollout_decision_board import (
 
 DEFAULT_SEED = 5434
 DEFAULT_OBJECTIVE = 1
-DEFAULT_ALPHA = 0.9
-DEFAULT_BASE_OPTIMIZER = "nearest"
-DEFAULT_HORIZON = 5
+DEFAULT_ALPHA = optimizer_catalog.DEFAULT_ROLLOUT_ALPHA
+DEFAULT_BASE_OPTIMIZER = optimizer_catalog.DEFAULT_ROLLOUT_BASE
+DEFAULT_HORIZON = optimizer_catalog.DEFAULT_ROLLOUT_HORIZON
 DEFAULT_OUT_DIR = "data/visualization/rollout_viz"
 ALL_OBJECTIVES = FoodDeliveryGymEnv.REWARD_OBJECTIVES
 BASE_OPTIMIZER_CHOICES = optimizer_catalog.cli_choices(rollout_base=True)
@@ -163,7 +163,11 @@ def main() -> None:
     optimizer.truncated = False
 
     print(f"=== {optimizer.get_title()} ===")
-    out_dir = os.path.join(args.out_dir, args.scenario.split(".")[0], args.base_optimizer if args.base_optimizer != "lowest" else args.base_optimizer + "_" + args.cost_function)
+    out_dir = os.path.join(
+        args.out_dir,
+        args.scenario.split(".")[0],
+        optimizer_catalog.rollout_result_key(args.base_optimizer, args.cost_function),
+    )
     print(f"scenario={args.scenario} seed={args.seed} objective={args.objective}")
     print(f"base_optimizer={args.base_optimizer} cost_function={args.cost_function}")
     print(f"out_dir={out_dir}\n")

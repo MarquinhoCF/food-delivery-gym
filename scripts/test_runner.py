@@ -100,7 +100,11 @@ def main():
     parser.add_argument("--cost-function", choices=optimizer_catalog.COST_FUNCTION_CHOICES, default=None,
                         help="Função de custo (obrigatória com --optimizer lowest, ou com --optimizer rollout e --base-optimizer lowest)")
     parser.add_argument("--base-optimizer", choices=optimizer_catalog.cli_choices(rollout_base=True), default=None,
-                        help="Política de base do rollout (apenas com --optimizer rollout; padrão: nearest)")
+                        help=f"Política de base do rollout (apenas com --optimizer rollout; padrão: {optimizer_catalog.DEFAULT_ROLLOUT_BASE})")
+    parser.add_argument("--alpha", type=float, default=optimizer_catalog.DEFAULT_ROLLOUT_ALPHA,
+                        help=f"Fator de desconto do rollout (padrão: {optimizer_catalog.DEFAULT_ROLLOUT_ALPHA})")
+    parser.add_argument("--horizon", type=int, default=optimizer_catalog.DEFAULT_ROLLOUT_HORIZON,
+                        help=f"Passos de rollout após a ação candidata (padrão: {optimizer_catalog.DEFAULT_ROLLOUT_HORIZON})")
     parser.add_argument("--model-path", default=None,
                         help=(
                             "Caminho para um best_model.zip avulso (atalho com --optimizer rl).\n"
@@ -145,7 +149,7 @@ def main():
         needed = ()
         is_rollout = False
 
-    base_name = args.base_optimizer or "nearest"
+    base_name = args.base_optimizer or optimizer_catalog.DEFAULT_ROLLOUT_BASE
     base_needs_cost = is_rollout and "cost_function" in optimizer_catalog.requires(base_name)
 
     if args.base_optimizer and not is_rollout:
@@ -192,6 +196,8 @@ def main():
                 args.objective,
                 cost_function=args.cost_function,
                 base_optimizer=base_name,
+                alpha=args.alpha,
+                horizon=args.horizon,
             )
 
         print(f"=== Ambiente pronto com otimizador: {optimizer.get_title()} ===")

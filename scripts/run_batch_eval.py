@@ -94,20 +94,52 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--base-optimizer",
-        choices=optimizer_catalog.cli_choices(rollout_base=True),
+        "--lowest-cost-functions",
+        nargs="+",
+        choices=optimizer_catalog.COST_FUNCTION_CHOICES,
         default=None,
+        metavar="COST",
         help=(
-            "Política de base do rollout (apenas se rollout estiver entre os agentes).\n"
-            "Padrão: nearest"
+            "Cost functions do lowest. Vale para a heurística lowest e para o rollout\n"
+            "quando a base é lowest. Não há lista separada para a base.\n"
+            f"Opções: {optimizer_catalog.COST_FUNCTION_CHOICES}\n"
+            "Padrão: todas."
         ),
     )
 
     parser.add_argument(
-        "--cost-function",
-        choices=optimizer_catalog.COST_FUNCTION_CHOICES,
+        "--rollout-base-optimizers",
+        nargs="+",
         default=None,
-        help="Função de custo (obrigatória se --base-optimizer lowest)",
+        metavar="OPTIMIZER",
+        help=(
+            "Políticas de base do rollout (apenas se rollout estiver entre os agentes).\n"
+            f"Opções: {optimizer_catalog.cli_choices(rollout_base=True)}\n"
+            "Padrão: todas."
+        ),
+    )
+
+    parser.add_argument(
+        "--rollout-alpha",
+        type=float,
+        default=optimizer_catalog.DEFAULT_ROLLOUT_ALPHA,
+        help=f"Fator de desconto do rollout. Padrão: {optimizer_catalog.DEFAULT_ROLLOUT_ALPHA}.",
+    )
+
+    parser.add_argument(
+        "--rollout-horizon",
+        type=int,
+        default=optimizer_catalog.DEFAULT_ROLLOUT_HORIZON,
+        help=(
+            "Passos de rollout após a ação candidata.\n"
+            f"Padrão: {optimizer_catalog.DEFAULT_ROLLOUT_HORIZON}."
+        ),
+    )
+
+    parser.add_argument(
+        "--rollout-record-decisions",
+        action="store_true",
+        help="Grava o decision_log do rollout (desativado por padrão).",
     )
 
     parser.add_argument(
@@ -269,30 +301,22 @@ def select_agents_for_run(
     return selected
 
 
-def output_name(spec, base_optimizer: str, cost_function: str | None) -> str:
-    if spec.key == "rollout":
-        base_key = optimizer_catalog.resolve_key(base_optimizer, cost_function)
-        return f"rollout_{base_key}"
-    return spec.key
-
-
 def run_agents(
-    scenario: str, agents: list, objective: int,
+    scenario: str, variants: list, objective: int,
     results_dir: str, num_runs: int, seed: int,
     save_individual_plots: bool, save_mean_plots: bool,
-    metrics_fmt: str, base_optimizer: str, cost_function: str | None,
+    metrics_fmt: str,
 ):
-    for spec in agents:
-        output_dir = os.path.join(results_dir, output_name(spec, base_optimizer, cost_function)) + "/"
-        print(f"\n=== Executando {spec.label} no cenário '{scenario}' ===")
+    for variant in variants:
+        output_dir = os.path.join(results_dir, variant.result_key) + "/"
+        print(f"\n=== Executando {variant.spec.label} ({variant.result_key}) no cenário '{scenario}' ===")
         try:
             env = create_environment(reward_objective=objective, scenario_name=scenario)
             optimizer = optimizer_catalog.instantiate(
-                spec,
+                variant.spec,
                 env,
                 objective,
-                base_optimizer=base_optimizer,
-                cost_function=cost_function,
+                **variant.extras,
             )
             optimizer.run_simulations(
                 num_runs, output_dir, seed=seed,
@@ -301,7 +325,10 @@ def run_agents(
                 metrics_fmt=metrics_fmt,
             )
         except Exception as e:
-            print(f"Erro ao executar {spec.label} — objetivo {objective}, cenário '{scenario}': {e}")
+            print(
+                f"Erro ao executar {variant.result_key} — "
+                f"objetivo {objective}, cenário '{scenario}': {e}"
+            )
             traceback.print_exc()
 
 
@@ -324,9 +351,17 @@ def main():
           f"{' (desativadas)' if args.no_heuristics else ''}")
     print(f"  Modelos RL   : {args.models if args.models else 'descoberta automática'}"
           f"{' (desativados)' if args.no_rl else ''}")
-    print(f"  Base rollout : {args.base_optimizer or 'nearest'}")
-    if args.cost_function:
-        print(f"  Cost function: {args.cost_function}")
+    cost_functions = list(
+        args.lowest_cost_functions or optimizer_catalog.COST_FUNCTION_CHOICES
+    )
+    base_optimizers = list(
+        args.rollout_base_optimizers
+        or optimizer_catalog.keys(rollout_base=True)
+    )
+    print(f"  Cost functions: {cost_functions}")
+    print(f"  Bases rollout : {base_optimizers}")
+    print(f"  Rollout alpha : {args.rollout_alpha}")
+    print(f"  Rollout horiz.: {args.rollout_horizon}")
     print(f"  Runs         : {args.num_runs} | Seed: {args.seed}")
     print(f"  Modo experim.: {args.experiment_mode}")
     print(f"  Model base   : {args.model_base_dir}")
@@ -337,25 +372,33 @@ def main():
     print(f"  Plot médias  : {'desativado' if not save_mean_plots else 'ativado'}")
     print(f"  Formato métr.: {args.metrics_fmt}")
 
-    base_name = args.base_optimizer or "nearest"
-    rollout_names = {"rollout"}
     heuristics_filter = set(args.heuristics or [])
     agents_filter = set(args.agents or [])
-    rollout_selected = (
-        not args.no_heuristics
-        and (not agents_filter or bool(agents_filter & rollout_names))
-        and (not heuristics_filter or bool(heuristics_filter & rollout_names))
-    )
-    if args.base_optimizer and not rollout_selected:
-        parser.error("Erro: --base-optimizer só pode ser usado se rollout estiver entre os agentes")
-    if args.cost_function and not rollout_selected:
-        parser.error("Erro: --cost-function só pode ser usado com rollout e --base-optimizer lowest")
-    if rollout_selected:
-        base_needs_cost = "cost_function" in optimizer_catalog.requires(base_name)
-        if base_needs_cost and not args.cost_function:
-            parser.error("Erro: --base-optimizer lowest requer --cost-function")
-        if args.cost_function and not base_needs_cost:
-            parser.error("Erro: --cost-function só pode ser usado com --base-optimizer lowest")
+
+    def _heuristic_selected(name: str) -> bool:
+        return (
+            not args.no_heuristics
+            and (not agents_filter or name in agents_filter)
+            and (not heuristics_filter or name in heuristics_filter)
+        )
+
+    rollout_selected = _heuristic_selected("rollout")
+    lowest_selected = _heuristic_selected("lowest")
+    try:
+        bases = optimizer_catalog.normalize_base_optimizers(base_optimizers)
+    except (KeyError, ValueError) as exc:
+        parser.error(str(exc))
+    lowest_base_selected = rollout_selected and "lowest" in bases
+
+    if args.rollout_base_optimizers and not rollout_selected:
+        parser.error(
+            "Erro: --rollout-base-optimizers só pode ser usado se rollout estiver entre os agentes"
+        )
+    if args.lowest_cost_functions and not (lowest_selected or lowest_base_selected):
+        parser.error(
+            "Erro: --lowest-cost-functions só pode ser usado se lowest estiver na seleção "
+            "ou se lowest for base do rollout"
+        )
 
     heuristic_names = set(optimizer_catalog.keys(is_heuristic=True)) | set(
         optimizer_catalog.cli_choices(is_heuristic=True)
@@ -406,15 +449,25 @@ def main():
                 print("[AVISO] Nenhum agente selecionado para este objetivo.")
                 continue
 
-            print(f"  Agentes neste objetivo: {[spec.key for spec in agents]}")
+            try:
+                variants = optimizer_catalog.expand_evaluations(
+                    agents,
+                    cost_functions=cost_functions,
+                    base_optimizers=bases,
+                    rollout_alpha=args.rollout_alpha,
+                    rollout_horizon=args.rollout_horizon,
+                    record_decisions=args.rollout_record_decisions,
+                )
+            except (KeyError, ValueError) as exc:
+                parser.error(str(exc))
+
+            print(f"  Execuções neste objetivo: {[variant.result_key for variant in variants]}")
             run_agents(
-                scenario, agents, objective, results_dir,
+                scenario, variants, objective, results_dir,
                 args.num_runs, args.seed,
                 save_individual_plots=save_individual_plots,
                 save_mean_plots=save_mean_plots,
                 metrics_fmt=args.metrics_fmt,
-                base_optimizer=base_name,
-                cost_function=args.cost_function,
             )
 
     print("\n=== Avaliação concluída ===")
