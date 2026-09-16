@@ -105,7 +105,15 @@ def main():
                         help=f"Fator de desconto do rollout (padrão: {optimizer_catalog.DEFAULT_ROLLOUT_ALPHA})")
     parser.add_argument("--horizon", type=int, default=optimizer_catalog.DEFAULT_ROLLOUT_HORIZON,
                         help=f"Passos de rollout após a ação candidata (padrão: {optimizer_catalog.DEFAULT_ROLLOUT_HORIZON})")
-    parser.add_argument("--model-path", default=None,
+    parser.add_argument(
+        "--terminal-cost",
+        choices=optimizer_catalog.TERMINAL_COST_MODES,
+        default=optimizer_catalog.DEFAULT_ROLLOUT_TERMINAL,
+        help=(
+            "Custo terminal do rollout: '0' força zero; 'model' carrega o linear model "
+            f"(padrão: {optimizer_catalog.DEFAULT_ROLLOUT_TERMINAL})."
+        ),
+    )    parser.add_argument("--model-path", default=None,
                         help=(
                             "Caminho para um best_model.zip avulso (atalho com --optimizer rl).\n"
                             "O algoritmo é detectado automaticamente. O vecnormalize.pkl é "
@@ -198,6 +206,7 @@ def main():
                 base_optimizer=base_name,
                 alpha=args.alpha,
                 horizon=args.horizon,
+                terminal_cost_mode=args.terminal_cost,
             )
 
         print(f"=== Ambiente pronto com otimizador: {optimizer.get_title()} ===")

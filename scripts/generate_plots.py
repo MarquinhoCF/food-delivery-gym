@@ -127,8 +127,6 @@ def _has_metrics_file(agent_dir: str) -> bool:
 # ── Descoberta de agentes ─────────────────────────────────────────────────────
 
 def discover_agent_dirs(results_dir: str, objectives: list, scenarios: list) -> list[str]:
-    known_order = optimizer_catalog.result_keys()
-
     dirs: list[str] = []
 
     for obj in objectives:
@@ -137,13 +135,13 @@ def discover_agent_dirs(results_dir: str, objectives: list, scenarios: list) -> 
             if not os.path.isdir(base):
                 continue
 
-            entries = [e for e in os.scandir(base) if e.is_dir() and _has_metrics_file(e.path)]
-
-            known = [e for k in known_order for e in entries if e.name == k]
-            ppo   = sorted([e for e in entries if e.name not in known_order], key=lambda e: e.name)
-
-            for entry in known + ppo:
-                dirs.append(entry.path)
+            entries = [
+                e for e in os.scandir(base)
+                if e.is_dir() and _has_metrics_file(e.path)
+            ]
+            by_name = {e.name: e.path for e in entries}
+            for name in optimizer_catalog.sort_discovered_result_dirs(by_name.keys()):
+                dirs.append(by_name[name])
 
     return dirs
 

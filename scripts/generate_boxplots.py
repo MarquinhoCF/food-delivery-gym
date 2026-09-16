@@ -24,9 +24,6 @@ PPO_LABELS: dict[str, str] = {
     "ppo_18M_steps_otimizado": "PPO Otimizado",
 }
 
-KNOWN_AGENTS: dict[str, str] = {**optimizer_catalog.result_labels(short=True), **PPO_LABELS}
-HEURISTIC_DIRS = set(optimizer_catalog.result_keys())
-
 ALL_SCENARIOS     = ["simple", "medium", "complex"]
 SCENARIO_LABELS   = {"simple": "Simples", "medium": "Médio", "complex": "Complexo"}
 
@@ -224,41 +221,34 @@ def collect_data(
 def discover_agents(results_dir: str, scenarios: list[str], objective: int) -> list[str]:
     """
     Varre os diretórios e retorna todos os agentes que possuem resultados,
-    na ordem: heurísticas conhecidas → PPO (ordem alfabética).
+    na ordem: heurísticas fixas -> rollouts -> RL.
     """
-    found_heuristics: list[str] = []
-    found_ppo: list[str]        = []
+    found: set[str] = set()
 
     for scenario in scenarios:
         base = os.path.join(results_dir, f"obj_{objective}", f"{scenario}_scenario")
         if not os.path.isdir(base):
             continue
-        for entry in sorted(os.scandir(base), key=lambda e: e.name):
+        for entry in os.scandir(base):
             if not entry.is_dir():
                 continue
-            name = entry.name
             has_data = (
                 os.path.exists(os.path.join(entry.path, "metrics_data.npz")) or
                 os.path.exists(os.path.join(entry.path, "metrics_data.json"))
             )
-            if not has_data:
-                continue
-            if name in HEURISTIC_DIRS and name not in found_heuristics:
-                found_heuristics.append(name)
-            elif name not in HEURISTIC_DIRS and name not in found_ppo:
-                found_ppo.append(name)
+            if has_data:
+                found.add(entry.name)
 
-    # Garante a ordem canônica das heurísticas conhecidas
-    canonical = list(KNOWN_AGENTS.keys())
-    found_heuristics.sort(key=lambda x: canonical.index(x) if x in canonical else 99)
-
-    return found_heuristics + found_ppo
+    return optimizer_catalog.sort_discovered_result_dirs(found)
 
 
 def agent_label(agent: str) -> str:
-    if agent in KNOWN_AGENTS:
-        return KNOWN_AGENTS[agent]
-    return optimizer_catalog.rl_result_label(agent) or agent.replace("_", " ").title()
+    if agent in PPO_LABELS:
+        return PPO_LABELS[agent]
+    labeled = optimizer_catalog.label_for_result_dir(agent, short=True)
+    if labeled:
+        return labeled
+    return agent.replace("_", " ").title()
 
 
 def build_color_map(agents: list[str]) -> dict[str, str]:

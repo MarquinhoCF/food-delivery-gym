@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 import re
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 from food_delivery_gym.main.cost.marginal_route_cost_function import MarginalRouteCostFunction
 from food_delivery_gym.main.cost.route_cost_function import RouteCostFunction
@@ -39,8 +39,58 @@ DEFAULT_ROLLOUT_ALPHA = 0.9
 DEFAULT_ROLLOUT_HORIZON = 5
 DEFAULT_ROLLOUT_RECORD_DECISIONS = False
 DEFAULT_ROLLOUT_BASE = "nearest"
+DEFAULT_ROLLOUT_TERMINAL = "0"
+TERMINAL_COST_MODES = ("0", "model")
+TerminalCostMode = Literal["0", "model"]
 
 Builder = Callable[..., OptimizerGym]
+
+
+@dataclass(frozen=True)
+class RolloutVariantSpec:
+    """Uma variante explícita de rollout (base + hiperparâmetros)."""
+
+    base_optimizer: str
+    cost_function: str | None = None
+    horizon: int | None = DEFAULT_ROLLOUT_HORIZON
+    alpha: float = DEFAULT_ROLLOUT_ALPHA
+    terminal: TerminalCostMode = DEFAULT_ROLLOUT_TERMINAL
+
+    def normalized(self) -> RolloutVariantSpec:
+        base = get(self.base_optimizer)
+        if not base.rollout_base:
+            known = ", ".join(cli_choices(rollout_base=True))
+            raise ValueError(
+                f"Otimizador '{self.base_optimizer}' não pode ser base do rollout. "
+                f"Opções: {known}"
+            )
+        cost = self.cost_function
+        if needs_cost_function(base.key):
+            if not cost:
+                raise ValueError(
+                    f"Base '{base.key}' requer cost_function "
+                    f"(ex.: cost={COST_FUNCTION_CHOICES[0]})"
+                )
+            cost = get_cost_function(cost).key
+        elif cost:
+            raise ValueError(
+                f"cost_function só se aplica quando a base é lowest; "
+                f"recebido base='{base.key}'"
+            )
+        if self.terminal not in TERMINAL_COST_MODES:
+            raise ValueError(
+                f"terminal inválido: '{self.terminal}'. "
+                f"Opções: {TERMINAL_COST_MODES}"
+            )
+        if self.horizon is not None and self.horizon < 0:
+            raise ValueError(f"horizon deve ser >= 0 ou None; recebido {self.horizon}")
+        return RolloutVariantSpec(
+            base_optimizer=base.key,
+            cost_function=cost,
+            horizon=self.horizon,
+            alpha=float(self.alpha),
+            terminal=self.terminal,  # type: ignore[arg-type]
+        )
 
 
 @dataclass(frozen=True)
@@ -63,7 +113,7 @@ _COST_FUNCTIONS: tuple[CostFunctionSpec, ...] = (
         cls=RouteCostFunction,
         result_key="lowest_route_cost",
         result_label="Motorista de Menor Custo de Rota",
-        result_short_label="Menor Custo",
+        result_short_label="Custo de Rota",
     ),
     CostFunctionSpec(
         key="marginal_route",
@@ -72,7 +122,7 @@ _COST_FUNCTIONS: tuple[CostFunctionSpec, ...] = (
         cls=MarginalRouteCostFunction,
         result_key="lowest_marginal_route_cost",
         result_label="Motorista de Menor Custo Marginal de Rota",
-        result_short_label="Menor Custo Marg.",
+        result_short_label="Custo Marg. Rota",
     ),
     CostFunctionSpec(
         key="weighted_score",
@@ -151,6 +201,7 @@ def _rollout(env, objective: int | None = None, **extras) -> OptimizerGym:
         alpha=extras.get("alpha", DEFAULT_ROLLOUT_ALPHA),
         horizon=horizon,
         record_decisions=extras.get("record_decisions", DEFAULT_ROLLOUT_RECORD_DECISIONS),
+        terminal_cost_mode=extras.get("terminal_cost_mode", DEFAULT_ROLLOUT_TERMINAL),
     )
 
 
@@ -349,13 +400,188 @@ def lowest_result_key(cost_function: str) -> str:
     return get_cost_function(cost_function).result_key
 
 
-def rollout_result_key(base_optimizer: str, cost_function: str | None = None) -> str:
-    base = get(base_optimizer)
-    if needs_cost_function(base.key):
-        if not cost_function:
-            raise ValueError(f"Base '{base.key}' requer cost_function")
-        return f"rollout_{lowest_result_key(cost_function)}"
-    return f"rollout_{base.key}"
+def _format_alpha_token(alpha: float) -> str:
+    text = format(float(alpha), "g")
+    return text.replace(".", "p")
+
+
+def _parse_alpha_token(token: str) -> float:
+    return float(token.replace("p", "."))
+
+
+def _format_horizon_token(horizon: int | None) -> str:
+    return "hinf" if horizon is None else f"h{int(horizon)}"
+
+
+def _parse_horizon_token(token: str) -> int | None:
+    if token == "hinf":
+        return None
+    if not token.startswith("h"):
+        raise ValueError(f"token de horizon inválido: '{token}'")
+    return int(token[1:])
+
+
+def _base_variant_from_key(base_variant: str) -> tuple[str, str | None]:
+    """Inverso de base_variant_key: 'lowest_weighted_score' → ('lowest', 'weighted_score')."""
+    for cost in _COST_FUNCTIONS:
+        if base_variant == cost.result_key:
+            return "lowest", cost.key
+    if base_variant in CATALOG and CATALOG[base_variant].rollout_base:
+        return base_variant, None
+    raise ValueError(f"base_variant desconhecida no result_key: '{base_variant}'")
+
+
+def rollout_result_key(
+    base_optimizer: str,
+    cost_function: str | None = None,
+    *,
+    horizon: int | None = DEFAULT_ROLLOUT_HORIZON,
+    alpha: float = DEFAULT_ROLLOUT_ALPHA,
+    terminal: TerminalCostMode = DEFAULT_ROLLOUT_TERMINAL,
+) -> str:
+    """Nome de pasta: rollout_<base_variant>_h5_a0p9_tc0."""
+    variant = RolloutVariantSpec(
+        base_optimizer=base_optimizer,
+        cost_function=cost_function,
+        horizon=horizon,
+        alpha=alpha,
+        terminal=terminal,
+    ).normalized()
+    base_key = base_variant_key(variant.base_optimizer, variant.cost_function)
+    return (
+        f"rollout_{base_key}"
+        f"_{_format_horizon_token(variant.horizon)}"
+        f"_a{_format_alpha_token(variant.alpha)}"
+        f"_tc{variant.terminal}"
+    )
+
+
+_ROLLOUT_RESULT_KEY_RE = re.compile(
+    r"^rollout_(.+)_h(\d+|inf)_a([0-9p]+)_tc(0|model)$"
+)
+_LEGACY_ROLLOUT_RESULT_KEY_RE = re.compile(r"^rollout_(.+)$")
+
+
+def parse_rollout_result_key(dir_name: str) -> RolloutVariantSpec | None:
+    """Reconstrói a variante a partir do nome da pasta (formato novo)."""
+    match = _ROLLOUT_RESULT_KEY_RE.match(dir_name)
+    if not match:
+        return None
+    base_variant, horizon_body, alpha_token, terminal = match.groups()
+    try:
+        base_optimizer, cost_function = _base_variant_from_key(base_variant)
+        return RolloutVariantSpec(
+            base_optimizer=base_optimizer,
+            cost_function=cost_function,
+            horizon=_parse_horizon_token(f"h{horizon_body}"),
+            alpha=_parse_alpha_token(alpha_token),
+            terminal=terminal,  # type: ignore[arg-type]
+        ).normalized()
+    except (ValueError, KeyError):
+        return None
+
+
+def parse_legacy_rollout_result_key(dir_name: str) -> RolloutVariantSpec | None:
+    """Fallback para pastas antigas sem sufixo h/a/tc (usa defaults)."""
+    if _ROLLOUT_RESULT_KEY_RE.match(dir_name):
+        return None
+    match = _LEGACY_ROLLOUT_RESULT_KEY_RE.match(dir_name)
+    if not match:
+        return None
+    try:
+        base_optimizer, cost_function = _base_variant_from_key(match.group(1))
+        return RolloutVariantSpec(
+            base_optimizer=base_optimizer,
+            cost_function=cost_function,
+        ).normalized()
+    except (ValueError, KeyError):
+        return None
+
+
+def rollout_result_label(spec: RolloutVariantSpec, *, short: bool = False) -> str:
+    """Label legível para uma variante de rollout."""
+    variant = spec.normalized()
+    if variant.cost_function:
+        cost = get_cost_function(variant.cost_function)
+        base_label = cost.result_short_label if short else cost.result_label
+    else:
+        base = get(variant.base_optimizer)
+        base_label = base.short_label if short else base.label
+    horizon_str = "inf" if variant.horizon is None else str(variant.horizon)
+    tc_str = "0" if variant.terminal == "0" else "model"
+    return (
+        f"Rollout ({base_label}, H={horizon_str}, α={variant.alpha:g}, TC={tc_str})"
+    )
+
+
+def parse_rollout_cli(raw: str) -> RolloutVariantSpec:
+    """
+    Parseia `base=lowest,cost=weighted_score,horizon=5,terminal=0,alpha=0.9`.
+
+    Chaves aceitas: base, cost|cost_function, horizon, alpha, terminal.
+    Defaults: base=nearest, horizon=5, alpha=0.9, terminal=0.
+    """
+    if not raw or not raw.strip():
+        raise ValueError("especificação de --rollout vazia")
+
+    known_keys = {
+        "base",
+        "cost",
+        "cost_function",
+        "horizon",
+        "alpha",
+        "terminal",
+    }
+    values: dict[str, str] = {}
+    for part in raw.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "=" not in part:
+            raise ValueError(
+                f"trecho inválido em --rollout: '{part}' "
+                "(esperado chave=valor)"
+            )
+        key, value = part.split("=", 1)
+        key = key.strip().lower()
+        value = value.strip()
+        if key not in known_keys:
+            raise ValueError(
+                f"chave desconhecida em --rollout: '{key}'. "
+                f"Opções: base, cost, horizon, alpha, terminal"
+            )
+        if key == "cost_function":
+            key = "cost"
+        if key in values:
+            raise ValueError(f"chave duplicada em --rollout: '{key}'")
+        values[key] = value
+
+    base = values.get("base", DEFAULT_ROLLOUT_BASE)
+    cost = values.get("cost")
+
+    if "horizon" in values:
+        horizon_raw = values["horizon"].lower()
+        if horizon_raw in ("inf", "none", "null"):
+            horizon: int | None = None
+        else:
+            horizon = int(horizon_raw)
+    else:
+        horizon = DEFAULT_ROLLOUT_HORIZON
+
+    alpha = float(values["alpha"]) if "alpha" in values else DEFAULT_ROLLOUT_ALPHA
+    terminal = values.get("terminal", DEFAULT_ROLLOUT_TERMINAL)
+    if terminal not in TERMINAL_COST_MODES:
+        raise ValueError(
+            f"terminal inválido: '{terminal}'. Opções: {TERMINAL_COST_MODES}"
+        )
+
+    return RolloutVariantSpec(
+        base_optimizer=base,
+        cost_function=cost,
+        horizon=horizon,
+        alpha=alpha,
+        terminal=terminal,  # type: ignore[arg-type]
+    ).normalized()
 
 
 def base_variant_key(base_optimizer: str, cost_function: str | None = None) -> str:
@@ -417,15 +643,15 @@ def expand_evaluations(
     specs: list[OptimizerSpec],
     *,
     cost_functions: list[str],
-    base_optimizers: list[str],
-    rollout_alpha: float = DEFAULT_ROLLOUT_ALPHA,
-    rollout_horizon: int | None = DEFAULT_ROLLOUT_HORIZON,
+    rollout_variants: list[RolloutVariantSpec] | None = None,
     record_decisions: bool = DEFAULT_ROLLOUT_RECORD_DECISIONS,
 ) -> list[EvalVariant]:
-    """Expande lowest e rollout em uma execução por cost function e/ou base."""
+    """Expande lowest por cost function e rollout por variantes explícitas."""
     cost_names = _normalize_cost_functions(cost_functions)
-    bases = normalize_base_optimizers(base_optimizers)
     variants: list[EvalVariant] = []
+    normalized_rollouts = [
+        variant.normalized() for variant in (rollout_variants or [])
+    ]
 
     for spec in specs:
         if spec.key == "lowest":
@@ -440,33 +666,34 @@ def expand_evaluations(
             continue
 
         if spec.key == "rollout":
-            rollout_extras = {
-                "alpha": rollout_alpha,
-                "horizon": rollout_horizon,
-                "record_decisions": record_decisions,
-            }
-            for base_key in bases:
-                if needs_cost_function(base_key):
-                    for cost_name in cost_names:
-                        variants.append(
-                            EvalVariant(
-                                spec=spec,
-                                result_key=rollout_result_key(base_key, cost_name),
-                                extras={
-                                    **rollout_extras,
-                                    "base_optimizer": base_key,
-                                    "cost_function": cost_name,
-                                },
-                            )
-                        )
-                else:
-                    variants.append(
-                        EvalVariant(
-                            spec=spec,
-                            result_key=rollout_result_key(base_key),
-                            extras={**rollout_extras, "base_optimizer": base_key},
-                        )
+            if not normalized_rollouts:
+                raise ValueError(
+                    "rollout selecionado exige ao menos uma variante "
+                    "(passe --rollout base=...,horizon=...,terminal=...)"
+                )
+            for rollout in normalized_rollouts:
+                extras: dict[str, Any] = {
+                    "base_optimizer": rollout.base_optimizer,
+                    "alpha": rollout.alpha,
+                    "horizon": rollout.horizon,
+                    "terminal_cost_mode": rollout.terminal,
+                    "record_decisions": record_decisions,
+                }
+                if rollout.cost_function:
+                    extras["cost_function"] = rollout.cost_function
+                variants.append(
+                    EvalVariant(
+                        spec=spec,
+                        result_key=rollout_result_key(
+                            rollout.base_optimizer,
+                            rollout.cost_function,
+                            horizon=rollout.horizon,
+                            alpha=rollout.alpha,
+                            terminal=rollout.terminal,
+                        ),
+                        extras=extras,
                     )
+                )
             continue
 
         variants.append(EvalVariant(spec=spec, result_key=spec.key, extras={}))
@@ -475,7 +702,7 @@ def expand_evaluations(
 
 
 def result_labels(*, short: bool = False) -> dict[str, str]:
-    """Chaves de pasta de resultado → label. Inclui variantes de lowest e rollout."""
+    """Chaves de pasta fixas → label (heurísticas e variantes de lowest)."""
     labels_by_key: dict[str, str] = {}
     for spec in CATALOG.values():
         if spec.key == "lowest":
@@ -485,19 +712,7 @@ def result_labels(*, short: bool = False) -> dict[str, str]:
                 )
             continue
         if spec.key == "rollout":
-            for base in CATALOG.values():
-                if not base.rollout_base:
-                    continue
-                if needs_cost_function(base.key):
-                    for cost in _COST_FUNCTIONS:
-                        key = rollout_result_key(base.key, cost.key)
-                        cost_label = (
-                            cost.result_short_label if short else cost.result_label
-                        )
-                        labels_by_key[key] = f"Rollout ({cost_label})"
-                else:
-                    base_label = base.short_label if short else base.label
-                    labels_by_key[rollout_result_key(base.key)] = f"Rollout ({base_label})"
+            # Rollouts parametrizados são rotulados via label_for_result_dir.
             continue
         labels_by_key[spec.key] = spec.short_label if short else spec.label
     return labels_by_key
@@ -506,6 +721,60 @@ def result_labels(*, short: bool = False) -> dict[str, str]:
 def result_keys() -> list[str]:
     return list(result_labels().keys())
 
+
+def is_heuristic_result_dir(dir_name: str) -> bool:
+    """True se a pasta é heurística conhecida (inclui rollout parametrizado/legacy)."""
+    if dir_name in result_labels():
+        return True
+    if parse_rollout_result_key(dir_name) is not None:
+        return True
+    if parse_legacy_rollout_result_key(dir_name) is not None:
+        return True
+    return False
+
+
+def label_for_result_dir(dir_name: str, *, short: bool = False) -> str | None:
+    """
+    Label para uma pasta de resultado.
+
+    Reconhece heurísticas fixas, rollout parametrizado, rollout legacy e RL.
+    Retorna None se desconhecido.
+    """
+    fixed = result_labels(short=short)
+    if dir_name in fixed:
+        return fixed[dir_name]
+
+    rollout = parse_rollout_result_key(dir_name)
+    if rollout is not None:
+        return rollout_result_label(rollout, short=short)
+
+    legacy = parse_legacy_rollout_result_key(dir_name)
+    if legacy is not None:
+        return rollout_result_label(legacy, short=short)
+
+    return rl_result_label(dir_name)
+
+
+def sort_discovered_result_dirs(names: list[str] | set[str]) -> list[str]:
+    """
+    Ordena pastas descobertas: heurísticas fixas -> rollouts -> demais (RL).
+    """
+    found = set(names)
+    fixed_order = result_keys()
+    fixed = [key for key in fixed_order if key in found]
+    rollouts = sorted(
+        name
+        for name in found
+        if name not in fixed_order
+        and (
+            parse_rollout_result_key(name) is not None
+            or parse_legacy_rollout_result_key(name) is not None
+        )
+    )
+    others = sorted(
+        name for name in found if name not in fixed_order and name not in rollouts
+    )
+    return fixed + rollouts + others
 
 # ── Modelos de aprendizado por reforço ───────────────────────────────────────
 

@@ -100,39 +100,25 @@ def parse_args():
         default=None,
         metavar="COST",
         help=(
-            "Cost functions do lowest. Vale para a heurística lowest e para o rollout\n"
-            "quando a base é lowest. Não há lista separada para a base.\n"
+            "Cost functions da heurística lowest (standalone).\n"
             f"Opções: {optimizer_catalog.COST_FUNCTION_CHOICES}\n"
-            "Padrão: todas."
+            "Padrão: todas. Para rollout com base lowest, use --rollout cost=..."
         ),
     )
 
     parser.add_argument(
-        "--rollout-base-optimizers",
-        nargs="+",
+        "--rollout",
+        action="append",
         default=None,
-        metavar="OPTIMIZER",
+        metavar="SPEC",
         help=(
-            "Políticas de base do rollout (apenas se rollout estiver entre os agentes).\n"
-            f"Opções: {optimizer_catalog.cli_choices(rollout_base=True)}\n"
-            "Padrão: todas."
-        ),
-    )
-
-    parser.add_argument(
-        "--rollout-alpha",
-        type=float,
-        default=optimizer_catalog.DEFAULT_ROLLOUT_ALPHA,
-        help=f"Fator de desconto do rollout. Padrão: {optimizer_catalog.DEFAULT_ROLLOUT_ALPHA}.",
-    )
-
-    parser.add_argument(
-        "--rollout-horizon",
-        type=int,
-        default=optimizer_catalog.DEFAULT_ROLLOUT_HORIZON,
-        help=(
-            "Passos de rollout após a ação candidata.\n"
-            f"Padrão: {optimizer_catalog.DEFAULT_ROLLOUT_HORIZON}."
+            "Variante explícita de rollout (repetível). Formato key=value,...\n"
+            "Chaves: base, cost, horizon, alpha, terminal (0|model).\n"
+            f"Defaults: base={optimizer_catalog.DEFAULT_ROLLOUT_BASE}, "
+            f"horizon={optimizer_catalog.DEFAULT_ROLLOUT_HORIZON}, "
+            f"alpha={optimizer_catalog.DEFAULT_ROLLOUT_ALPHA}, "
+            f"terminal={optimizer_catalog.DEFAULT_ROLLOUT_TERMINAL}.\n"
+            "Ex.: --rollout base=lowest,cost=weighted_score,horizon=5,terminal=0,alpha=0.9"
         ),
     )
 
@@ -354,14 +340,27 @@ def main():
     cost_functions = list(
         args.lowest_cost_functions or optimizer_catalog.COST_FUNCTION_CHOICES
     )
-    base_optimizers = list(
-        args.rollout_base_optimizers
-        or optimizer_catalog.keys(rollout_base=True)
-    )
+    try:
+        rollout_variants = [
+            optimizer_catalog.parse_rollout_cli(raw)
+            for raw in (args.rollout or [])
+        ]
+    except ValueError as exc:
+        parser.error(str(exc))
     print(f"  Cost functions: {cost_functions}")
-    print(f"  Bases rollout : {base_optimizers}")
-    print(f"  Rollout alpha : {args.rollout_alpha}")
-    print(f"  Rollout horiz.: {args.rollout_horizon}")
+    if rollout_variants:
+        print("  Rollouts:")
+        for variant in rollout_variants:
+            key = optimizer_catalog.rollout_result_key(
+                variant.base_optimizer,
+                variant.cost_function,
+                horizon=variant.horizon,
+                alpha=variant.alpha,
+                terminal=variant.terminal,
+            )
+            print(f"    - {key}")
+    else:
+        print("  Rollouts     : (nenhum --rollout)")
     print(f"  Runs         : {args.num_runs} | Seed: {args.seed}")
     print(f"  Modo experim.: {args.experiment_mode}")
     print(f"  Model base   : {args.model_base_dir}")
@@ -384,20 +383,19 @@ def main():
 
     rollout_selected = _heuristic_selected("rollout")
     lowest_selected = _heuristic_selected("lowest")
-    try:
-        bases = optimizer_catalog.normalize_base_optimizers(base_optimizers)
-    except (KeyError, ValueError) as exc:
-        parser.error(str(exc))
-    lowest_base_selected = rollout_selected and "lowest" in bases
 
-    if args.rollout_base_optimizers and not rollout_selected:
+    if args.rollout and not rollout_selected:
         parser.error(
-            "Erro: --rollout-base-optimizers só pode ser usado se rollout estiver entre os agentes"
+            "Erro: --rollout só pode ser usado se rollout estiver entre os agentes"
         )
-    if args.lowest_cost_functions and not (lowest_selected or lowest_base_selected):
+    if rollout_selected and not rollout_variants:
         parser.error(
-            "Erro: --lowest-cost-functions só pode ser usado se lowest estiver na seleção "
-            "ou se lowest for base do rollout"
+            "Erro: rollout selecionado exige ao menos um --rollout "
+            "(ex.: --rollout base=lowest,cost=weighted_score,horizon=5,terminal=0)"
+        )
+    if args.lowest_cost_functions and not lowest_selected:
+        parser.error(
+            "Erro: --lowest-cost-functions só pode ser usado se lowest estiver na seleção"
         )
 
     heuristic_names = set(optimizer_catalog.keys(is_heuristic=True)) | set(
@@ -453,9 +451,7 @@ def main():
                 variants = optimizer_catalog.expand_evaluations(
                     agents,
                     cost_functions=cost_functions,
-                    base_optimizers=bases,
-                    rollout_alpha=args.rollout_alpha,
-                    rollout_horizon=args.rollout_horizon,
+                    rollout_variants=rollout_variants,
                     record_decisions=args.rollout_record_decisions,
                 )
             except (KeyError, ValueError) as exc:

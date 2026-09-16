@@ -1,4 +1,4 @@
-from typing import List, Optional, Type, Tuple
+from typing import List, Literal, Optional, Type, Tuple
 
 import numpy as np
 
@@ -10,6 +10,8 @@ from food_delivery_gym.main.optimizer.optimizer_gym.optmizer_gym import (
 )
 from food_delivery_gym.main.optimizer.optimizer_gym.nearest_driver_optimizer_gym import NearestDriverOptimizerGym
 from food_delivery_gym.main.route.route import Route
+
+TerminalCostMode = Literal["0", "model"]
 
 
 def _coord_to_list(coord) -> list[float]:
@@ -29,7 +31,7 @@ class RolloutOptimizerGym(OptimizerGym):
          ambiente clonado, acumulando recompensa descontada por α, até:
            - o episódio terminar (done/truncated), ou
            - atingir o horizonte `horizon` (se definido), somando nesse
-             caso uma aproximação de custo terminal (TODO).
+             caso uma aproximação de custo terminal.
       4. Escolhe a ação com o maior Q-factor estimado (reward imediato +
          α * valor do rollout) e a retorna para ser executada no ambiente
          REAL (isso é feito pelo framework, via assign_driver_to_order).
@@ -44,6 +46,7 @@ class RolloutOptimizerGym(OptimizerGym):
         horizon: Optional[int] = None,
         record_decisions: bool = True,
         scenario_seed: int = 0,
+        terminal_cost_mode: TerminalCostMode = "0",
     ):
         """
         Args:
@@ -61,24 +64,31 @@ class RolloutOptimizerGym(OptimizerGym):
             scenario_seed: semente do RNG próprio do rollout. Cada decisão
                 sorteia um cenário hipotético independente do ambiente real;
                 todos os candidatos dessa decisão compartilham o mesmo cenário.
+            terminal_cost_mode: "0" força custo terminal 0.0; "model" carrega
+                o modelo linear e falha se o artefato estiver ausente ou
+                incompatível com alpha.
         """
         super().__init__(environment)
+        if terminal_cost_mode not in ("0", "model"):
+            raise ValueError(
+                f"terminal_cost_mode inválido: '{terminal_cost_mode}'. "
+                "Opções: '0', 'model'"
+            )
         self.base_optimizer_cls = base_optimizer_cls
         self.base_optimizer_kwargs = base_optimizer_kwargs or {}
         self.alpha = alpha
         self.horizon = horizon
         self.record_decisions = record_decisions
         self.scenario_seed = int(scenario_seed)
+        self.terminal_cost_mode = terminal_cost_mode
         self._scenario_rng = np.random.default_rng(self.scenario_seed)
         self.decision_log: list[dict] = []
-        # Modelo linear de custo terminal: carregado uma vez no primeiro uso.
-        # None = ainda não tentado; False = indisponível (fica em 0.0).
         self._terminal_cost_model = None
 
     def get_title(self):
         base_name = self.base_optimizer_cls.__name__
         horizon_str = f"H={self.horizon}" if self.horizon is not None else "H=inf"
-        return f"Rollout({base_name}, alpha={self.alpha}, {horizon_str})"
+        return f"Rollout({base_name}, alpha={self.alpha}, {horizon_str}, TC={self.terminal_cost_mode})"
 
     def get_hyperparameters(self):
         return {
@@ -88,13 +98,14 @@ class RolloutOptimizerGym(OptimizerGym):
             "horizon": jsonable_hyperparameter(self.horizon),
             "record_decisions": jsonable_hyperparameter(self.record_decisions),
             "scenario_seed": jsonable_hyperparameter(self.scenario_seed),
+            "terminal_cost_mode": jsonable_hyperparameter(self.terminal_cost_mode),
         }
 
     def _load_terminal_cost_model(self):
         """
         Localiza o modelo linear treinado por scripts/collect_terminal_cost.py
-        para (cenário, objetivo, base). Sem artefato compatível, o custo
-        terminal permanece 0.
+        para (cenário, objetivo, base). Em modo "model", ausência ou
+        incompatibilidade de alpha levantam exceção.
         """
         from food_delivery_gym.main.optimizer import catalog
         from food_delivery_gym.main.optimizer.terminal_cost.linear_model import (
@@ -103,19 +114,38 @@ class RolloutOptimizerGym(OptimizerGym):
         )
 
         scenario = FoodDeliveryGymEnv.SCENARIO_NAME
+        objective = self.gym_env.get_reward_objective()
         base_key = catalog.base_variant_key_for_instance(
             self.base_optimizer_cls, self.base_optimizer_kwargs
         )
-        if scenario is None or base_key is None:
-            return False
+        if scenario is None:
+            raise ValueError(
+                "terminal_cost_mode='model' requer FoodDeliveryGymEnv.SCENARIO_NAME "
+                "definido (chame set_scenario antes)."
+            )
+        if base_key is None:
+            raise ValueError(
+                "terminal_cost_mode='model' não conseguiu identificar a base do "
+                "rollout no catálogo (classe/cost_function)."
+            )
 
-        path = linear_model_path(scenario, self.gym_env.get_reward_objective(), base_key)
+        path = linear_model_path(scenario, objective, base_key)
         if not path.is_file():
-            return False
+            raise FileNotFoundError(
+                "Modelo de custo terminal não encontrado para "
+                f"scenario={scenario!r}, objective={objective}, base={base_key!r}.\n"
+                f"  Esperado: {path}\n"
+                "  Rode scripts/collect_terminal_cost.py ou use terminal=0."
+            )
 
         model = LinearTerminalCostModel.load(path)
         if abs(model.alpha - self.alpha) > 1e-9:
-            return False
+            raise ValueError(
+                "Modelo de custo terminal com alpha incompatível: "
+                f"modelo alpha={model.alpha}, rollout alpha={self.alpha} "
+                f"(scenario={scenario!r}, objective={objective}, base={base_key!r}, "
+                f"path={path})."
+            )
         return model
 
     def terminal_cost_to_go(self, cloned_env: FoodDeliveryGymEnv) -> float:
@@ -124,13 +154,15 @@ class RolloutOptimizerGym(OptimizerGym):
         partir do estado atual do clone, usado para compensar o truncamento
         do rollout em `self.horizon` passos.
 
-        Usa a regressão linear treinada sobre episódios da própria base
-        (scripts/collect_terminal_cost.py). Sem modelo, retorna 0.
+        Com terminal_cost_mode='0' retorna 0.0. Com 'model', usa a regressão
+        linear de scripts/collect_terminal_cost.py e falha se o artefato
+        estiver ausente ou incompatível.
         """
+        if self.terminal_cost_mode == "0":
+            return 0.0
+
         if self._terminal_cost_model is None:
             self._terminal_cost_model = self._load_terminal_cost_model()
-        if self._terminal_cost_model is False:
-            return 0.0
 
         from food_delivery_gym.main.optimizer.terminal_cost.features import extract_features
 

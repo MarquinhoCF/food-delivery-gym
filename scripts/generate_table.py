@@ -37,9 +37,6 @@ METRIC_LABELS       = ["Média", "Desvio Padrão", "Mediana", "Moda"]
 ROWS_PER_OBJECTIVE  = len(METRICS)   # 4 linhas por objetivo
 HEADER_ROWS         = 2              # linhas de cabeçalho antes dos dados
 
-# Heurísticas conhecidas: dir_name → label legível (ver optimizer/catalog.py)
-KNOWN_HEURISTICS = optimizer_catalog.result_labels()
-
 # Chaves de SimulationStats.aggregate → nome da aba
 # Deve corresponder ao que finalize() grava em self.aggregate
 AGG_KEY_TO_SHEET = {
@@ -213,11 +210,9 @@ def _has_metrics_file(agent_dir: str) -> bool:
 
 def agent_label(dir_name: str) -> str:
     """Converte nome de diretório em label legível."""
-    if dir_name in KNOWN_HEURISTICS:
-        return KNOWN_HEURISTICS[dir_name]
-    rl_label = optimizer_catalog.rl_result_label(dir_name)
-    if rl_label:
-        return rl_label
+    labeled = optimizer_catalog.label_for_result_dir(dir_name)
+    if labeled:
+        return labeled
     return dir_name
 
 
@@ -226,9 +221,8 @@ def discover_agents(results_dir: str, objectives: list, scenarios: list) -> list
     Varre results_dir para descobrir todos os agentes presentes.
 
     Um agente é válido se seu diretório contém metrics_data.npz ou
-    metrics_data.json. Retorna lista ordenada: heurísticas conhecidas
-    primeiro (na ordem de KNOWN_HEURISTICS), depois modelos PPO
-    em ordem alfabética.
+    metrics_data.json. Retorna lista ordenada: heurísticas fixas →
+    rollouts → modelos RL.
     """
     found = set()
     for obj in objectives:
@@ -240,9 +234,7 @@ def discover_agents(results_dir: str, objectives: list, scenarios: list) -> list
                 if entry.is_dir() and _has_metrics_file(entry.path):
                     found.add(entry.name)
 
-    heuristics = [k for k in KNOWN_HEURISTICS if k in found]
-    ppo_models = sorted(d for d in found if d not in KNOWN_HEURISTICS)
-    return heuristics + ppo_models
+    return optimizer_catalog.sort_discovered_result_dirs(found)
 
 # ── Construção do Excel ───────────────────────────────────────────────────────
 

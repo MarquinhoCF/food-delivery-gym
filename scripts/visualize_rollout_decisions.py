@@ -4,6 +4,7 @@ import argparse
 import os
 import textwrap
 from importlib.resources import files
+from datetime import datetime
 
 from food_delivery_gym.main.environment.env_mode import EnvMode
 from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
@@ -114,6 +115,15 @@ def parse_args() -> argparse.Namespace:
         help="Fator de desconto do rollout (default: 0.9)",
     )
     parser.add_argument(
+        "--terminal-cost",
+        choices=optimizer_catalog.TERMINAL_COST_MODES,
+        default=optimizer_catalog.DEFAULT_ROLLOUT_TERMINAL,
+        help=(
+            "Custo terminal: '0' força zero; 'model' exige o linear model "
+            f"(default: {optimizer_catalog.DEFAULT_ROLLOUT_TERMINAL})"
+        ),
+    )
+    parser.add_argument(
         "--out-dir",
         default=DEFAULT_OUT_DIR,
         help=f"Diretório de saída (default: {DEFAULT_OUT_DIR})",
@@ -156,6 +166,7 @@ def main() -> None:
         alpha=args.alpha,
         horizon=args.horizon,
         record_decisions=True,
+        terminal_cost_mode=args.terminal_cost,
     )
     # prepare_env já fez reset; sincroniza o estado do otimizador
     optimizer.state = env.get_observation()
@@ -166,7 +177,15 @@ def main() -> None:
     out_dir = os.path.join(
         args.out_dir,
         args.scenario.split(".")[0],
-        optimizer_catalog.rollout_result_key(args.base_optimizer, args.cost_function),
+        optimizer_catalog.rollout_result_key(
+            args.base_optimizer,
+            args.cost_function,
+            horizon=args.horizon,
+            alpha=args.alpha,
+            terminal=args.terminal_cost,
+        ),
+        f"obj_{args.objective}",
+        datetime.now().strftime('%d_%m_%Y-%H_%M_%S'),
     )
     print(f"scenario={args.scenario} seed={args.seed} objective={args.objective}")
     print(f"base_optimizer={args.base_optimizer} cost_function={args.cost_function}")
