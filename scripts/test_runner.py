@@ -113,12 +113,16 @@ def main():
             "Custo terminal do rollout: '0' força zero; 'model' carrega o linear model "
             f"(padrão: {optimizer_catalog.DEFAULT_ROLLOUT_TERMINAL})."
         ),
-    )    parser.add_argument("--model-path", default=None,
-                        help=(
-                            "Caminho para um best_model.zip avulso (atalho com --optimizer rl).\n"
-                            "O algoritmo é detectado automaticamente. O vecnormalize.pkl é "
-                            "procurado no mesmo diretório."
-                        ))
+    )
+    parser.add_argument(
+        "--model-path", 
+        default=None,
+        help=(
+            "Caminho para um best_model.zip avulso (atalho com --optimizer rl).\n"
+            "O algoritmo é detectado automaticamente. O vecnormalize.pkl é "
+            "procurado no mesmo diretório."
+        )
+    )
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     parser.add_argument("--objective", type=int, default=1,
                         help="Objetivo de recompensa para o ambiente ({})".format(", ".join(map(str, ALL_OBJECTIVES))))

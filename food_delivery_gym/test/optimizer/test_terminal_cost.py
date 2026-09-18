@@ -74,6 +74,16 @@ def _write_model(tmp_path, scenario, objective, base_key, alpha, bias):
     )
 
 
+def _rollout(env, *, terminal_cost_mode: str = "0", alpha: float = 0.9) -> RolloutOptimizerGym:
+    return RolloutOptimizerGym(
+        env,
+        base_optimizer_cls=NearestDriverOptimizerGym,
+        alpha=alpha,
+        horizon=2,
+        terminal_cost_mode=terminal_cost_mode,
+    )
+
+
 def test_terminal_cost_uses_saved_model(tmp_path, monkeypatch):
     env = make_env(TINY, seed=5, reward_objective=3)
     scenario = type(env).SCENARIO_NAME
@@ -82,24 +92,33 @@ def test_terminal_cost_uses_saved_model(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "food_delivery_gym.main.optimizer.terminal_cost.linear_model.DEFAULT_ROOT", tmp_path
     )
-    optimizer = RolloutOptimizerGym(
-        env, base_optimizer_cls=NearestDriverOptimizerGym, alpha=0.9, horizon=2
-    )
+    optimizer = _rollout(env, terminal_cost_mode="model")
     assert optimizer.terminal_cost_to_go(env) == pytest.approx(-42.0)
 
 
-def test_terminal_cost_zero_without_model(tmp_path, monkeypatch):
+def test_terminal_cost_zero_ignores_saved_model(tmp_path, monkeypatch):
+    env = make_env(TINY, seed=5, reward_objective=3)
+    scenario = type(env).SCENARIO_NAME
+    _write_model(tmp_path, scenario, 3, "nearest_driver", alpha=0.9, bias=-42.0)
+
+    monkeypatch.setattr(
+        "food_delivery_gym.main.optimizer.terminal_cost.linear_model.DEFAULT_ROOT", tmp_path
+    )
+    optimizer = _rollout(env, terminal_cost_mode="0")
+    assert optimizer.terminal_cost_to_go(env) == 0.0
+
+
+def test_terminal_cost_model_requires_saved_file(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "food_delivery_gym.main.optimizer.terminal_cost.linear_model.DEFAULT_ROOT", tmp_path
     )
     env = make_env(TINY, seed=5, reward_objective=3)
-    optimizer = RolloutOptimizerGym(
-        env, base_optimizer_cls=NearestDriverOptimizerGym, alpha=0.9, horizon=2
-    )
-    assert optimizer.terminal_cost_to_go(env) == 0.0
+    optimizer = _rollout(env, terminal_cost_mode="model")
+    with pytest.raises(FileNotFoundError, match="Modelo de custo terminal não encontrado"):
+        optimizer.terminal_cost_to_go(env)
 
 
-def test_terminal_cost_zero_on_alpha_mismatch(tmp_path, monkeypatch):
+def test_terminal_cost_model_rejects_alpha_mismatch(tmp_path, monkeypatch):
     env = make_env(TINY, seed=5, reward_objective=3)
     scenario = type(env).SCENARIO_NAME
     _write_model(tmp_path, scenario, 3, "nearest_driver", alpha=0.5, bias=-42.0)
@@ -107,7 +126,6 @@ def test_terminal_cost_zero_on_alpha_mismatch(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "food_delivery_gym.main.optimizer.terminal_cost.linear_model.DEFAULT_ROOT", tmp_path
     )
-    optimizer = RolloutOptimizerGym(
-        env, base_optimizer_cls=NearestDriverOptimizerGym, alpha=0.9, horizon=2
-    )
-    assert optimizer.terminal_cost_to_go(env) == 0.0
+    optimizer = _rollout(env, terminal_cost_mode="model")
+    with pytest.raises(ValueError, match="alpha incompatível"):
+        optimizer.terminal_cost_to_go(env)
