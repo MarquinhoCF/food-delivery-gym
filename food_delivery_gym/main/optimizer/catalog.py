@@ -223,6 +223,9 @@ class OptimizerSpec:
     requires: tuple[str, ...] = ()
     is_heuristic: bool = True
     rollout_base: bool = True
+    # Preenchidos só em specs de modelos RL descobertos (payload paralelo).
+    model_path: str | None = None
+    model_search_root: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1003,6 +1006,8 @@ def spec_from_discovered(model: DiscoveredModel, search_root: str) -> OptimizerS
         builder=_rl_discovered_builder(model.path, search_root),
         is_heuristic=False,
         rollout_base=False,
+        model_path=model.path,
+        model_search_root=search_root,
     )
 
 

@@ -165,6 +165,15 @@ class OptimizerGym(Optimizer, ABC):
         self.done = False
         self.truncated = False
 
+    def prepare_episode(self, seed: int | None = None):
+        """
+        Prepara o otimizador para um novo episódio com semente explícita.
+
+        Subclasses (ex.: rollout) podem resetar RNGs próprios aqui.
+        """
+        self.reset_env(seed=seed)
+        self._call_env_method("set_mode", EnvMode.EVALUATING)
+
     def assign_driver_to_order(self, obs: dict, order: Order):
         segment_pickup = PickupRouteSegment(order)
         segment_delivery = DeliveryRouteSegment(order)
@@ -224,90 +233,163 @@ class OptimizerGym(Optimizer, ABC):
         save_individual_plots: bool = True,
         save_mean_plots: bool = True,
         metrics_fmt: str = "npz",
+        num_workers: int = 1,
+        eval_spec=None,
     ):
-        self.reset_env(seed=seed)
-        self._call_env_method("set_mode", EnvMode.EVALUATING)
+        from food_delivery_gym.main.optimizer.eval_parallel import (
+            EpisodeJob,
+            derive_episode_seeds,
+            run_episodes_parallel,
+        )
+
+        if num_workers < 1:
+            raise ValueError(f"num_workers deve ser >= 1; recebido {num_workers}")
+        if num_workers > 1 and eval_spec is None:
+            raise ValueError(
+                "num_workers > 1 exige eval_spec (EvalJobSpec) para reconstruir "
+                "o otimizador nos processos filhos"
+            )
 
         os.makedirs(dir_path, exist_ok=True)
         file_path = os.path.join(dir_path, "results.txt")
+        episode_seeds = derive_episode_seeds(seed, num_runs)
 
         stats = SimulationStats()
+        # Hyperparâmetros: no caminho paralelo o self do pai ainda existe e
+        # reflete a mesma configuração que os workers vão reconstruir.
+        if num_workers <= 1:
+            self.prepare_episode(episode_seeds[0] if episode_seeds else seed)
+        else:
+            self._call_env_method("set_mode", EnvMode.EVALUATING)
         stats.hyperparameters = self.get_hyperparameters()
 
         with open(file_path, "w", encoding="utf-8") as results_file:
             self._write_run_header(results_file, num_runs, seed)
 
-            for i in range(num_runs):
-                print(f"-> Execução {i + 1} de {num_runs}...")
+            if num_workers <= 1:
+                self._run_simulations_serial(
+                    num_runs=num_runs,
+                    episode_seeds=episode_seeds,
+                    stats=stats,
+                    results_file=results_file,
+                    dir_path=dir_path,
+                    save_individual_plots=save_individual_plots,
+                )
+            else:
+                jobs = [
+                    EpisodeJob(spec=eval_spec, episode_idx=i, seed=episode_seeds[i])
+                    for i in range(num_runs)
+                ]
+                results = run_episodes_parallel(jobs, num_workers=num_workers)
+                self._ingest_parallel_results(
+                    results=results,
+                    stats=stats,
+                    results_file=results_file,
+                    dir_path=dir_path,
+                    save_individual_plots=save_individual_plots,
+                )
 
-                sum_reward    = 0.0
-                ep_length     = 0
-                was_truncated = True   # pessimista: se falhar, trata como truncada
-                run_ok        = False
-
-                try:
-                    resultado     = self.run()
-                    sum_reward    = resultado["sum_reward"]
-                    ep_length     = resultado["steps"]
-                    was_truncated = resultado["truncated"]
-                    run_ok        = True
- 
-                except Exception as e:
-                    print(f"  ✗ Erro na execução {i + 1}: {e}")
-                    traceback.print_exc()
-                    results_file.write(f"Execução {i + 1}: ERRO - {e}\n")
- 
-                if run_ok:
-                    # ── Registro centralizado em SimulationStats ──────────
-                    simpy_env        = self.gym_env.get_simpy_env()
-                    orders_generated = self._call_env_method("get_num_orders_generated")
- 
-                    stats.register_episode(
-                        simpy_env=simpy_env,
-                        reward=sum_reward,
-                        length=ep_length,
-                        truncated=was_truncated,
-                        orders_generated=orders_generated,
-                    )
- 
-                    # Índice do episódio recém-registrado
-                    episode_idx = len(stats._raw_episodes) - 1
- 
-                    results_file.write(
-                        f"Execução {i + 1}: Retorno = {sum_reward:.4f} | "
-                        f"Passos = {ep_length} | SimPy t = {simpy_env.now} | "
-                        f"Truncada = {was_truncated}\n"
-                    )
- 
-                    # ── Gráficos do episódio individual ───────────────────
-                    if save_individual_plots:
-                        try:
-                            board: Board = stats.get_episode_board(episode_idx=episode_idx)
-                            board.save(dir_path)
-                        except Exception as e:
-                            print(f"  ⚠  generate_episode_stats_board falhou: {e}")
- 
-                self.reset_env()
- 
             results_file.write("\n" + "=" * 60 + "\n")
             results_file.write("RESUMO ESTATÍSTICO\n")
             results_file.write("=" * 60 + "\n")
- 
+
             stats.finalize()
             num_truncated = sum(stats.episodes.get("truncated", []))
             stats.write_report(results_file, num_truncated=num_truncated)
- 
-            # ── Board de médias (usa SimulationStats já finalizado) ───────
+
             if save_mean_plots:
                 try:
                     board: Board = stats.get_batch_board()
                     board.save(dir_path)
                 except Exception as e:
                     results_file.write(f"\n⚠  Erro ao mostrar board de médias: {e}\n")
- 
+
         stats.save(dir_path=dir_path, fmt=metrics_fmt)
         print(f"Resultados salvos em {dir_path}")
         return stats
+
+    def _run_simulations_serial(
+        self,
+        num_runs: int,
+        episode_seeds: list[int],
+        stats: SimulationStats,
+        results_file,
+        dir_path: str,
+        save_individual_plots: bool,
+    ):
+        for i in range(num_runs):
+            print(f"-> Execução {i + 1} de {num_runs}...")
+            self.prepare_episode(episode_seeds[i])
+
+            sum_reward = 0.0
+            ep_length = 0
+            was_truncated = True
+            run_ok = False
+
+            try:
+                resultado = self.run()
+                sum_reward = resultado["sum_reward"]
+                ep_length = resultado["steps"]
+                was_truncated = resultado["truncated"]
+                run_ok = True
+            except Exception as e:
+                print(f"  ✗ Erro na execução {i + 1}: {e}")
+                traceback.print_exc()
+                results_file.write(f"Execução {i + 1}: ERRO - {e}\n")
+
+            if run_ok:
+                simpy_env = self.gym_env.get_simpy_env()
+                orders_generated = self._call_env_method("get_num_orders_generated")
+                stats.register_episode(
+                    simpy_env=simpy_env,
+                    reward=sum_reward,
+                    length=ep_length,
+                    truncated=was_truncated,
+                    orders_generated=orders_generated,
+                )
+                episode_idx = len(stats._raw_episodes) - 1
+                results_file.write(
+                    f"Execução {i + 1}: Retorno = {sum_reward:.4f} | "
+                    f"Passos = {ep_length} | SimPy t = {simpy_env.now} | "
+                    f"Truncada = {was_truncated}\n"
+                )
+                if save_individual_plots:
+                    try:
+                        board: Board = stats.get_episode_board(episode_idx=episode_idx)
+                        board.save(dir_path)
+                    except Exception as e:
+                        print(f"  ⚠  generate_episode_stats_board falhou: {e}")
+
+    def _ingest_parallel_results(
+        self,
+        results: list[dict],
+        stats: SimulationStats,
+        results_file,
+        dir_path: str,
+        save_individual_plots: bool,
+    ):
+        # Progresso já foi impresso em tempo real por run_episodes_parallel.
+        for result in results:
+            idx = result["episode_idx"]
+            if not result["ok"]:
+                print(f"  ✗ Detalhe do erro na execução {idx + 1}:\n{result['error']}")
+                results_file.write(f"Execução {idx + 1}: ERRO - {result['error']}\n")
+                continue
+
+            episode = result["episode"]
+            stats.register_episode_dict(episode)
+            episode_idx = len(stats._raw_episodes) - 1
+            results_file.write(
+                f"Execução {idx + 1}: Retorno = {episode['reward']:.4f} | "
+                f"Passos = {episode['length']} | SimPy t = {episode['simpy_time']} | "
+                f"Truncada = {episode['truncated']}\n"
+            )
+            if save_individual_plots:
+                try:
+                    board: Board = stats.get_episode_board(episode_idx=episode_idx)
+                    board.save(dir_path)
+                except Exception as e:
+                    print(f"  ⚠  generate_episode_stats_board falhou: {e}")
     
     # ========================================================
     #     Escrita do cabeçalho do relatório

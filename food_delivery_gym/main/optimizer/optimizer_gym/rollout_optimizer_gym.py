@@ -85,6 +85,13 @@ class RolloutOptimizerGym(OptimizerGym):
         self.decision_log: list[dict] = []
         self._terminal_cost_model = None
 
+    def prepare_episode(self, seed: int | None = None):
+        """Reseta ambiente e o RNG de cenários hipotéticos do rollout."""
+        super().prepare_episode(seed=seed)
+        episode_seed = 0 if seed is None else int(seed)
+        self.scenario_seed = episode_seed
+        self._scenario_rng = np.random.default_rng(episode_seed)
+
     def get_title(self):
         base_name = self.base_optimizer_cls.__name__
         horizon_str = f"H={self.horizon}" if self.horizon is not None else "H=inf"

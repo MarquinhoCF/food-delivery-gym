@@ -1,12 +1,23 @@
-from importlib.resources import files
 import os
 import traceback
 import argparse
 
-from food_delivery_gym.main.environment.env_mode import EnvMode
-from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
-from food_delivery_gym.main.optimizer import catalog as optimizer_catalog
-from food_delivery_gym.main.scenarios import get_all_scenarios, get_defaults_scenarios
+# Antes de qualquer import que puxe SB3 → gym → gym_notices (print no stderr).
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
+os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
+os.environ.setdefault("PYTHONUNBUFFERED", "1")
+
+from food_delivery_gym.main.optimizer.eval_parallel import (  # noqa: E402
+    EvalJobSpec,
+    create_eval_environment,
+    silence_eval_noise,
+)
+
+silence_eval_noise()
+
+from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv  # noqa: E402
+from food_delivery_gym.main.optimizer import catalog as optimizer_catalog  # noqa: E402
+from food_delivery_gym.main.scenarios import get_all_scenarios, get_defaults_scenarios  # noqa: E402
 
 ALL_SCENARIOS = get_all_scenarios()
 DEFAULT_SCENARIOS = get_defaults_scenarios()
@@ -148,6 +159,16 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=1,
+        help=(
+            "Processos paralelos para os episódios de cada agente.\n"
+            "1 = serial (padrão). >1 exige reconstrução do otimizador nos filhos."
+        ),
+    )
+
+    parser.add_argument(
         "--seed",
         type=int,
         default=DEFAULT_SEED,
@@ -228,17 +249,19 @@ def parse_args():
     return parser, parser.parse_args()
 
 def create_environment(reward_objective: int, scenario_name: str):
-    if reward_objective not in range(1, 14):
-        raise ValueError("reward_objective deve ser um valor entre 1 e 13.")
+    return create_eval_environment(reward_objective, scenario_name)
 
-    scenario_file = scenario_name + ".json"
-    scenario_path = str(files("food_delivery_gym.main.scenarios").joinpath(scenario_file))
 
-    # Atualiza o cache ANTES de instanciar — workers herdarão o dict via fork.
-    FoodDeliveryGymEnv.set_scenario(scenario_path)
- 
-    gym_env = FoodDeliveryGymEnv(reward_objective=reward_objective, mode=EnvMode.EVALUATING)
-    return gym_env
+def build_eval_job_spec(variant, scenario: str, objective: int) -> EvalJobSpec:
+    """Monta o payload serializável para workers a partir de uma EvalVariant."""
+    return EvalJobSpec(
+        scenario=scenario,
+        objective=objective,
+        optimizer_key=variant.spec.key,
+        extras=dict(variant.extras),
+        model_path=variant.spec.model_path,
+        model_search_root=variant.spec.model_search_root,
+    )
 
 
 def select_agents_for_run(
@@ -292,6 +315,7 @@ def run_agents(
     results_dir: str, num_runs: int, seed: int,
     save_individual_plots: bool, save_mean_plots: bool,
     metrics_fmt: str,
+    num_workers: int = 1,
 ):
     for variant in variants:
         output_dir = os.path.join(results_dir, variant.result_key) + "/"
@@ -304,12 +328,18 @@ def run_agents(
                 objective,
                 **variant.extras,
             )
+            eval_spec = build_eval_job_spec(variant, scenario, objective)
             optimizer.run_simulations(
                 num_runs, output_dir, seed=seed,
                 save_individual_plots=save_individual_plots,
                 save_mean_plots=save_mean_plots,
                 metrics_fmt=metrics_fmt,
+                num_workers=num_workers,
+                eval_spec=eval_spec,
             )
+        except KeyboardInterrupt:
+            print("\nInterrompido pelo usuário — encerrando avaliação.")
+            raise
         except Exception as e:
             print(
                 f"Erro ao executar {variant.result_key} — "
@@ -362,6 +392,7 @@ def main():
     else:
         print("  Rollouts     : (nenhum --rollout)")
     print(f"  Runs         : {args.num_runs} | Seed: {args.seed}")
+    print(f"  Workers      : {args.num_workers}")
     print(f"  Modo experim.: {args.experiment_mode}")
     print(f"  Model base   : {args.model_base_dir}")
     if args.experiment_mode == "cross_scenario":
@@ -397,6 +428,8 @@ def main():
         parser.error(
             "Erro: --lowest-cost-functions só pode ser usado se lowest estiver na seleção"
         )
+    if args.num_workers < 1:
+        parser.error("--num-workers deve ser >= 1")
 
     heuristic_names = set(optimizer_catalog.keys(is_heuristic=True)) | set(
         optimizer_catalog.cli_choices(is_heuristic=True)
@@ -464,6 +497,7 @@ def main():
                 save_individual_plots=save_individual_plots,
                 save_mean_plots=save_mean_plots,
                 metrics_fmt=args.metrics_fmt,
+                num_workers=args.num_workers,
             )
 
     print("\n=== Avaliação concluída ===")

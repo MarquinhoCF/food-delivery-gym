@@ -317,21 +317,20 @@ class SimulationStats:
     #  API principal
     # ════════════════════════════════════════════════════════════════════
 
-    def register_episode(
-        self,
+    @staticmethod
+    def snapshot_episode(
         simpy_env,
         reward: float,
         length: int,
         truncated: bool,
         orders_generated: int,
-    ) -> None:
+    ) -> dict:
         """
-        Registra os dados de um episódio completo.
+        Extrai um dict pickleável com as métricas de um episódio completo.
 
-        Chame uma vez por episódio, antes de reset(). Extrai os dados
-        diretamente dos drivers, establishments e eventos via simpy_env.
+        Usado por workers de avaliação paralela e por register_episode.
         """
-        ep: dict = {
+        return {
             "reward":           float(reward),
             "length":           int(length),
             "simpy_time":       float(simpy_env.now),
@@ -350,8 +349,34 @@ class SimulationStats:
                 for event in simpy_env.events
             ],
         }
-        self._raw_episodes.append(ep)
-        self._sim = None  # invalida cache lazy
+
+    def register_episode_dict(self, episode: dict) -> None:
+        """Registra um episódio já serializado (ex.: retorno de um worker)."""
+        self._raw_episodes.append(episode)
+        self._sim = None
+
+    def register_episode(
+        self,
+        simpy_env,
+        reward: float,
+        length: int,
+        truncated: bool,
+        orders_generated: int,
+    ) -> None:
+        """
+        Registra os dados de um episódio completo.
+
+        Chame uma vez por episódio, antes de reset(). Extrai os dados
+        diretamente dos drivers, establishments e eventos via simpy_env.
+        """
+        ep = self.snapshot_episode(
+            simpy_env=simpy_env,
+            reward=reward,
+            length=length,
+            truncated=truncated,
+            orders_generated=orders_generated,
+        )
+        self.register_episode_dict(ep)
 
     def finalize(self) -> "SimulationStats":
         """
