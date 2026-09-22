@@ -27,7 +27,7 @@ PPO_LABELS: dict[str, str] = {
 ALL_SCENARIOS     = ["simple", "medium", "complex"]
 SCENARIO_LABELS   = {"simple": "Simples", "medium": "Médio", "complex": "Complexo"}
 
-# Paleta de cores — uma por agente (até 12 agentes)
+# Paleta de cores — uma por agente (até 20 agentes sem repetir)
 _BASE_PALETTE = [
     "#E64B35",  # vermelho
     "#4DBBD5",  # azul claro
@@ -36,11 +36,19 @@ _BASE_PALETTE = [
     "#3C5488",  # azul escuro
     "#6A0572",  # roxo escuro
     "#00A087",  # verde-água
-    "#91D1C2",  # menta
-    "#DC0000",  # vermelho vivo
+    "#F39B7F",  # salmão
     "#7E6148",  # marrom
+    "#8491B4",  # lavanda acinzentada
+    "#91D1C2",  # menta
     "#B09C85",  # bege
-    "#8491B4",  # roxo claro
+    "#DC0000",  # vermelho vivo
+    "#7AA6DC",  # azul médio
+    "#B09A29",  # mostarda
+    "#C77CFF",  # lilás
+    "#2A9D8F",  # teal
+    "#E9C46A",  # amarelo ocre
+    "#264653",  # azul petróleo
+    "#E76F51",  # coral
 ]
 
 # Paleta alternativa por cenário (para modo --by-scenario)
@@ -370,6 +378,16 @@ def _add_sample_annotation(
 def format_br(x, precision=2):
     return f"{x:,.{precision}f}".replace(",", "_").replace(".", ",").replace("_", ".")
 
+
+def _xtick_ha(rotation: float) -> str:
+    """Alinhamento horizontal dos rótulos do eixo X conforme a rotação."""
+    r = abs(float(rotation)) % 180
+    if r < 5 or r > 175:
+        return "center"
+    if 85 <= r <= 95:
+        return "center"
+    return "right"
+
 # ─────────────────────────────────────────────────────────────────────────────
 #  Funções de plotagem principais
 # ─────────────────────────────────────────────────────────────────────────────
@@ -387,6 +405,7 @@ def _plot_metric_ax(
     show_mean_values: bool,
     annotate_n: bool,
     title: Optional[str],
+    xtick_rotation: Optional[float] = None,
 ) -> bool:
     """
     Plota um boxplot de uma métrica em `ax`.
@@ -476,8 +495,12 @@ def _plot_metric_ax(
                 _add_sample_annotation(ax, real_matrix, real_positions, -0.02)
 
     # Formatação do eixo
+    if xtick_rotation is None:
+        rotation = 0.0 if by_scenario else 15.0
+    else:
+        rotation = float(xtick_rotation)
     ax.set_xticks(group_positions)
-    ax.set_xticklabels(x_labels, rotation=15 if not by_scenario else 0, ha="right" if not by_scenario else "center")
+    ax.set_xticklabels(x_labels, rotation=rotation, ha=_xtick_ha(rotation))
     ylabel = meta["label"]
     if meta["unit"]:
         ylabel += f" {meta['unit']}"
@@ -508,6 +531,7 @@ def _plot_single_scenario_ax(
     show_mean_values: bool,
     annotate_n: bool,
     sharey_ax: Optional[plt.Axes] = None,
+    xtick_rotation: Optional[float] = None,
 ) -> bool:
     """
     Plota um boxplot por agente para um único cenário.
@@ -540,10 +564,12 @@ def _plot_single_scenario_ax(
                 ax, [vals], np.array([positions[i]]), -0.02
             )
 
+    rotation = 20.0 if xtick_rotation is None else float(xtick_rotation)
     ax.set_xticks(positions)
     ax.set_xticklabels(
         [agent_label(a) for a in agents],
-        rotation=20, ha="right",
+        rotation=rotation,
+        ha=_xtick_ha(rotation),
     )
     ax.set_title(SCENARIO_LABELS.get(scenario, scenario), pad=8)
 
@@ -656,6 +682,8 @@ def plot_combined(
     suptitle: Optional[str],
     legend_cols: Optional[int],
     legend_stats: bool = False,
+    no_legend: bool = False,
+    xtick_rotation: Optional[float] = None,
 ) -> None:
     """Cria uma figura com N subplots (um por métrica) lado a lado."""
     n = len(metrics)
@@ -668,14 +696,18 @@ def plot_combined(
             ax, metric_key, data, agents, scenarios,
             build_color_map(agents), by_scenario,
             showfliers, show_means, show_mean_values, annotate_n, None,
+            xtick_rotation=xtick_rotation,
         )
 
     if suptitle:
         fig.suptitle(suptitle, fontsize=font_size + 3, y=1.01)
 
-    _add_legend(fig, agents, scenarios, build_color_map(agents), by_scenario,
-                legend_cols, legend_stats=legend_stats, show_means=show_means)
-    fig.tight_layout(rect=[0, 0.06, 1, 1])
+    if not no_legend:
+        _add_legend(fig, agents, scenarios, build_color_map(agents), by_scenario,
+                    legend_cols, legend_stats=legend_stats, show_means=show_means)
+        fig.tight_layout(rect=[0, 0.06, 1, 1])
+    else:
+        fig.tight_layout()
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
     fig.savefig(output_path, bbox_inches="tight", dpi=dpi)
     print(f"  ✔ Figura salva: {output_path}")
@@ -701,6 +733,8 @@ def plot_split(
     suptitle: Optional[str],
     legend_cols: Optional[int],
     legend_stats: bool = False,
+    no_legend: bool = False,
+    xtick_rotation: Optional[float] = None,
 ) -> None:
     """Salva cada métrica em um arquivo separado."""
     for metric_key in metrics:
@@ -715,11 +749,15 @@ def plot_split(
             build_color_map(agents), by_scenario,
             showfliers, show_means, show_mean_values, annotate_n,
             title=suptitle,
+            xtick_rotation=xtick_rotation,
         )
 
-        _add_legend(fig, agents, scenarios, build_color_map(agents), by_scenario,
-                    legend_cols, legend_stats=legend_stats, show_means=show_means)
-        fig.tight_layout(rect=[0, 0.08, 1, 1])
+        if not no_legend:
+            _add_legend(fig, agents, scenarios, build_color_map(agents), by_scenario,
+                        legend_cols, legend_stats=legend_stats, show_means=show_means)
+            fig.tight_layout(rect=[0, 0.08, 1, 1])
+        else:
+            fig.tight_layout()
         os.makedirs(output_dir, exist_ok=True)
         fig.savefig(output, bbox_inches="tight", dpi=dpi)
         print(f"  ✔ Figura salva: {output}")
@@ -744,13 +782,15 @@ def plot_per_scenario(
     suptitle: Optional[str],
     legend_cols: Optional[int],
     legend_stats: bool = False,
+    no_legend: bool = False,
+    xtick_rotation: Optional[float] = None,
 ) -> None:
     """
     Modo --split-scenarios (requer --by-scenario).
     Para cada métrica gera 1 arquivo com N subplots lado a lado,
     um por cenário. Eixo X = agentes, cor = agente.
     Cada subplot possui escala Y independente.
-    Legenda unificada no rodapé.
+    Legenda unificada no rodapé (a menos que no_legend=True).
 
     Nomes dos arquivos:
       {prefix}_{metric_key}_scenarios.{fmt}
@@ -783,16 +823,20 @@ def plot_per_scenario(
                 ax, metric_key, data, agents, scenario,
                 color_map, showfliers, show_means, show_mean_values,
                 annotate_n, sharey_ax=None,
+                xtick_rotation=xtick_rotation,
             )
 
-        _add_legend(
-            fig, agents, scenarios, color_map,
-            by_scenario=True,       # por agente → usa color_map de agentes
-            n_cols=legend_cols,
-            legend_stats=legend_stats,
-            show_means=show_means,
-        )
-        fig.tight_layout(rect=[0, 0.10, 1, 1])
+        if not no_legend:
+            _add_legend(
+                fig, agents, scenarios, color_map,
+                by_scenario=True,       # por agente → usa color_map de agentes
+                n_cols=legend_cols,
+                legend_stats=legend_stats,
+                show_means=show_means,
+            )
+            fig.tight_layout(rect=[0, 0.10, 1, 1])
+        else:
+            fig.tight_layout()
         os.makedirs(output_dir, exist_ok=True)
         fig.savefig(out, bbox_inches="tight", dpi=dpi)
         print(f"  ✔ Figura salva: {out}")
@@ -833,6 +877,10 @@ Exemplos:
 
   # Idem, com entradas de mediana e média na legenda
   python generate_boxplots.py --by-scenario --split-scenarios --show-means --legend-stats
+
+  # Sem legenda, nomes verticais e figura larga
+  python generate_boxplots.py --by-scenario --split-scenarios --no-legend \\
+      --xtick-rotation 90 --figsize 28 8 --fmt png
 
   # Selecionar apenas recompensa e distância
   python generate_boxplots.py --metrics rewards distance
@@ -969,6 +1017,21 @@ Exemplos:
             "se --show-means estiver ativo, para Média (losango branco)."
         ),
     )
+    layout.add_argument(
+        "--no-legend",
+        action="store_true",
+        help="Não desenha a legenda (útil quando os nomes já estão no eixo X).",
+    )
+    layout.add_argument(
+        "--xtick-rotation",
+        type=float,
+        default=None,
+        metavar="GRAUS",
+        help=(
+            "Rotação dos rótulos do eixo X em graus (ex.: 90 para vertical).\n"
+            "Padrão: 0 (cenários no X), 15/20 (agentes no X)."
+        ),
+    )
 
     # ── Saída ───────────────────────────────────────────────────────────────
     out = parser.add_argument_group("Saída")
@@ -1077,6 +1140,8 @@ def main():
         suptitle=args.suptitle,
         legend_cols=args.legend_cols,
         legend_stats=args.legend_stats,
+        no_legend=args.no_legend,
+        xtick_rotation=args.xtick_rotation,
     )
 
     if args.split_scenarios:
