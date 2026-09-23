@@ -69,6 +69,10 @@ def bare_simpy_env(seed: int = 0, map_size: int = 20) -> FoodDeliverySimpyEnv:
 
 
 def _default_catalog() -> Catalog:
+    return Catalog([Item(f"item_{i}") for i in range(5)])
+
+
+def _dimensioned_catalog() -> Catalog:
     dim = Dimensions(1, 1, 1, 1)
     return Catalog([Item(f"item_{i}", dim, 4) for i in range(5)])
 
@@ -219,7 +223,7 @@ def make_order(
     request_date: int = 0,
 ) -> Order:
     customer = customer or make_customer(env)
-    items = list(establishment.catalog.items[:2])
+    items = list(establishment.catalog.items[:1])
     return Order(
         id=order_id,
         customer=customer,

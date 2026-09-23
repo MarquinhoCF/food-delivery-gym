@@ -1,27 +1,29 @@
 {
-    "order_generator": {
-      "type": "non_homogeneous_poisson",
-      "estimated_num_orders": 576,
-      "time_window": 960,
-      "rate_function": "lambda t: 0.3115 + 0.9345 * (exp(-((t - 330)**2) / 7000) + exp(-((t - 630)**2) / 7000))"
-    },
-    "simpy_env": {
-        "max_time_step": 5760
-    },
-    "grid_map": {
-        "size": 50
-    },
-    "drivers" : {
-        "num": 10,
-        "vel": [3, 4],
-        "tolerance_percentage": 0.5,
-        "max_capacity": 2
-    },
-    "establishments": {
-        "num": 10,
-        "prepare_time": [20, 60],
-        "operating_radius": [5, 30],
-        "production_capacity": [3, 3],
-        "percentage_allocation_driver": 0.7
-    }
+  "order_generator": {
+    "type": "non_homogeneous_poisson",
+    "estimated_num_orders": 576,
+    "time_window": 960,
+    "rate_function": "lambda t: 0.3115 + 0.9345 * (exp(-((t - 330)**2) / 7000) + exp(-((t - 630)**2) / 7000))"
+  },
+  "simpy_env": {
+    "max_time_step": 5760
+  },
+  "grid_map": {
+    "size": 50
+  },
+  "drivers": {
+    "type": "dynamic_route",
+    "num": 10,
+    "vel": [3, 4],
+    "tolerance_percentage": 0.5,
+    "max_capacity": 2
+  },
+  "establishments": {
+    "type": "order_rate",
+    "num": 10,
+    "prepare_time": [20, 60],
+    "operating_radius": [5, 30],
+    "production_capacity": [3, 3],
+    "percentage_allocation_driver": 0.7
+  }
 }

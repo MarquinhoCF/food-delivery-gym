@@ -11,12 +11,14 @@
     "size": 20
   },
   "drivers": {
+    "type": "dynamic_route",
     "num": 2,
     "vel": [3, 4],
     "tolerance_percentage": 0.5,
     "max_capacity": 2
   },
   "establishments": {
+    "type": "order_rate",
     "num": 2,
     "prepare_time": [8, 15],
     "operating_radius": [5, 10],

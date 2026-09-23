@@ -14,7 +14,8 @@ class TimeShiftOrderGenerator(TimeShiftGenerator):
         for _ in self.range(env):
             customer = self.rng.choice(env.state.customers, size=None)
             establishment = self.rng.choice(env.state.establishments, size=None)
-            items = self.rng.choice(establishment.catalog.items, size=2, replace=False).tolist()
+            # TODO: no futuro permitir multi-item por pedido (cooks paralelizam itens).
+            items = [self.rng.choice(establishment.catalog.items)]
             order = Order(customer, establishment, env.now, items)
             orders.append(order)
             customer.place_order(order, establishment)

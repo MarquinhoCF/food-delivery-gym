@@ -4,6 +4,8 @@ from food_delivery_gym.main.environment.food_delivery_simpy_env import FoodDeliv
 from food_delivery_gym.main.order.order import Order
 
 class Cook():
+    # TODO: evoluir para fila/trabalho por item (não só por pedido), para
+    # paralelizar itens de um mesmo pedido e permitir race entre pedidos.
     def __init__(self, environment: FoodDeliverySimpyEnv):
         self.environment = environment
         self.is_cooking = False

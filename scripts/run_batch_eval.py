@@ -2,18 +2,10 @@ import os
 import traceback
 import argparse
 
-# Antes de qualquer import que puxe SB3 → gym → gym_notices (print no stderr).
-os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
-os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
-os.environ.setdefault("PYTHONUNBUFFERED", "1")
-
 from food_delivery_gym.main.optimizer.eval_parallel import (  # noqa: E402
     EvalJobSpec,
     create_eval_environment,
-    silence_eval_noise,
 )
-
-silence_eval_noise()
 
 from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv  # noqa: E402
 from food_delivery_gym.main.optimizer import catalog as optimizer_catalog  # noqa: E402

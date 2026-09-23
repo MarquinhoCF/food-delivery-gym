@@ -29,7 +29,8 @@ class TimeShiftOrderEstablishmentRateGenerator(TimeShiftGenerator):
                 single_order=True
             )
 
-            items = self.rng.choice(establishment.catalog.items, size=2, replace=False).tolist()
+            # TODO: no futuro permitir multi-item por pedido (cooks paralelizam itens).
+            items = [self.rng.choice(establishment.catalog.items)]
 
             order = Order(
                 id=self.current_order_id,

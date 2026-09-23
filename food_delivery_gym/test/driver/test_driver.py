@@ -3,8 +3,10 @@ from collections import deque
 import pytest
 
 from food_delivery_gym.main.base.dimensions import Dimensions
-from food_delivery_gym.main.driver.capacity import Capacity
+from food_delivery_gym.main.driver.capacity import Capacity, route_required_capacity
+from food_delivery_gym.main.driver.capacity_driver import CapacityDriver
 from food_delivery_gym.main.driver.driver_status import DriverStatus
+from food_delivery_gym.main.order.item import Item
 from food_delivery_gym.main.order.order_status import OrderStatus
 from food_delivery_gym.main.route.route_segment_type import RouteSegmentType
 from food_delivery_gym.test.conftest import (
@@ -213,3 +215,50 @@ def test_reactive_driver_accept_route_condition_by_distance():
 
     driver.available = False
     assert driver.accept_route_condition(route_near) is False
+
+
+def test_capacity_driver_fits_unique_orders_not_double_counting_segments():
+    env = bare_simpy_env()
+    bag = Capacity(Dimensions(10, 10, 10, 10))
+    driver = CapacityDriver(
+        id=1,
+        environment=env,
+        coordinate=(0, 0),
+        available=True,
+        capacity=bag,
+        start_processes=False,
+    )
+    assert driver.capacity is bag
+
+    establishment = make_establishment(env)
+    dim = Dimensions(3, 3, 3, 3)
+    order = make_order(env, establishment)
+    order.items = [Item("a", dim), Item("b", dim)]
+
+    route = make_pickup_delivery_route(env, order)
+    assert len(route.route_segments) == 2
+    required = route_required_capacity(route)
+    assert required == Dimensions(6, 6, 6, 6)
+    assert driver.fits(route) is True
+
+    big = Dimensions(8, 8, 8, 8)
+    order.items = [Item("a", big), Item("b", big)]
+    assert driver.fits(route) is False
+
+
+def test_capacity_driver_ignores_items_without_dimensions():
+    env = bare_simpy_env()
+    driver = CapacityDriver(
+        id=1,
+        environment=env,
+        coordinate=(0, 0),
+        available=True,
+        capacity=Capacity(Dimensions(10, 10, 10, 10)),
+        start_processes=False,
+    )
+    establishment = make_establishment(env)
+    order = make_order(env, establishment)
+    order.items = [Item("plain"), Item("also_plain")]
+    route = make_pickup_delivery_route(env, order)
+    assert route_required_capacity(route) == Dimensions(0, 0, 0, 0)
+    assert driver.fits(route) is True

@@ -10,7 +10,6 @@ class RouteSegment:
         self.route_segment_type = route_segment_type
         self.order = order
         self.coordinate = self.init_coordinates()
-        self.required_capacity = self.order.required_capacity
     
     def init_coordinates(self):
         if self.is_pickup():

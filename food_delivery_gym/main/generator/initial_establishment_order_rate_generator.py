@@ -1,4 +1,3 @@
-from food_delivery_gym.main.base.dimensions import Dimensions
 from food_delivery_gym.main.environment.food_delivery_simpy_env import FoodDeliverySimpyEnv
 from food_delivery_gym.main.generator.initial_generator import InitialGenerator
 from food_delivery_gym.main.order.item import Item
@@ -16,8 +15,11 @@ class InitialEstablishmentOrderRateGenerator(InitialGenerator):
         self.percentage_allocation_driver = percentage_allocation_driver
 
     def run(self, env: FoodDeliverySimpyEnv):
-        dimension = Dimensions(1, 1, 1, 1)
-        catalog = Catalog([Item(f"type_{i}", dimension, 4) for i in range(5)])
+        # TODO: ao criar o catálogo, sortear preparation_time por item uma vez
+        # (beta com min/max_prepare_time e order_production_time_rate) e usar esse
+        # tempo estimado de chegada em time_estimate_to_prepare_order em vez de
+        # sortear por pedido no accept.
+        catalog = Catalog([Item(f"type_{i}") for i in range(5)])
         establishment = [
             EstablishmentOrderRate(
                 id=i+1,

@@ -133,6 +133,9 @@ class Establishment(MapActor):
         return establishment_busy_time
 
     def estimate_preparation_time(self, order) -> SimTime:
+        # TODO: ler o tempo estimado de chegada do(s) item(ns) do pedido
+        # (item.preparation_time do catálogo) em vez de sortear por pedido via
+        # time_estimate_to_prepare_order().
         estimated_time = self.time_estimate_to_prepare_order()
         event = EstimatedOrderPreparationTime(
             order=order,
@@ -157,6 +160,8 @@ class Establishment(MapActor):
         self.orders_rejected.append(order)
 
     def _try_start_preparation(self, cook: Cook) -> None:
+        # TODO: paralelizar preparação por item (não por pedido), permitindo
+        # multi-item e race conditions entre pedidos quando um pedido tiver vários itens.
         # Se o cozinheiro tem pedidos aceitos e não está cozinhando, processa o próximo pedido
         if cook.get_length_orders_accepted() > 0 and not cook.get_is_cooking():
             order = cook.pop_order()
@@ -322,6 +327,8 @@ class Establishment(MapActor):
         return self.rng.integers(1, 5)
 
     def time_estimate_to_prepare_order(self) -> SimTime:
+        # TODO: quando o catálogo tiver preparation_time por item, derivar a
+        # estimativa do pedido a partir dos itens (hoje ainda sorteia por pedido).
         return self.rng.integers(8, 20)
 
     def time_to_prepare_order(self, estimated_time: SimTime) -> SimTime:

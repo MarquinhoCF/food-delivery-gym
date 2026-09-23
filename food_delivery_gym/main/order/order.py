@@ -1,6 +1,5 @@
 from typing import List, TYPE_CHECKING
 
-from food_delivery_gym.main.base.dimensions import Dimensions
 from food_delivery_gym.main.base.types import Number
 from food_delivery_gym.main.order.delivery_rejection import DeliveryRejection
 from food_delivery_gym.main.order.item import Item
@@ -33,7 +32,6 @@ class Order:
         self.items = items
         self.status: OrderStatus = OrderStatus.CREATED
         self.isReady = False
-        self.required_capacity = self.calculate_required_capacity()
 
         # Atributos de tempo para preparação (atualizados pelo estabelecimento)
         self.time_establishment_accepted_order = None # Momento em que o pedido foi aceito pelo estabelecimento
@@ -53,12 +51,6 @@ class Order:
         self.estimated_time_between_picked_up_and_start_delivery = None # Estimativa de tempo entre retirar o pedido e começar a entrega
         self.estimated_delivery_travel_time = None # Estimativa de tempo de viagem para entrega
         self.estimated_time_to_costumer_receive_order = None # Estimativa de tempo para o cliente receber o pedido
-
-    def calculate_required_capacity(self):
-        dimensions = Dimensions(0, 0, 0, 0)
-        for item in self.items:
-            dimensions += item.dimensions
-        return dimensions
 
     def update_status(self, status: OrderStatus):
         self.status = status

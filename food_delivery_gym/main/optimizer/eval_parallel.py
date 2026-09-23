@@ -29,10 +29,6 @@ os.environ.setdefault("PYTHONUNBUFFERED", "1")
 def silence_eval_noise() -> None:
     """
     Reduz spam de TensorFlow/oneDNN e do aviso legado do Gym.
-
-    O aviso "Gym has been unmaintained..." vem de `gym_notices` via
-    `print(..., file=sys.stderr)` no import de `gym` — filterwarnings não
-    pega. Stubamos o pacote antes do primeiro import de gym.
     """
     os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
     os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")

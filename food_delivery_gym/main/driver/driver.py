@@ -423,9 +423,6 @@ class Driver(MapActor):
     def check_availability(self, route: Route) -> bool:
         return self.available
 
-    def estimate_time_to_driver_receive_order(self) -> int:
-        return self.rng.integers(1, 5)
-
     def time_to_accept_or_reject_route(self) -> int:
         # Retirando incerteza
         # return self.rng.integers(3, 10)
