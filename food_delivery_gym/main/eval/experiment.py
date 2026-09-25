@@ -326,6 +326,33 @@ def resolve_experiment(
     return resolved
 
 
+def load_run_json(experiment_dir: str | Path) -> dict[str, Any]:
+    """
+    Lê run.json de uma pasta de experimento.
+
+    Raises:
+        FileNotFoundError: se run.json não existir.
+        ValueError: se o JSON não tiver spec.objectives / spec.scenarios.
+    """
+    path = Path(experiment_dir) / "run.json"
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"run.json não encontrado em {experiment_dir}. "
+            "O relatório precisa de um experimento gerado por run_batch_eval."
+        )
+    with path.open("r", encoding="utf-8") as f:
+        payload = json.load(f)
+    spec = payload.get("spec")
+    if not isinstance(spec, dict):
+        raise ValueError(f"run.json inválido em {path}: falta 'spec'")
+    if "objectives" not in spec or "scenarios" not in spec:
+        raise ValueError(
+            f"run.json inválido em {path}: "
+            "spec deve conter 'objectives' e 'scenarios'"
+        )
+    return payload
+
+
 def write_run_json(
     spec: dict[str, Any],
     *,

@@ -875,34 +875,33 @@ def parse_args():
         formatter_class=argparse.RawTextHelpFormatter,
         epilog="""
 Exemplos:
+  # Padrão: um PNG por métrica, um painel por cenário, média anotada
+  python -m scripts.generate_boxplots
+
   # Só heurísticas principais, cenário médio
-  python generate_boxplots.py --agents random nearest_driver lowest_marginal_route_cost \\
+  python -m scripts.generate_boxplots --agents random nearest_driver lowest_marginal_route_cost \\
          --scenarios medium
 
   # Comparar dois modelos PPO com as heurísticas, objetivo 5
-  python generate_boxplots.py --agents random nearest_driver ppo_18M ppo_36M --objective 5
+  python -m scripts.generate_boxplots --agents random nearest_driver ppo_18M ppo_36M --objective 5
 
-  # Agentes no eixo X, cenários como grupos de boxes (padrão inverso)
-  python generate_boxplots.py --by-scenario
+  # Figura única (cenários no eixo X, agentes como grupos), em PDF
+  python -m scripts.generate_boxplots --no-split-scenarios --no-by-scenario --fmt pdf
 
-  # Salvar cada métrica em arquivo separado, alta resolução
-  python generate_boxplots.py --split --dpi 600 --fmt pdf
+  # Um arquivo por métrica, sem painel por cenário
+  python -m scripts.generate_boxplots --split --dpi 600 --fmt pdf
 
-  # Ocultar outliers, mostrar médias com valor numérico, anotar N amostras
-  python generate_boxplots.py --no-fliers --show-means --show-mean-values --annotate-n
+  # Ocultar outliers e anotar N amostras
+  python -m scripts.generate_boxplots --no-fliers --annotate-n
 
-  # Um PNG por métrica com 3 subplots (simples/médio/complexo), legenda unificada
-  python generate_boxplots.py --by-scenario --split-scenarios
-
-  # Idem, com entradas de mediana e média na legenda
-  python generate_boxplots.py --by-scenario --split-scenarios --show-means --legend-stats
+  # Entradas de mediana e média na legenda
+  python -m scripts.generate_boxplots --legend-stats
 
   # Sem legenda, nomes verticais e figura larga
-  python generate_boxplots.py --by-scenario --split-scenarios --no-legend \\
-      --xtick-rotation 90 --figsize 28 8 --fmt png
+  python -m scripts.generate_boxplots --no-legend --xtick-rotation 90 --figsize 28 8
 
   # Selecionar apenas recompensa e distância
-  python generate_boxplots.py --metrics rewards distance
+  python -m scripts.generate_boxplots --metrics rewards distance
 """,
     )
 
@@ -971,26 +970,33 @@ Exemplos:
     layout = parser.add_argument_group("Layout e visualização")
     layout.add_argument(
         "--by-scenario",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
+        default=True,
         help=(
-            "Agrupa boxes por cenário no eixo X e usa agentes como grupos de boxes.\n"
-            "Padrão: agrupa por agente no eixo X, cenários como grupos de boxes."
+            "Agentes no eixo X e cenários como grupos de boxes.\n"
+            "Com --split-scenarios, cada cenário vira um painel.\n"
+            "Padrão: ligado. Desligue com --no-by-scenario."
         ),
     )
     layout.add_argument(
         "--split-scenarios",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
+        default=True,
         help=(
-            "Gera 1 PNG por métrica contendo N subplots (um por cenário).\n"
-            "Cada subplot mostra os agentes no eixo X com suas respectivas boxes.\n"
-            "Cada subplot tem escala Y independente.\n"
-            "Requer --by-scenario. A legenda é unificada para todos os subplots."
+            "Gera 1 arquivo por métrica com N painéis (um por cenário).\n"
+            "Cada painel mostra os agentes no eixo X.\n"
+            "Cada painel tem escala Y independente.\n"
+            "A legenda é unificada para todos os painéis.\n"
+            "Padrão: ligado. Desligue com --no-split-scenarios."
         ),
     )
     layout.add_argument(
         "--split",
         action="store_true",
-        help="Salva cada métrica em um arquivo separado em vez de uma figura única.",
+        help=(
+            "Salva cada métrica em um arquivo separado, sem painel por cenário.\n"
+            "Desliga --split-scenarios."
+        ),
     )
     layout.add_argument(
         "--no-fliers",
@@ -999,15 +1005,21 @@ Exemplos:
     )
     layout.add_argument(
         "--show-means",
-        action="store_true",
-        help="Exibe a média como um losango dentro de cada box.",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Exibe a média como um losango dentro de cada box.\n"
+            "Padrão: ligado. Desligue com --no-show-means."
+        ),
     )
     layout.add_argument(
         "--show-mean-values",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
+        default=True,
         help=(
             "Anota o valor numérico da média ao lado de cada losango.\n"
-            "Requer --show-means para ter efeito."
+            "Requer --show-means para ter efeito.\n"
+            "Padrão: ligado. Desligue com --no-show-mean-values."
         ),
     )
     layout.add_argument(
@@ -1069,8 +1081,8 @@ Exemplos:
     out.add_argument(
         "--fmt",
         choices=["pdf", "png", "svg"],
-        default="pdf",
-        help="Formato de saída. Padrão: pdf",
+        default="png",
+        help="Formato de saída. Padrão: png",
     )
     out.add_argument(
         "--figsize",
@@ -1101,16 +1113,37 @@ Exemplos:
 #  Ponto de entrada
 # ─────────────────────────────────────────────────────────────────────────────
 
-def main():
-    args = parse_args()
+def run(
+    results_dir: str,
+    objective: int,
+    scenarios: list[str],
+    output_dir: str,
+    *,
+    agents: list[str] | None = None,
+    exclude_agents: list[str] | None = None,
+    metrics: list[str] | None = None,
+    by_scenario: bool = True,
+    split_scenarios: bool = True,
+    split: bool = False,
+    showfliers: bool = True,
+    show_means: bool = True,
+    show_mean_values: bool = True,
+    annotate_n: bool = False,
+    figsize: tuple[float, float] = (16.0, 5.0),
+    dpi: int = 300,
+    font_size: int = 9,
+    fmt: str = "png",
+    prefix: str = "boxplot",
+    suptitle: str | None = None,
+    legend_cols: int | None = None,
+    legend_stats: bool = False,
+    no_legend: bool = False,
+    xtick_rotation: float | None = None,
+) -> list[str]:
+    _apply_rcparams(font_size=font_size, dpi=dpi)
 
-    _apply_rcparams(font_size=args.font_size, dpi=args.dpi)
-
-    # ── Resolver lista de agentes ──────────────────────────────────────────
-    if args.agents:
-        agents = args.agents
-    else:
-        agents = discover_agents(args.results_dir, args.scenarios, args.objective)
+    if agents is None:
+        agents = discover_agents(results_dir, scenarios, objective)
         if agents:
             print(f"Agentes descobertos automaticamente: {agents}")
         else:
@@ -1118,37 +1151,93 @@ def main():
                 "[AVISO] Nenhum agente encontrado. "
                 "Verifique --results-dir e --objective."
             )
-            return
+            return []
 
-    # Remove excluídos
-    agents = [a for a in agents if a not in args.exclude_agents]
-
+    exclude = set(exclude_agents or [])
+    agents = [a for a in agents if a not in exclude]
     if not agents:
         print("[AVISO] Nenhum agente restante após exclusões.")
-        return
+        return []
+
+    metric_keys = list(metrics) if metrics else list(METRICS.keys())
 
     print(f"Agentes    : {agents}")
-    print(f"Cenários   : {args.scenarios}")
-    print(f"Objetivo   : obj_{args.objective}")
-    print(f"Métricas   : {args.metrics}")
-    print(f"Modo eixo  : {'agentes no eixo X' if args.by_scenario else 'cenários no eixo X'}")
+    print(f"Cenários   : {scenarios}")
+    print(f"Objetivo   : obj_{objective}")
+    print(f"Métricas   : {metric_keys}")
+    print(f"Modo eixo  : {'agentes no eixo X' if by_scenario else 'cenários no eixo X'}")
 
-    # ── Carregar dados ─────────────────────────────────────────────────────
-    data = collect_data(
-        args.results_dir, agents, args.scenarios, args.objective
-    )
+    data = collect_data(results_dir, agents, scenarios, objective)
 
-    # ── Gerar figuras ──────────────────────────────────────────────────────
-    if args.split_scenarios and not args.by_scenario:
+    if split and split_scenarios:
+        split_scenarios = False
+
+    if split_scenarios and not by_scenario:
         print("[AVISO] --split-scenarios requer --by-scenario. Adicionando automaticamente.")
-        args.by_scenario = True
+        by_scenario = True
 
     kwargs = dict(
         data=data,
         agents=agents,
-        scenarios=args.scenarios,
+        scenarios=scenarios,
+        metrics=metric_keys,
+        by_scenario=by_scenario,
+        showfliers=showfliers,
+        show_means=show_means,
+        show_mean_values=show_mean_values,
+        annotate_n=annotate_n,
+        figsize=figsize,
+        dpi=dpi,
+        font_size=font_size,
+        suptitle=suptitle,
+        legend_cols=legend_cols,
+        legend_stats=legend_stats,
+        no_legend=no_legend,
+        xtick_rotation=xtick_rotation,
+    )
+
+    saved: list[str] = []
+    if split_scenarios:
+        for metric_key in metric_keys:
+            saved.append(
+                os.path.join(output_dir, f"{prefix}_{metric_key}_scenarios.{fmt}")
+            )
+        plot_per_scenario(
+            **{k: v for k, v in kwargs.items() if k not in ("by_scenario",)},
+            output_dir=output_dir,
+            prefix=prefix,
+            fmt=fmt,
+        )
+    elif split:
+        for metric_key in metric_keys:
+            saved.append(os.path.join(output_dir, f"{prefix}_{metric_key}.{fmt}"))
+        plot_split(
+            **kwargs,
+            output_dir=output_dir,
+            prefix=prefix,
+            fmt=fmt,
+        )
+    else:
+        output_path = os.path.join(output_dir, f"{prefix}_obj{objective}.{fmt}")
+        saved.append(output_path)
+        plot_combined(**kwargs, output_path=output_path)
+
+    return [p for p in saved if os.path.isfile(p)]
+
+
+def main():
+    args = parse_args()
+    run(
+        args.results_dir,
+        args.objective,
+        args.scenarios,
+        args.output_dir,
+        agents=args.agents,
+        exclude_agents=args.exclude_agents,
         metrics=args.metrics,
         by_scenario=args.by_scenario,
+        split_scenarios=args.split_scenarios,
+        split=args.split,
         showfliers=not args.no_fliers,
         show_means=args.show_means,
         show_mean_values=args.show_mean_values,
@@ -1156,6 +1245,8 @@ def main():
         figsize=tuple(args.figsize),
         dpi=args.dpi,
         font_size=args.font_size,
+        fmt=args.fmt,
+        prefix=args.prefix,
         suptitle=args.suptitle,
         legend_cols=args.legend_cols,
         legend_stats=args.legend_stats,
@@ -1163,25 +1254,6 @@ def main():
         xtick_rotation=args.xtick_rotation,
     )
 
-    if args.split_scenarios:
-        plot_per_scenario(
-            **{k: v for k, v in kwargs.items() if k not in ("by_scenario",)},
-            output_dir=args.output_dir,
-            prefix=args.prefix,
-            fmt=args.fmt,
-        )
-    elif args.split:
-        plot_split(
-            **kwargs,
-            output_dir=args.output_dir,
-            prefix=args.prefix,
-            fmt=args.fmt,
-        )
-    else:
-        output_path = os.path.join(
-            args.output_dir, f"{args.prefix}_obj{args.objective}.{args.fmt}"
-        )
-        plot_combined(**kwargs, output_path=output_path)
 
 if __name__ == "__main__":
     main()

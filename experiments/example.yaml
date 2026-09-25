@@ -1,4 +1,4 @@
-name: teste_rollout
+name: experimento_exemplo
 objectives: [3]
 scenarios: [simple, medium, complex]
 experiment_mode: same_scenario

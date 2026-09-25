@@ -227,11 +227,16 @@ def parse_args():
     return parser.parse_args()
 
 
-def main():
-    args = parse_args()
-
-    do_episode = not args.only_batch
-    do_batch   = not args.only_episode
+def run(
+    results_dir: str,
+    objectives: list,
+    scenarios: list,
+    *,
+    only_episode: bool = False,
+    only_batch: bool = False,
+) -> int:
+    do_episode = not only_batch
+    do_batch = not only_episode
 
     mode_label = (
         "episódios + lote" if (do_episode and do_batch) else
@@ -240,26 +245,25 @@ def main():
     )
 
     print("=== Geração de Gráficos ===")
-    print(f"  Diretório  : {args.results_dir}")
-    print(f"  Objetivos  : {args.objectives}")
-    print(f"  Cenários   : {args.scenarios}")
+    print(f"  Diretório  : {results_dir}")
+    print(f"  Objetivos  : {objectives}")
+    print(f"  Cenários   : {scenarios}")
     print(f"  Modo       : {mode_label}")
     print()
 
-    agent_dirs = discover_agent_dirs(args.results_dir, args.objectives, args.scenarios)
+    agent_dirs = discover_agent_dirs(results_dir, objectives, scenarios)
 
     if not agent_dirs:
         print(
             "[AVISO] Nenhum agente encontrado. "
             "Verifique --results-dir e se os arquivos metrics_data.npz/.json existem."
         )
-        return
+        return 0
 
     print(f"{len(agent_dirs)} diretório(s) de agente encontrado(s).\n")
 
     prev_scenario_key = None
     for agent_dir in agent_dirs:
-        # Extrai obj_N/scenario para exibir cabeçalhos de seção
         parts = agent_dir.replace("\\", "/").split("/")
         try:
             scenario_key = f"{parts[-3]}/{parts[-2]}"
@@ -273,6 +277,18 @@ def main():
         process_agent(agent_dir, do_episode=do_episode, do_batch=do_batch)
 
     print("\n=== Concluído ===")
+    return len(agent_dirs)
+
+
+def main():
+    args = parse_args()
+    run(
+        args.results_dir,
+        args.objectives,
+        args.scenarios,
+        only_episode=args.only_episode,
+        only_batch=args.only_batch,
+    )
 
 
 if __name__ == "__main__":

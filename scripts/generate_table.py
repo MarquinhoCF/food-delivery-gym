@@ -323,7 +323,7 @@ def _build_sheet(ws, sheet_name: str, agg_key: str, results_dir: str,
         sep         = scenario_start(i)
         label_start = sep
         label_end   = sep + n
-        style_header(ws.cell(1, label_start), SCENARIO_LABELS[scenario])
+        style_header(ws.cell(1, label_start), SCENARIO_LABELS.get(scenario, scenario))
         if label_end > label_start:
             ws.merge_cells(
                 start_row=1, start_column=label_start,
@@ -510,27 +510,41 @@ def parse_args():
     return parser.parse_args()
 
 
-def main():
-    args = parse_args()
+def run(
+    results_dir: str,
+    objectives: list,
+    scenarios: list,
+    output: str,
+) -> str | None:
+    """
+    Gera a planilha Excel a partir de results_dir.
 
-    print(f"Varrendo diretório: {args.results_dir}")
-    agents = discover_agents(args.results_dir, args.objectives, args.scenarios)
+    Retorna o caminho do arquivo salvo, ou None se nenhum agente for encontrado.
+    """
+    print(f"Varrendo diretório: {results_dir}")
+    agents = discover_agents(results_dir, objectives, scenarios)
 
     if not agents:
         print(
             "[AVISO] Nenhum agente encontrado. Verifique o --results-dir e se os "
             "arquivos metrics_data.npz ou metrics_data.json existem."
         )
-        return
+        return None
 
     print(f"Agentes encontrados ({len(agents)}): {agents}")
-    print(f"Objetivos: {args.objectives}")
-    print(f"Cenários:  {args.scenarios}")
+    print(f"Objetivos: {objectives}")
+    print(f"Cenários:  {scenarios}")
 
-    wb = build_workbook(args.results_dir, args.objectives, args.scenarios, agents)
-    os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
-    wb.save(args.output)
-    print(f"\nPlanilha salva em: {args.output}")
+    wb = build_workbook(results_dir, objectives, scenarios, agents)
+    os.makedirs(os.path.dirname(os.path.abspath(output)), exist_ok=True)
+    wb.save(output)
+    print(f"\nPlanilha salva em: {output}")
+    return output
+
+
+def main():
+    args = parse_args()
+    run(args.results_dir, args.objectives, args.scenarios, args.output)
 
 
 if __name__ == "__main__":

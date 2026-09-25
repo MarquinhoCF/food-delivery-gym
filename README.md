@@ -840,6 +840,47 @@ Campos do YAML espelham essas opções (`name`, `objectives`, `scenarios`, `agen
 
 ---
 
+### 📋 Script `report`: Relatório a partir do `run.json`
+
+Lê a pasta de um experimento (`run.json`) e gera a planilha e os boxplots **sem** repetir `--objectives` e `--scenarios` na linha de comando. Objetivos e cenários vêm da spec; os agentes são descobertos no disco.
+
+#### ✅ O que ele faz:
+
+* Gera `report/objective_table.xlsx` (mesma planilha do `generate_table`)
+* Gera boxplots no padrão do `generate_boxplots` (um PNG por métrica, um painel por cenário, média anotada) em `report/boxplots/`, com prefixo `boxplot_obj<N>_`
+* Com `--episodes`, também gera os gráficos por episódio em cada pasta de agente (`obj_N/<cenário>/<agente>/figs/`)
+* Sem `run.json`, falha com mensagem clara (não assume “todos os objetivos”)
+
+#### 📦 Como usar:
+
+```bash
+# Planilha + boxplots
+python -m scripts.report data/runs/obj3_rollout
+
+# Também gráficos por episódio
+python -m scripts.report data/runs/obj3_rollout --episodes
+```
+
+#### 📁 Layout de saída
+
+```
+data/runs/<name>/
+  run.json
+  summary.csv
+  report/
+    objective_table.xlsx
+    boxplots/
+      boxplot_obj3_delivery_time_scenarios.png
+      boxplot_obj3_rewards_scenarios.png
+      boxplot_obj3_distance_scenarios.png
+  obj_3/<scenario>/<agent>/
+    figs/                  # só com --episodes (episódios)
+```
+
+Os scripts `generate_table`, `generate_boxplots` e `generate_plots` continuam disponíveis para recortes manuais ou pastas legadas sem `run.json`.
+
+---
+
 #### 🔬 Modos de Experimento para Modelos RL
 
 O argumento `--experiment-mode` controla qual modelo treinado é carregado para cada cenário de avaliação. Existem dois modos:
@@ -1071,16 +1112,18 @@ Gera boxplots para comparar visualmente o desempenho dos agentes em três métri
 #### O que ele faz:
 
 * Descobre automaticamente todos os agentes com dados disponíveis no diretório de resultados
-* Suporta dois modos de agrupamento no eixo X: **por agente** (padrão) ou **por cenário** (`--by-scenario`)
-* Permite gerar uma figura única com as três métricas lado a lado, arquivos separados por métrica (`--split`) ou um subplot por cenário (`--split-scenarios`)
-* Exibe opcionalmente outliers, médias (losango), valores numéricos das médias e anotação do N amostral por box
+* **Padrão:** um PNG por métrica (`rewards`, `delivery_time`, `distance`), com um painel por cenário (Simples, Médio, Complexo), agentes no eixo X, losango da média e o valor numérico ao lado
+* A figura única (cenários no eixo X) continua disponível com `--no-split-scenarios --no-by-scenario`
+* `--split` grava um arquivo por métrica sem o painel por cenário
+* Outliers seguem visíveis; `--no-fliers` os oculta. `--annotate-n` anota o tamanho da amostra
 * Adiciona entradas de estatísticas (mediana e média) na legenda via `--legend-stats`
-* Exporta nos formatos `pdf`, `png` ou `svg`
+* Exporta nos formatos `png` (padrão), `pdf` ou `svg`
 
 #### 📦 Como usar:
 
 ```bash
-# Gerar figura com os três boxplots (padrão: objetivo 3, todos os cenários)
+# Padrão: um PNG por métrica, um painel por cenário, média anotada
+# (objetivo 3, cenários simple/medium/complex)
 python -m scripts.generate_boxplots
 
 # Selecionar agentes e cenário específico
@@ -1089,17 +1132,17 @@ python -m scripts.generate_boxplots --agents random nearest_driver lowest_margin
 # Comparar dois modelos PPO com heurísticas, objetivo 5
 python -m scripts.generate_boxplots --agents random nearest_driver ppo_18M ppo_36M --objective 5
 
-# Salvar cada métrica em arquivo separado, alta resolução, formato SVG
+# Figura única em PDF, cenários no eixo X
+python -m scripts.generate_boxplots --no-split-scenarios --no-by-scenario --fmt pdf
+
+# Um arquivo por métrica, sem painel por cenário
 python -m scripts.generate_boxplots --split --dpi 600 --fmt svg
 
-# Um PNG por métrica com N subplots (um por cenário), legenda unificada
-python -m scripts.generate_boxplots --by-scenario --split-scenarios
-
-# Ocultar outliers, exibir médias e anotar N amostras
-python -m scripts.generate_boxplots --no-fliers --show-means --show-mean-values --annotate-n
+# Ocultar outliers e anotar N amostras
+python -m scripts.generate_boxplots --no-fliers --annotate-n
 
 # Adicionar entradas de mediana e média na legenda
-python -m scripts.generate_boxplots --by-scenario --split-scenarios --show-means --legend-stats
+python -m scripts.generate_boxplots --legend-stats
 
 # Selecionar apenas recompensa e distância
 python -m scripts.generate_boxplots --metrics rewards distance
@@ -1127,12 +1170,12 @@ python -m scripts.generate_boxplots --metrics rewards distance
 
 | Opção | Descrição | Padrão |
 |-------|-----------|--------|
-| `--by-scenario` | Agrupa por agente no eixo X, usando cenários como grupos de boxes. Por padrão, o eixo X é de cenários com agentes como grupos. | — |
-| `--split-scenarios` | Gera 1 arquivo por métrica com N subplots (um por cenário), cada um com escala Y independente. Requer `--by-scenario`. | — |
-| `--split` | Salva cada métrica em um arquivo separado em vez de uma figura única. | — |
+| `--by-scenario` / `--no-by-scenario` | Agentes no eixo X. Com `--split-scenarios`, cada cenário vira um painel. | ligado |
+| `--split-scenarios` / `--no-split-scenarios` | 1 arquivo por métrica com N painéis (um por cenário) e escala Y independente. | ligado |
+| `--split` | 1 arquivo por métrica, sem painel por cenário. Desliga `--split-scenarios`. | — |
 | `--no-fliers` | Oculta os outliers (pontos além dos whiskers). | — |
-| `--show-means` | Exibe a média como um losango dentro de cada box. | — |
-| `--show-mean-values` | Anota o valor numérico da média ao lado de cada losango. Requer `--show-means`. | — |
+| `--show-means` / `--no-show-means` | Exibe a média como um losango dentro de cada box. | ligado |
+| `--show-mean-values` / `--no-show-mean-values` | Anota o valor numérico da média ao lado de cada losango. | ligado |
 | `--annotate-n` | Anota o número de amostras (N) abaixo de cada box. | — |
 | `--suptitle` | Título geral da figura. | — |
 | `--legend-cols` | Número de colunas da legenda. | automático |
@@ -1144,7 +1187,7 @@ python -m scripts.generate_boxplots --metrics rewards distance
 |-------|-----------|--------|
 | `--output-dir` / `-od` | Diretório de saída das figuras. | `./data/runs/figuras` |
 | `--prefix` | Prefixo do nome do arquivo de saída. | `boxplot` |
-| `--fmt` | Formato de saída: `pdf`, `png`, `svg`. | `pdf` |
+| `--fmt` | Formato de saída: `png`, `pdf`, `svg`. | `png` |
 | `--figsize` | Dimensões da figura `(largura altura)` em polegadas. | `16 5` |
 | `--dpi` | Resolução em DPI. | `300` |
 | `--font-size` | Tamanho base da fonte. | `9` |
