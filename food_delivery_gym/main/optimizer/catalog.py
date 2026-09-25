@@ -7,6 +7,12 @@ vêm daqui, os scripts não precisam ser atualizados um a um.
 
 from __future__ import annotations
 
+# Workers podem chegar aqui via experiment/run_batch_eval antes do silence.
+from food_delivery_gym.main.eval.silence import in_worker_process, silence_eval_noise
+
+if in_worker_process():
+    silence_eval_noise(filter_stderr=True)
+
 import os
 import re
 from dataclasses import dataclass
@@ -44,6 +50,16 @@ TERMINAL_COST_MODES = ("0", "model")
 TerminalCostMode = Literal["0", "model"]
 
 Builder = Callable[..., OptimizerGym]
+
+
+@dataclass(frozen=True)
+class LowestVariantSpec:
+    """Uma variante explícita de lowest (apenas a cost function)."""
+
+    cost_function: str
+
+    def normalized(self) -> LowestVariantSpec:
+        return LowestVariantSpec(cost_function=get_cost_function(self.cost_function).key)
 
 
 @dataclass(frozen=True)
@@ -517,24 +533,11 @@ def rollout_result_label(spec: RolloutVariantSpec, *, short: bool = False) -> st
     )
 
 
-def parse_rollout_cli(raw: str) -> RolloutVariantSpec:
-    """
-    Parseia `base=lowest,cost=weighted_score,horizon=5,terminal=0,alpha=0.9`.
-
-    Chaves aceitas: base, cost|cost_function, horizon, alpha, terminal.
-    Defaults: base=nearest, horizon=5, alpha=0.9, terminal=0.
-    """
+def _parse_key_value_spec(raw: str, *, flag: str, known_keys: set[str]) -> dict[str, str]:
+    """Parseia `chave=valor,...` para flags CLI como --lowest e --rollout."""
     if not raw or not raw.strip():
-        raise ValueError("especificação de --rollout vazia")
+        raise ValueError(f"especificação de {flag} vazia")
 
-    known_keys = {
-        "base",
-        "cost",
-        "cost_function",
-        "horizon",
-        "alpha",
-        "terminal",
-    }
     values: dict[str, str] = {}
     for part in raw.split(","):
         part = part.strip()
@@ -542,22 +545,56 @@ def parse_rollout_cli(raw: str) -> RolloutVariantSpec:
             continue
         if "=" not in part:
             raise ValueError(
-                f"trecho inválido em --rollout: '{part}' "
+                f"trecho inválido em {flag}: '{part}' "
                 "(esperado chave=valor)"
             )
         key, value = part.split("=", 1)
         key = key.strip().lower()
         value = value.strip()
-        if key not in known_keys:
-            raise ValueError(
-                f"chave desconhecida em --rollout: '{key}'. "
-                f"Opções: base, cost, horizon, alpha, terminal"
-            )
         if key == "cost_function":
             key = "cost"
+        if key not in known_keys:
+            options = ", ".join(sorted(known_keys))
+            raise ValueError(
+                f"chave desconhecida em {flag}: '{key}'. Opções: {options}"
+            )
         if key in values:
-            raise ValueError(f"chave duplicada em --rollout: '{key}'")
+            raise ValueError(f"chave duplicada em {flag}: '{key}'")
         values[key] = value
+    return values
+
+
+def parse_lowest_cli(raw: str) -> LowestVariantSpec:
+    """
+    Parseia `cost=route` (ou `cost_function=route`).
+
+    Chave obrigatória: cost|cost_function.
+    """
+    values = _parse_key_value_spec(
+        raw,
+        flag="--lowest",
+        known_keys={"cost"},
+    )
+    if "cost" not in values:
+        raise ValueError(
+            "especificação de --lowest exige cost=... "
+            f"(opções: {COST_FUNCTION_CHOICES})"
+        )
+    return LowestVariantSpec(cost_function=values["cost"]).normalized()
+
+
+def parse_rollout_cli(raw: str) -> RolloutVariantSpec:
+    """
+    Parseia `base=lowest,cost=weighted_score,horizon=5,terminal=0,alpha=0.9`.
+
+    Chaves aceitas: base, cost|cost_function, horizon, alpha, terminal.
+    Defaults: base=nearest, horizon=5, alpha=0.9, terminal=0.
+    """
+    values = _parse_key_value_spec(
+        raw,
+        flag="--rollout",
+        known_keys={"base", "cost", "horizon", "alpha", "terminal"},
+    )
 
     base = values.get("base", DEFAULT_ROLLOUT_BASE)
     cost = values.get("cost")
@@ -619,15 +656,6 @@ def base_variant_key_for_instance(base_cls: type, base_kwargs: dict[str, Any]) -
     return cost_spec.result_key
 
 
-def _normalize_cost_functions(names: list[str]) -> list[str]:
-    selected: list[str] = []
-    for name in names:
-        spec = get_cost_function(name)
-        if spec.key not in selected:
-            selected.append(spec.key)
-    return selected
-
-
 def normalize_base_optimizers(names: list[str]) -> list[str]:
     selected: list[str] = []
     known = ", ".join(cli_choices(rollout_base=True))
@@ -645,25 +673,32 @@ def normalize_base_optimizers(names: list[str]) -> list[str]:
 def expand_evaluations(
     specs: list[OptimizerSpec],
     *,
-    cost_functions: list[str],
+    lowest_variants: list[LowestVariantSpec] | None = None,
     rollout_variants: list[RolloutVariantSpec] | None = None,
     record_decisions: bool = DEFAULT_ROLLOUT_RECORD_DECISIONS,
 ) -> list[EvalVariant]:
-    """Expande lowest por cost function e rollout por variantes explícitas."""
-    cost_names = _normalize_cost_functions(cost_functions)
+    """Expande lowest e rollout por variantes explícitas."""
     variants: list[EvalVariant] = []
+    normalized_lowest = [
+        variant.normalized() for variant in (lowest_variants or [])
+    ]
     normalized_rollouts = [
         variant.normalized() for variant in (rollout_variants or [])
     ]
 
     for spec in specs:
         if spec.key == "lowest":
-            for cost_name in cost_names:
+            if not normalized_lowest:
+                raise ValueError(
+                    "lowest selecionado exige ao menos uma variante "
+                    "(passe --lowest cost=route)"
+                )
+            for lowest in normalized_lowest:
                 variants.append(
                     EvalVariant(
                         spec=spec,
-                        result_key=lowest_result_key(cost_name),
-                        extras={"cost_function": cost_name},
+                        result_key=lowest_result_key(lowest.cost_function),
+                        extras={"cost_function": lowest.cost_function},
                     )
                 )
             continue

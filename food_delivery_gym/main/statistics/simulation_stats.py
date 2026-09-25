@@ -69,6 +69,7 @@ Formato JSON (conversão via npz_to_json / json_to_npz)
 
 from __future__ import annotations
 
+import csv
 import json
 import math
 import os
@@ -312,6 +313,7 @@ class SimulationStats:
         self.hyperparameters: dict          = {}
         self._num_runs: int                 = 0
         self._sim: list[dict] | None        = None
+        self.duration_seconds: float | None = None
     
     # ════════════════════════════════════════════════════════════════════
     #  API principal
@@ -324,13 +326,15 @@ class SimulationStats:
         length: int,
         truncated: bool,
         orders_generated: int,
+        seed: int | None = None,
+        eval_seconds: float | None = None,
     ) -> dict:
         """
         Extrai um dict pickleável com as métricas de um episódio completo.
 
         Usado por workers de avaliação paralela e por register_episode.
         """
-        return {
+        ep = {
             "reward":           float(reward),
             "length":           int(length),
             "simpy_time":       float(simpy_env.now),
@@ -349,6 +353,11 @@ class SimulationStats:
                 for event in simpy_env.events
             ],
         }
+        if seed is not None:
+            ep["seed"] = int(seed)
+        if eval_seconds is not None:
+            ep["eval_seconds"] = float(eval_seconds)
+        return ep
 
     def register_episode_dict(self, episode: dict) -> None:
         """Registra um episódio já serializado (ex.: retorno de um worker)."""
@@ -362,6 +371,8 @@ class SimulationStats:
         length: int,
         truncated: bool,
         orders_generated: int,
+        seed: int | None = None,
+        eval_seconds: float | None = None,
     ) -> None:
         """
         Registra os dados de um episódio completo.
@@ -375,6 +386,8 @@ class SimulationStats:
             length=length,
             truncated=truncated,
             orders_generated=orders_generated,
+            seed=seed,
+            eval_seconds=eval_seconds,
         )
         self.register_episode_dict(ep)
 
@@ -657,6 +670,94 @@ class SimulationStats:
         except Exception as e:
             print(f"Erro ao salvar métricas em {path}: {e}")
             traceback.print_exc()
+
+        try:
+            self._write_episodes_csv(dir_path)
+            self._write_summary_json(dir_path)
+        except Exception as e:
+            print(f"Erro ao salvar episodes.csv/summary.json em {dir_path}: {e}")
+            traceback.print_exc()
+
+    def _write_episodes_csv(self, dir_path: str) -> None:
+        """Uma linha por execução com métricas de episódio, seed e duração."""
+        path = os.path.join(dir_path, "episodes.csv")
+        fields = [
+            "episode",
+            "seed",
+            "reward",
+            "length",
+            "simpy_time",
+            "delivery_time",
+            "distance",
+            "orders_generated",
+            "truncated",
+            "eval_seconds",
+        ]
+        ep = self.episodes
+        n = self._num_runs
+        delivery = ep.get("delivery_time", [None] * n)
+        distance = ep.get("distance", [None] * n)
+        rewards = ep.get("rewards", [None] * n)
+        lengths = ep.get("lengths", [None] * n)
+        simpy_times = ep.get("simpy_times", [None] * n)
+        orders = ep.get("orders_generated", [None] * n)
+        truncated = ep.get("truncated", [False] * n)
+        seeds = [
+            self._raw_episodes[i].get("seed") if i < len(self._raw_episodes) else None
+            for i in range(n)
+        ]
+        eval_secs = [
+            self._raw_episodes[i].get("eval_seconds")
+            if i < len(self._raw_episodes) else None
+            for i in range(n)
+        ]
+
+        with open(path, "w", encoding="utf-8", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fields)
+            writer.writeheader()
+            for i in range(n):
+                writer.writerow({
+                    "episode": i + 1,
+                    "seed": seeds[i],
+                    "reward": rewards[i] if i < len(rewards) else None,
+                    "length": lengths[i] if i < len(lengths) else None,
+                    "simpy_time": simpy_times[i] if i < len(simpy_times) else None,
+                    "delivery_time": delivery[i] if i < len(delivery) else None,
+                    "distance": distance[i] if i < len(distance) else None,
+                    "orders_generated": orders[i] if i < len(orders) else None,
+                    "truncated": bool(truncated[i]) if i < len(truncated) else False,
+                    "eval_seconds": (
+                        round(float(eval_secs[i]), 4)
+                        if eval_secs[i] is not None else None
+                    ),
+                })
+        print(f"Episódios salvos em {path}")
+
+    def _write_summary_json(self, dir_path: str) -> None:
+        path = os.path.join(dir_path, "summary.json")
+        truncated = sum(1 for t in self.episodes.get("truncated", []) if t)
+        episode_eval = [
+            float(ep["eval_seconds"])
+            for ep in self._raw_episodes
+            if ep.get("eval_seconds") is not None
+        ]
+        payload = {
+            "aggregate": self.aggregate,
+            "truncated": truncated,
+            "num_runs": self._num_runs,
+            "hyperparameters": self.hyperparameters or {},
+            "duration_seconds": (
+                round(float(self.duration_seconds), 4)
+                if self.duration_seconds is not None else None
+            ),
+            "eval_seconds_sum": (
+                round(sum(episode_eval), 4) if episode_eval else None
+            ),
+        }
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2, default=_json_default, ensure_ascii=False)
+            f.write("\n")
+        print(f"Resumo salvo em {path}")
 
     @staticmethod
     def load(file_path: str) -> "SimulationStats":

@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from food_delivery_gym.main.optimizer import catalog as optimizer_catalog
-from food_delivery_gym.main.optimizer.eval_parallel import (
+from food_delivery_gym.main.eval.eval_parallel import (
     EpisodeJob,
     EvalJobSpec,
     create_eval_environment,

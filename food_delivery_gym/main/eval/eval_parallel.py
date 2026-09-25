@@ -11,8 +11,6 @@ import multiprocessing as mp
 import os
 import sys
 import traceback
-import types
-import warnings
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from importlib.resources import files
@@ -20,42 +18,7 @@ from typing import Any
 
 import numpy as np
 
-# Silêncio ANTES de imports do projeto que puxam SB3/gym via outras rotas.
-os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
-os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
-os.environ.setdefault("PYTHONUNBUFFERED", "1")
-
-
-def silence_eval_noise() -> None:
-    """
-    Reduz spam de TensorFlow/oneDNN e do aviso legado do Gym.
-    """
-    os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
-    os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
-    os.environ.setdefault("PYTHONUNBUFFERED", "1")
-
-    if "gym_notices.notices" not in sys.modules:
-        pkg = types.ModuleType("gym_notices")
-        notices_mod = types.ModuleType("gym_notices.notices")
-        notices_mod.notices = {}  # type: ignore[attr-defined]
-        sys.modules["gym_notices"] = pkg
-        sys.modules["gym_notices.notices"] = notices_mod
-
-    warnings.filterwarnings(
-        "ignore",
-        message=r".*Gym has been unmaintained since 2022.*",
-    )
-    warnings.filterwarnings(
-        "ignore",
-        message=r".*The environment .* is out of date.*",
-    )
-    try:
-        import gym.logger as gym_logger
-
-        gym_logger.set_level(gym_logger.ERROR)
-    except Exception:
-        pass
-
+from food_delivery_gym.main.eval.silence import silence_eval_noise
 
 silence_eval_noise()
 
@@ -145,12 +108,15 @@ def run_episode_job(job: EpisodeJob) -> dict[str, Any]:
 
     Remonta ambiente + otimizador, roda um episódio e devolve métricas.
     """
+    import time
+
     silence_eval_noise()
     idx = job.episode_idx + 1
     print(
         f"-> Iniciando episódio {idx} (pid={os.getpid()})...",
         flush=True,
     )
+    t0 = time.perf_counter()
     try:
         env = create_eval_environment(
             job.spec.objective,
@@ -163,12 +129,15 @@ def run_episode_job(job: EpisodeJob) -> dict[str, Any]:
 
         simpy_env = optimizer.gym_env.get_simpy_env()
         orders_generated = optimizer.gym_env.get_num_orders_generated()
+        eval_seconds = time.perf_counter() - t0
         episode = SimulationStats.snapshot_episode(
             simpy_env=simpy_env,
             reward=resultado["sum_reward"],
             length=resultado["steps"],
             truncated=resultado["truncated"],
             orders_generated=orders_generated,
+            seed=job.seed,
+            eval_seconds=eval_seconds,
         )
         return {
             "episode_idx": job.episode_idx,
@@ -263,12 +232,14 @@ def run_episodes_parallel(
             idx = result["episode_idx"] + 1
             if result["ok"]:
                 ep = result["episode"]
+                eval_s = ep.get("eval_seconds")
+                eval_str = f" | eval={eval_s:.2f}s" if eval_s is not None else ""
                 print(
                     f"-> Concluído {done}/{total} "
                     f"(episódio {idx}): "
                     f"retorno={ep['reward']:.4f} | "
                     f"passos={ep['length']} | "
-                    f"truncada={ep['truncated']}",
+                    f"truncada={ep['truncated']}{eval_str}",
                     flush=True,
                 )
             else:

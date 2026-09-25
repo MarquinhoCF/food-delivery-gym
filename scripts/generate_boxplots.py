@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.ticker import FuncFormatter
 
+from food_delivery_gym.main.eval import experiment as exp
 from food_delivery_gym.main.optimizer import catalog as optimizer_catalog
 
 DEFAULT_RESULTS_DIR = "./data/runs/execucoes"
@@ -170,14 +171,50 @@ def _load_aggregate_fallback(agent_dir: str) -> dict[str, list]:
     return result
 
 
+def _load_episodes_csv(path: str) -> dict[str, list]:
+    """Extrai séries por episódio de episodes.csv."""
+    import csv
+
+    result: dict[str, list] = {
+        "rewards": [],
+        "delivery_time": [],
+        "distance": [],
+    }
+    with open(path, "r", encoding="utf-8", newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            def _f(key: str):
+                val = row.get(key)
+                if val is None or val == "":
+                    return None
+                try:
+                    return float(val)
+                except ValueError:
+                    return None
+
+            result["rewards"].append(_f("reward"))
+            result["delivery_time"].append(_f("delivery_time"))
+            result["distance"].append(_f("distance"))
+    return result
+
+
 def load_agent_data(agent_dir: str) -> dict[str, list]:
     """
     Carrega dados por episódio para um agente.
-    Prioridade: NPZ > JSON > fallback (agregados → Normal simulada).
+    Prioridade: episodes.csv > NPZ > JSON > fallback (agregados → Normal simulada).
     Retorna dict {metric_key: [val_ep1, val_ep2, ...]}.
     """
+    csv_p  = os.path.join(agent_dir, "episodes.csv")
     npz_p  = os.path.join(agent_dir, "metrics_data.npz")
     json_p = os.path.join(agent_dir, "metrics_data.json")
+
+    if os.path.exists(csv_p):
+        try:
+            data = _load_episodes_csv(csv_p)
+            if data.get("rewards"):
+                return data
+        except Exception as e:
+            warnings.warn(f"Erro ao ler episodes.csv em {agent_dir}: {e}")
 
     if os.path.exists(npz_p):
         try:
@@ -212,13 +249,11 @@ def collect_data(
     for agent in agents:
         data[agent] = {}
         for scenario in scenarios:
-            agent_dir = os.path.join(
-                results_dir, f"obj_{objective}", f"{scenario}_scenario", agent
-            )
-            if not os.path.isdir(agent_dir):
+            resolved = exp.resolve_agent_dir(results_dir, objective, scenario, agent)
+            if resolved is None:
                 data[agent][scenario] = {}
                 continue
-            data[agent][scenario] = load_agent_data(agent_dir)
+            data[agent][scenario] = load_agent_data(str(resolved))
     return data
 
 
@@ -231,23 +266,7 @@ def discover_agents(results_dir: str, scenarios: list[str], objective: int) -> l
     Varre os diretórios e retorna todos os agentes que possuem resultados,
     na ordem: heurísticas fixas -> rollouts -> RL.
     """
-    found: set[str] = set()
-
-    for scenario in scenarios:
-        base = os.path.join(results_dir, f"obj_{objective}", f"{scenario}_scenario")
-        if not os.path.isdir(base):
-            continue
-        for entry in os.scandir(base):
-            if not entry.is_dir():
-                continue
-            has_data = (
-                os.path.exists(os.path.join(entry.path, "metrics_data.npz")) or
-                os.path.exists(os.path.join(entry.path, "metrics_data.json"))
-            )
-            if has_data:
-                found.add(entry.name)
-
-    return optimizer_catalog.sort_discovered_result_dirs(found)
+    return exp.discover_agent_names(results_dir, [objective], scenarios)
 
 
 def agent_label(agent: str) -> str:

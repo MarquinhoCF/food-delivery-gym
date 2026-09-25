@@ -1,0 +1,86 @@
+name: teste_rollout
+objectives: [3]
+scenarios: [simple, medium, complex]
+experiment_mode: same_scenario
+model_base_dir: ./data/ppo_training/
+num_runs: 20
+num_workers: 8
+seed: 42
+metrics_fmt: npz
+
+agents:
+  - random
+  - nearest_driver
+  - lowest
+  - rollout
+  - ppo_18M_steps
+  - ppo_18M_steps_otimizado
+
+lowest:
+  - cost: route
+  - cost: weighted_score
+
+rollout:
+  # base=lowest + route | H=5,10,inf | α=0.9 | terminal=0 e model
+  - base: lowest
+    cost: route
+    horizon: 5
+    alpha: 0.9
+    terminal: "0"
+  - base: lowest
+    cost: route
+    horizon: 10
+    alpha: 0.9
+    terminal: "0"
+  - base: lowest
+    cost: route
+    horizon: inf
+    alpha: 0.9
+    terminal: "0"
+  - base: lowest
+    cost: route
+    horizon: 5
+    alpha: 0.9
+    terminal: model
+  - base: lowest
+    cost: route
+    horizon: 10
+    alpha: 0.9
+    terminal: model
+  - base: lowest
+    cost: route
+    horizon: inf
+    alpha: 0.9
+    terminal: model
+
+  # base=lowest + weighted_score | mesmas variações
+  - base: lowest
+    cost: weighted_score
+    horizon: 5
+    alpha: 0.9
+    terminal: "0"
+  - base: lowest
+    cost: weighted_score
+    horizon: 10
+    alpha: 0.9
+    terminal: "0"
+  - base: lowest
+    cost: weighted_score
+    horizon: inf
+    alpha: 0.9
+    terminal: "0"
+  - base: lowest
+    cost: weighted_score
+    horizon: 5
+    alpha: 0.9
+    terminal: model
+  - base: lowest
+    cost: weighted_score
+    horizon: 10
+    alpha: 0.9
+    terminal: model
+  - base: lowest
+    cost: weighted_score
+    horizon: inf
+    alpha: 0.9
+    terminal: model

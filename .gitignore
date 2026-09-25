@@ -30,6 +30,8 @@ data/*
 *.xlsx
 *.xlsx#
 *.prof
+experiments/*
+!experiments/example.yaml
 
 # PyInstaller
 #  Usually these files are written by a python script from a template

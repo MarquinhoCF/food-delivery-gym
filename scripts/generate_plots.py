@@ -6,6 +6,7 @@ import os
 import traceback
 
 from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
+from food_delivery_gym.main.eval import experiment as exp
 from food_delivery_gym.main.optimizer import catalog as optimizer_catalog
 from food_delivery_gym.main.scenarios import get_all_scenarios, get_defaults_scenarios
 from food_delivery_gym.main.statistics.simulation_stats import SimulationStats
@@ -128,21 +129,16 @@ def _has_metrics_file(agent_dir: str) -> bool:
 
 def discover_agent_dirs(results_dir: str, objectives: list, scenarios: list) -> list[str]:
     dirs: list[str] = []
-
+    names = exp.discover_agent_names(results_dir, objectives, scenarios)
     for obj in objectives:
         for scenario in scenarios:
-            base = os.path.join(results_dir, f"obj_{obj}", f"{scenario}_scenario")
-            if not os.path.isdir(base):
-                continue
-
-            entries = [
-                e for e in os.scandir(base)
-                if e.is_dir() and _has_metrics_file(e.path)
-            ]
-            by_name = {e.name: e.path for e in entries}
+            by_name: dict[str, str] = {}
+            for name in names:
+                resolved = exp.resolve_agent_dir(results_dir, obj, scenario, name)
+                if resolved is not None:
+                    by_name[name] = str(resolved)
             for name in optimizer_catalog.sort_discovered_result_dirs(by_name.keys()):
                 dirs.append(by_name[name])
-
     return dirs
 
 def generate_episode_plots(stats: SimulationStats, agent_dir: str) -> None:

@@ -31,8 +31,8 @@ class BatchStatsBoard(Board):
     
     # Estrutura de saída (relativa a dir_path):
     #   <dir_path>/figs/
-    #       mean_results_<sum_reward>_route_reordering.png
-    #       mean_results_<sum_reward>_other_metrics.png
+    #       batch_route_reordering.png
+    #       batch_other_metrics.png
 
     def __init__(
         self,
@@ -61,17 +61,26 @@ class BatchStatsBoard(Board):
         agregate = self.sim_stats.get_aggregated_sim()
         sum_reward_avg = agregate.get("rewards", {}).get("avg", 0.0)
 
-        prefix               = f"mean_results_{sum_reward_avg}"
         fig_reordering, fig_agents = self._build_figures()
+        fig_reordering.suptitle(
+            f"Route Reordering Metric – Aggregate (reward avg={sum_reward_avg:.4f})",
+            fontsize=16,
+            fontweight="bold",
+        )
+        fig_agents.suptitle(
+            f"Driver & Establishment Metrics – Aggregate (reward avg={sum_reward_avg:.4f})",
+            fontsize=16,
+            fontweight="bold",
+        )
 
         fig_reordering.savefig(
-            os.path.join(figs_dir, f"{prefix}_route_reordering.png"),
+            os.path.join(figs_dir, "batch_route_reordering.png"),
             dpi=300, bbox_inches="tight",
         )
         plt.close(fig_reordering)
 
         fig_agents.savefig(
-            os.path.join(figs_dir, f"{prefix}_other_metrics.png"),
+            os.path.join(figs_dir, "batch_other_metrics.png"),
             dpi=300, bbox_inches="tight",
         )
         plt.close(fig_agents)

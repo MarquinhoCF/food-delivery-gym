@@ -2,16 +2,17 @@
 generate_table.py
 
 Gera automaticamente a planilha de resultados (objective_table.xlsx) a partir
-dos dados produzidos pelo script evaluate_agents.py.
+dos dados produzidos pelo script run_batch_eval.
 
 - Descobre agentes e modelos PPO varrendo os diretórios de resultados
-- Tenta carregar metrics_data.npz; se não encontrar, tenta metrics_data.json
+- Prefere summary.csv / summary.json; fallback para metrics_data.npz/.json
 - Usa SimulationStats para acessar os dados agregados
 - Constrói o Excel dinamicamente: sem mapeamentos manuais de colunas
 - Replica o estilo visual do template original
 - Destaca em negrito o melhor agente por cenário/objetivo em cada aba
 """
 
+import csv
 import json
 import os
 import argparse
@@ -21,6 +22,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
 from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
+from food_delivery_gym.main.eval import experiment as exp
 from food_delivery_gym.main.optimizer import catalog as optimizer_catalog
 from food_delivery_gym.main.scenarios import get_all_scenarios, get_defaults_scenarios
 
@@ -176,13 +178,23 @@ def load_aggregate(agent_dir: str) -> dict | None:
     Carrega os agregados do diretório do agente.
 
     Ordem de tentativa:
-      1. metrics_data.npz  →  chaves agg__*
-      2. metrics_data.json →  campo "aggregate"
+      1. summary.json      →  campo "aggregate"
+      2. metrics_data.npz  →  chaves agg__*
+      3. metrics_data.json →  campo "aggregate"
 
     Retorna None se nenhum arquivo for encontrado ou ocorrer erro.
     """
+    summary_path = os.path.join(agent_dir, "summary.json")
     npz_path  = os.path.join(agent_dir, "metrics_data.npz")
     json_path = os.path.join(agent_dir, "metrics_data.json")
+
+    if os.path.exists(summary_path):
+        try:
+            with open(summary_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return data.get("aggregate", data)
+        except Exception as e:
+            print(f"  [Erro summary.json] {summary_path}: {e}")
 
     if os.path.exists(npz_path):
         try:
@@ -203,7 +215,8 @@ def _has_metrics_file(agent_dir: str) -> bool:
     """Verifica se há ao menos um arquivo de métricas no diretório do agente."""
     return (
         os.path.isfile(os.path.join(agent_dir, "metrics_data.npz")) or
-        os.path.isfile(os.path.join(agent_dir, "metrics_data.json"))
+        os.path.isfile(os.path.join(agent_dir, "metrics_data.json")) or
+        os.path.isfile(os.path.join(agent_dir, "summary.json"))
     )
 
 # ── Descoberta de agentes ─────────────────────────────────────────────────────
@@ -218,32 +231,63 @@ def agent_label(dir_name: str) -> str:
 
 def discover_agents(results_dir: str, objectives: list, scenarios: list) -> list:
     """
-    Varre results_dir para descobrir todos os agentes presentes.
-
-    Um agente é válido se seu diretório contém metrics_data.npz ou
-    metrics_data.json. Retorna lista ordenada: heurísticas fixas →
-    rollouts → modelos RL.
+    Varre results_dir para descobrir todos os agentes presentes
+    (layout novo e legado).
     """
-    found = set()
-    for obj in objectives:
-        for scenario in scenarios:
-            path = os.path.join(results_dir, f"obj_{obj}", f"{scenario}_scenario")
-            if not os.path.isdir(path):
-                continue
-            for entry in os.scandir(path):
-                if entry.is_dir() and _has_metrics_file(entry.path):
-                    found.add(entry.name)
+    return exp.discover_agent_names(results_dir, objectives, scenarios)
 
-    return optimizer_catalog.sort_discovered_result_dirs(found)
+
+def _load_summary_csv(results_dir: str) -> dict | None:
+    """
+    Lê summary.csv na raiz, se existir.
+
+    Retorna dict[(objective, scenario, agent)] -> row, ou None.
+    """
+    path = os.path.join(results_dir, "summary.csv")
+    if not os.path.isfile(path):
+        return None
+    index: dict = {}
+    with open(path, "r", encoding="utf-8", newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            try:
+                key = (int(row["objective"]), row["scenario"], row["agent"])
+            except (KeyError, ValueError):
+                continue
+            index[key] = row
+    return index or None
+
+
+def _aggregate_from_summary_row(row: dict, agg_key: str) -> dict | None:
+    """Monta um bloco aggregate parcial a partir de uma linha do summary.csv."""
+    mapping = {
+        "rewards": ("rewards_avg", "rewards_std"),
+        "delivery_time": ("delivery_time_avg", "delivery_time_std"),
+        "distance": ("distance_avg", "distance_std"),
+    }
+    if agg_key not in mapping:
+        return None
+    avg_k, std_k = mapping[agg_key]
+    try:
+        avg = float(row[avg_k]) if row.get(avg_k) not in (None, "") else None
+        std = float(row[std_k]) if row.get(std_k) not in (None, "") else None
+        n = int(float(row["n"])) if row.get("n") not in (None, "") else 0
+    except (TypeError, ValueError):
+        return None
+    if avg is None:
+        return None
+    return {"avg": avg, "std_dev": std if std is not None else 0.0, "n": n}
 
 # ── Construção do Excel ───────────────────────────────────────────────────────
 
 def build_workbook(results_dir: str, objectives: list, scenarios: list, agents: list) -> Workbook:
     wb = Workbook()
     wb.remove(wb.active)
+    summary_index = _load_summary_csv(results_dir)
 
     for agg_key, sheet_name in AGG_KEY_TO_SHEET.items():
         ws = wb.create_sheet(sheet_name)
+        ws._summary_index = summary_index  # type: ignore[attr-defined]
         _build_sheet(ws, sheet_name, agg_key, results_dir, objectives, scenarios, agents)
 
     return wb
@@ -333,13 +377,22 @@ def _build_sheet(ws, sheet_name: str, agg_key: str, results_dir: str,
                 # Rótulo estatístico
                 style_metric_label(ws.cell(row, sep), metric_label, m_i)
 
-                # Dados de cada agente via SimulationStats
+                # Dados de cada agente (layout novo ou legado; summary.csv se disponível)
+                summary_index = getattr(ws, "_summary_index", None)
                 for j, agent in enumerate(agents):
-                    agent_dir = os.path.join(
-                        results_dir, f"obj_{obj}", f"{scenario}_scenario", agent
-                    )
-
-                    value = _get_metric_value(agent_dir, agg_key, metric_key)
+                    value = None
+                    if summary_index is not None and metric_key in ("avg", "std_dev"):
+                        row_data = summary_index.get((obj, scenario, agent))
+                        if row_data is not None:
+                            partial = _aggregate_from_summary_row(row_data, agg_key)
+                            if partial is not None:
+                                value = partial.get(metric_key)
+                    if value is None:
+                        resolved = exp.resolve_agent_dir(
+                            results_dir, obj, scenario, agent
+                        )
+                        agent_path = str(resolved) if resolved else ""
+                        value = _get_metric_value(agent_path, agg_key, metric_key)
                     style_data_cell(ws.cell(row, first_agent_col(sc_i) + j), value, m_i)
 
     # ── Destacar melhor média por cenário/objetivo ────────────────────────────
@@ -425,7 +478,7 @@ def _highlight_best(ws, sheet_name, objectives, scenarios, agents,
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Gera a planilha de resultados a partir dos dados do evaluate_agents.",
+        description="Gera a planilha de resultados a partir dos dados do run_batch_eval.",
         formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument(

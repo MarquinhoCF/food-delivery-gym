@@ -770,51 +770,73 @@ O projeto fornece quatro scripts utilitários para execução de simulações em
 
 ### 🚀 Script `run_batch_eval`: Execução de Múltiplos Otimizadores
 
-Automatiza a execução de diferentes agentes otimizadores em combinações de cenários experimentais e objetivos de recompensa.
+Automatiza a execução de diferentes agentes otimizadores em combinações de cenários experimentais e objetivos de recompensa. Cada execução é um **experimento nomeado** em `data/runs/<name>/`.
 
 #### ✅ O que ele faz:
 
-* Executa os seguintes agentes heurísticos:
-  * `RandomDriverOptimizerGym`
-  * `FirstDriverOptimizerGym`
-  * `NearestDriverOptimizerGym`
-  * `LowestCostDriverOptimizerGym` (com custo de rota)
-  * `LowestCostDriverOptimizerGym` (com custo marginal de rota)
-* Executa modelos de algoritmos RL (`RLModelOptimizerGym`), com **descoberta automática** dos modelos disponíveis em `--model-base-dir`
-* Suporta dois modos de experimento para seleção dos modelos RL: `cross_scenario` e `same_scenario`
-* Gera arquivos `.txt` com os resultados das execuções
-* Gera arquivos `.npz` ou `.json` contendo as métricas agregadas para análise
+* Executa heurísticas do catálogo (`random`, `first_driver`, `nearest_driver`, `lowest`, `rollout`, …) e modelos RL descobertos em `--model-base-dir`
+* Aceita um **YAML de experimento** (versionável) e/ou flags CLI; flags explícitas sobrescrevem o YAML
+* Variantes explícitas: `--lowest cost=route` e `--rollout base=...,cost=...,horizon=...` (repetíveis)
+* Grava `run.json` (spec resolvida + versão + commit), `summary.csv` na raiz e, por agente, `episodes.csv`, `metrics_data.npz` e `summary.json`
+* **Retoma** automaticamente: se `metrics_data.npz` já existir e abrir, o agente é pulado
 
 #### 📦 Como usar:
 
 ```bash
-# Execução padrão (todos os objetivos, cenários, heurísticas e modelos disponíveis)
-python -m scripts.run_batch_eval
+# Via arquivo de experimento (recomendado)
+python -m scripts.run_batch_eval experiments/obj3_smoke.yaml
+
+# Override de um campo do YAML
+python -m scripts.run_batch_eval experiments/obj3_smoke.yaml --num-runs 2
+
+# Sem YAML (exige --name)
+python -m scripts.run_batch_eval --name smoke --objectives 3 --scenarios simple \
+  --agents random nearest_driver --lowest cost=route --no-rl --num-runs 5
+```
+
+#### 📁 Layout de saída
+
+```
+data/runs/<name>/
+  run.json
+  summary.csv
+  obj_<N>/<scenario>/<agent>/
+    episodes.csv
+    metrics_data.npz
+    summary.json
+    figs/                  # se --batch-plots / --all-plots
+      batch_route_reordering.png
+      batch_other_metrics.png
 ```
 
 #### ⚙️ Opções de Configuração
 
 | Opção | Descrição | Padrão |
 |-------|-----------|--------|
+| `EXPERIMENT.yaml` | Arquivo YAML do experimento (posicional, opcional). | — |
+| `--name` | Nome do experimento (obrigatório sem YAML). Saída em `data/runs/<name>/`. | — |
 | `--objectives` / `-o` | Objetivos de recompensa a executar (1–13). Aceita múltiplos valores. | todos (1–13) |
-| `--scenarios` / `-s` | Cenários a executar: `simple`, `medium`, `complex`. Aceita múltiplos valores. | todos |
-| `--heuristics` | Heurísticas a executar. Aceita múltiplos valores. | todas |
-| `--models` / `-m` | Nomes dos modelos RL (subdiretórios de `obj_N/` com `best_model.zip`). | descoberta automática |
+| `--scenarios` / `-s` | Cenários a executar. Aceita múltiplos valores. | `simple`, `medium`, `complex` |
+| `--agents` / `-a` | Agentes a executar (heurísticas ou modelos). | todos os disponíveis |
+| `--heuristics` | Filtra heurísticas. | todas (exceto `lowest`/`rollout` sem variantes) |
+| `--models` / `-m` | Nomes dos modelos RL. | descoberta automática |
+| `--lowest` | Variante de lowest (repetível). Formato: `cost=route`. | — |
+| `--rollout` | Variante de rollout (repetível). Formato: `base=...,cost=...,horizon=...`. | — |
 | `--no-heuristics` | Desativa a execução de todas as heurísticas. | — |
 | `--no-rl` | Desativa a execução dos modelos PPO. | — |
 | `--num-runs` / `-n` | Número de simulações por agente. | `20` |
+| `--num-workers` | Processos paralelos por agente (`1` = serial). | `1` |
 | `--seed` | Seed para reprodutibilidade. | `123456789` |
-| `--experiment-mode` | Modo de seleção dos modelos RL: `cross_scenario` ou `same_scenario`. Ver seção abaixo. | `cross_scenario` |
-| `--train-scenario` | Cenário cujos modelos serão usados no modo `cross_scenario`. Ignorado em `same_scenario`. | `medium` |
-| `--model-base-dir` | Diretório raiz dos modelos PPO treinados. Os modelos são buscados em `<model-base-dir>/<scenario>/treinamento/`. | `./data/ppo_training/` |
-| `--results-base-dir` | Diretório base para salvar resultados. Use `{}` como placeholder para objetivo e cenário. | `./data/runs/execucoes/obj_{}/{}_scenario/` |
+| `--experiment-mode` | Modo de seleção dos modelos RL: `cross_scenario` ou `same_scenario`. | `cross_scenario` |
+| `--train-scenario` | Cenário cujos modelos serão usados no modo `cross_scenario`. | `medium` |
+| `--model-base-dir` | Diretório raiz dos modelos PPO treinados. | `./data/ppo_training/` |
 | `--batch-plots` | Ativa a geração de gráficos agregados (lote) ao final de cada agente. | — |
 | `--all-plots` | Ativa todos os gráficos: equivale a `--batch-plots` mais gráficos individuais por episódio. | — |
 | `--metrics-fmt` | Formato do arquivo de métricas: `npz` (comprimido) ou `json` (legível). | `npz` |
 
-Os valores possíveis para `--heuristics` são: `random`, `first_driver`, `nearest_driver`, `lowest_route_cost`, `lowest_marginal_route_cost`.
+Campos do YAML espelham essas opções (`name`, `objectives`, `scenarios`, `agents`, `lowest`, `rollout`, `no_rl`, `num_runs`, …). Exemplo em [`experiments/obj3_smoke.yaml`](experiments/obj3_smoke.yaml).
 
-> 💡 **Dica:** Para gerar gráficos de execuções anteriores sem re-executar as simulações, use o script `generate_plots` descrito abaixo.
+> 💡 **Dica:** Para gerar gráficos de execuções anteriores sem re-executar as simulações, use o script `generate_plots` apontando `--results-dir` para `data/runs/<name>` (ou o layout legado `data/runs/execucoes`).
 
 ---
 
@@ -873,43 +895,42 @@ As regras são:
 #### 🔹 Exemplos
 
 ```bash
-# Rodar apenas heurísticas, sem PPO
-python -m scripts.run_batch_eval --no-rl
+# Via YAML
+python -m scripts.run_batch_eval experiments/obj3_smoke.yaml
+
+# Rodar apenas heurísticas (exige --name sem YAML)
+python -m scripts.run_batch_eval --name heuristics_only --no-rl \
+  --lowest cost=route --lowest cost=marginal_route
 
 # Rodar apenas os modelos PPO, sem heurísticas
-python -m scripts.run_batch_eval --no-heuristics
+python -m scripts.run_batch_eval --name rl_only --no-heuristics
 
 # Cenário e objetivo específicos
-python -m scripts.run_batch_eval --scenarios medium --objectives 1 3 5
+python -m scripts.run_batch_eval --name obj135 --scenarios medium --objectives 1 3 5 --no-rl
 
 # Selecionar heurísticas específicas
-python -m scripts.run_batch_eval --heuristics random nearest_driver
+python -m scripts.run_batch_eval --name nearest_only --heuristics random nearest_driver --no-rl
 
-# Forçar modelos RL específicos (sem descoberta automática)
-python -m scripts.run_batch_eval --models 18M_steps 100M_steps
+# Variantes de lowest e rollout
+python -m scripts.run_batch_eval --name costs --agents lowest rollout --no-rl \
+  --lowest cost=route --lowest cost=weighted_score \
+  --rollout base=lowest,cost=weighted_score,horizon=5,terminal=0
 
 # Experimento cross_scenario: modelo treinado em 'medium', avaliado em todos os cenários
-python -m scripts.run_batch_eval --experiment-mode cross_scenario --train-scenario medium
+python -m scripts.run_batch_eval --name cross_med --experiment-mode cross_scenario --train-scenario medium
 
 # Experimento same_scenario: cada cenário usa seu próprio modelo treinado
-python -m scripts.run_batch_eval --experiment-mode same_scenario
+python -m scripts.run_batch_eval --name same_sc --experiment-mode same_scenario
 
 # Execução rápida para testes
-python -m scripts.run_batch_eval --num-runs 5 --seed 42 --scenarios simple --objectives 1
+python -m scripts.run_batch_eval --name quick --num-runs 5 --seed 42 \
+  --scenarios simple --objectives 1 --heuristics random --no-rl
 
 # Gerar gráficos de lote ao final de cada agente
-python -m scripts.run_batch_eval --batch-plots
-
-# Gerar todos os gráficos (individuais + lote)
-python -m scripts.run_batch_eval --all-plots
+python -m scripts.run_batch_eval --name with_plots --batch-plots --no-rl --heuristics random
 
 # Salvar métricas em JSON (legível) em vez de NPZ
-python -m scripts.run_batch_eval --metrics-fmt json
-
-# Execução completa com diretórios customizados
-python -m scripts.run_batch_eval \
-    --model-base-dir ./meus_modelos \
-    --results-base-dir ./resultados/obj_{}/{}_scenario/
+python -m scripts.run_batch_eval --name json_metrics --metrics-fmt json --no-rl --heuristics random
 ```
 
 ---
