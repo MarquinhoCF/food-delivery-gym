@@ -42,16 +42,6 @@ rollout:
     horizon: 5
     alpha: 0.9
     terminal: model
-  - base: lowest
-    cost: route
-    horizon: 10
-    alpha: 0.9
-    terminal: model
-  - base: lowest
-    cost: route
-    horizon: inf
-    alpha: 0.9
-    terminal: model
 
   # base=lowest + weighted_score | mesmas variações
   - base: lowest
@@ -72,15 +62,5 @@ rollout:
   - base: lowest
     cost: weighted_score
     horizon: 5
-    alpha: 0.9
-    terminal: model
-  - base: lowest
-    cost: weighted_score
-    horizon: 10
-    alpha: 0.9
-    terminal: model
-  - base: lowest
-    cost: weighted_score
-    horizon: inf
     alpha: 0.9
     terminal: model

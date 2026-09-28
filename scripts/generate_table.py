@@ -396,6 +396,7 @@ def _build_sheet(ws, sheet_name: str, agg_key: str, results_dir: str,
                     style_data_cell(ws.cell(row, first_agent_col(sc_i) + j), value, m_i)
 
     # ── Destacar melhor média por cenário/objetivo ────────────────────────────
+    # Acontece antes da anotação de truncamento: a comparação usa o número.
     _highlight_best(ws, sheet_name, objectives, scenarios, agents,
                     scenario_start, first_agent_col, n)
 
@@ -414,6 +415,11 @@ def _build_sheet(ws, sheet_name: str, agg_key: str, results_dir: str,
             label = agent_label(agents[j])
             ws.column_dimensions[get_column_letter(col)].width = max(18, min(len(label) * 1.1, 40))
 
+    if agg_key == "distance":
+        _annotate_truncated_distance(
+            ws, results_dir, objectives, scenarios, agents, first_agent_col,
+        )
+
     # ── Freeze panes ─────────────────────────────────────────────────────────
     ws.freeze_panes = "B3"
 
@@ -430,13 +436,108 @@ def _get_metric_value(agent_dir: str, agg_key: str, metric_key: str) -> float | 
     if aggregate is None:
         return None
 
-    value = aggregate.get(agg_key, {}).get(metric_key)
+    # A chave pode existir com valor null (ex.: distância sem episódio válido).
+    block = aggregate.get(agg_key) or {}
+    if not isinstance(block, dict):
+        return None
+    value = block.get(metric_key)
 
     if isinstance(value, (np.floating, np.integer)):
         return float(value)
     if isinstance(value, float) and value != value:   # NaN
         return None
     return value
+
+
+def _load_truncation(agent_dir: str) -> tuple[int, int] | None:
+    """
+    Retorna (episódios truncados, total de episódios).
+
+    Lê summary.json. Se o total não estiver lá, usa o n de rewards.
+    Sem summary, conta ep__truncated no NPZ.
+    """
+    if not agent_dir:
+        return None
+
+    summary_path = os.path.join(agent_dir, "summary.json")
+    if os.path.isfile(summary_path):
+        try:
+            with open(summary_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            truncated = int(data.get("truncated") or 0)
+            num_runs = int(data.get("num_runs") or 0)
+            if num_runs <= 0:
+                rewards = (data.get("aggregate") or {}).get("rewards") or {}
+                num_runs = int((rewards or {}).get("n") or 0)
+            if num_runs <= 0:
+                return None
+            return truncated, num_runs
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            return None
+
+    npz_path = os.path.join(agent_dir, "metrics_data.npz")
+    if not os.path.isfile(npz_path):
+        return None
+    try:
+        with np.load(npz_path, allow_pickle=False) as raw:
+            if "ep__truncated" not in raw.files:
+                return None
+            flags = np.asarray(raw["ep__truncated"]).astype(bool)
+        total = int(flags.size)
+        if total <= 0:
+            return None
+        return int(flags.sum()), total
+    except (OSError, ValueError, TypeError):
+        return None
+
+
+def _truncation_note(truncated: int, num_runs: int) -> str | None:
+    """Indicativo visível quando ao menos um episódio foi truncado."""
+    if truncated < 1 or num_runs < 1:
+        return None
+    return f"({truncated}/{num_runs} eps truncados)"
+
+
+def _annotate_truncated_distance(
+    ws,
+    results_dir: str,
+    objectives: list,
+    scenarios: list,
+    agents: list,
+    first_agent_col_fn,
+) -> None:
+    """
+    Na aba de distância, anexa o indicativo de truncamento à célula da média.
+
+    A média continua sendo a dos episódios que terminaram. Se nenhum terminou,
+    a célula fica só com o indicativo, fora do ranqueamento numérico.
+    """
+    for obj_i, obj in enumerate(objectives):
+        avg_row = HEADER_ROWS + 1 + obj_i * ROWS_PER_OBJECTIVE
+        for sc_i, scenario in enumerate(scenarios):
+            for j, agent in enumerate(agents):
+                resolved = exp.resolve_agent_dir(results_dir, obj, scenario, agent)
+                counts = _load_truncation(str(resolved) if resolved else "")
+                if counts is None:
+                    continue
+                note = _truncation_note(*counts)
+                if note is None:
+                    continue
+
+                col = first_agent_col_fn(sc_i) + j
+                cell = ws.cell(avg_row, col)
+                value = cell.value
+                if isinstance(value, (int, float, np.floating, np.integer)) and not (
+                    isinstance(value, float) and value != value
+                ):
+                    cell.value = f"{float(value):.4f} {note}"
+                else:
+                    cell.value = note
+
+                letter = get_column_letter(col)
+                current = ws.column_dimensions[letter].width or 18
+                needed = max(36, len(str(cell.value)) * 1.05)
+                ws.column_dimensions[letter].width = max(current, min(needed, 48))
 
 
 def _highlight_best(ws, sheet_name, objectives, scenarios, agents,

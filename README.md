@@ -38,7 +38,7 @@ Os dados brutos usados para gerar as figuras e tabelas do artigo estão disponí
 
 O acesso ao diretório de dados é concedido mediante solicitação pelo Google Drive.
 
-Para um guia completo voltado a revisores, consulte [Reprodução dos resultados do SBPO](docs/experiments/reproducing-sbpo.md).
+Para um guia voltado a reprodução dos resultados, consulte [Reprodução dos resultados do SBPO](docs/experiments/reproducing-sbpo.md).
 
 ---
 
@@ -59,7 +59,7 @@ A documentação completa está organizada em [`docs/`](docs/README.md).
 
 | Perfil | Ordem sugerida |
 |--------|----------------|
-| Revisor / reprodução do artigo | [Reprodução SBPO](docs/experiments/reproducing-sbpo.md) → [Layout de dados](docs/experiments/data-layout.md) → [generate_table](docs/tools/generate-table.md) / [generate_boxplots](docs/tools/generate-boxplots.md) |
+| Reprodução do artigo | [Reprodução SBPO](docs/experiments/reproducing-sbpo.md) → [Layout de dados](docs/experiments/data-layout.md) → [generate_table](docs/tools/generate-table.md) / [generate_boxplots](docs/tools/generate-boxplots.md) |
 | Usuário do simulador | [Instalação](docs/getting-started/installation.md) → [Início rápido](docs/getting-started/quickstart.md) → [test_runner](docs/tools/test-runner.md) |
 | Experimentos em lote | [YAML](docs/experiments/yaml.md) → [run_batch_eval](docs/tools/run-batch-eval.md) → [report](docs/tools/report.md) |
 | Treinamento PPO | [Cenários](docs/framework/scenarios.md) → [RL Baselines3 Zoo](docs/rl-baselines3-zoo/README.md) → [Avaliação](docs/tools/run-batch-eval.md) |
@@ -81,5 +81,6 @@ A documentação completa está organizada em [`docs/`](docs/README.md).
 ## Licença e links
 
 - Licença: [MIT](LICENSE)
+- Copyright: gabriel-76 (2024); Marcos Carvalho Ferreira (2024–2026)
 - Repositório: [github.com/MarquinhoCF/food-delivery-gym](https://github.com/MarquinhoCF/food-delivery-gym)
-- Versão do pacote: `1.2.7` (ver [`pyproject.toml`](pyproject.toml))
+- Versão do pacote: `1.3.0` (ver [`pyproject.toml`](pyproject.toml))

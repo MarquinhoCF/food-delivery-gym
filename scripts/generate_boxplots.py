@@ -293,6 +293,22 @@ def _clean(values) -> list[float]:
     return [float(v) for v in values if v is not None and np.isfinite(float(v))]
 
 
+def _distance_truncation_note(values) -> str | None:
+    """
+    Indicativo quando a série de distância tem episódio truncado.
+
+    None e NaN são os episódios excluídos da caixa. A caixa continua só com
+    os episódios que terminaram.
+    """
+    if not values:
+        return None
+    total = len(values)
+    truncated = total - len(_clean(values))
+    if truncated < 1 or total < 1:
+        return None
+    return f"({truncated}/{total} eps truncados)"
+
+
 def _apply_rcparams(font_size: int, dpi: int) -> None:
     matplotlib.rcParams.update({
         "font.family":       "serif",
@@ -376,6 +392,30 @@ def _draw_boxplot_on_ax(
                         linewidth=0.5,
                     ),
                 )
+
+
+def _annotate_distance_truncation(
+    ax: plt.Axes,
+    positions: np.ndarray,
+    series: list,
+) -> None:
+    """Escreve o indicativo de truncamento sob cada caixa de distância."""
+    for pos, values in zip(positions, series):
+        note = _distance_truncation_note(values)
+        if note is None:
+            continue
+        ax.text(
+            pos,
+            -0.03,
+            note,
+            transform=ax.get_xaxis_transform(),
+            ha="center",
+            va="top",
+            rotation=90,
+            fontsize=6,
+            color="#7A2E2E",
+            clip_on=False,
+        )
 
 
 def _add_sample_annotation(
@@ -463,11 +503,16 @@ def _plot_metric_ax(
         for b_idx, agent in enumerate(agents):
             positions   = group_positions + offsets[b_idx]
             data_matrix = []
+            raw_matrix  = []
             for scenario in scenarios:
-                vals = _clean(data.get(agent, {}).get(scenario, {}).get(metric_key))
+                raw = data.get(agent, {}).get(scenario, {}).get(metric_key)
+                raw_matrix.append(raw)
+                vals = _clean(raw)
                 data_matrix.append(vals if vals else [np.nan])
             real = [d for d in data_matrix if not (len(d) == 1 and np.isnan(d[0]))]
             if not real:
+                if metric_key == "distance":
+                    _annotate_distance_truncation(ax, positions, raw_matrix)
                 continue
             has_data = True
             _draw_boxplot_on_ax(
@@ -475,6 +520,8 @@ def _plot_metric_ax(
                 color_map[agent], agent_label(agent),
                 showfliers, show_means, show_mean_values,
             )
+            if metric_key == "distance":
+                _annotate_distance_truncation(ax, positions, raw_matrix)
             if annotate_n:
                 real_matrix = [
                     d for d in data_matrix
@@ -489,11 +536,16 @@ def _plot_metric_ax(
         for b_idx, scenario in enumerate(scenarios):
             positions   = group_positions + offsets[b_idx]
             data_matrix = []
+            raw_matrix  = []
             for agent in agents:
-                vals = _clean(data.get(agent, {}).get(scenario, {}).get(metric_key))
+                raw = data.get(agent, {}).get(scenario, {}).get(metric_key)
+                raw_matrix.append(raw)
+                vals = _clean(raw)
                 data_matrix.append(vals if vals else [np.nan])
             real = [d for d in data_matrix if not (len(d) == 1 and np.isnan(d[0]))]
             if not real:
+                if metric_key == "distance":
+                    _annotate_distance_truncation(ax, positions, raw_matrix)
                 continue
             has_data = True
             color = SCENARIO_COLORS.get(scenario, _BASE_PALETTE[b_idx % len(_BASE_PALETTE)])
@@ -502,6 +554,8 @@ def _plot_metric_ax(
                 color, SCENARIO_LABELS.get(scenario, scenario),
                 showfliers, show_means, show_mean_values,
             )
+            if metric_key == "distance":
+                _annotate_distance_truncation(ax, positions, raw_matrix)
             if annotate_n:
                 real_matrix = [
                     d for d in data_matrix
@@ -585,11 +639,17 @@ def _plot_single_scenario_ax(
 
     rotation = 20.0 if xtick_rotation is None else float(xtick_rotation)
     ax.set_xticks(positions)
-    ax.set_xticklabels(
-        [agent_label(a) for a in agents],
-        rotation=rotation,
-        ha=_xtick_ha(rotation),
-    )
+    labels = []
+    for agent in agents:
+        label = agent_label(agent)
+        if metric_key == "distance":
+            note = _distance_truncation_note(
+                data.get(agent, {}).get(scenario, {}).get(metric_key)
+            )
+            if note:
+                label = f"{label}\n{note}"
+        labels.append(label)
+    ax.set_xticklabels(labels, rotation=rotation, ha=_xtick_ha(rotation))
     ax.set_title(SCENARIO_LABELS.get(scenario, scenario), pad=8)
 
     ylabel = meta["label"]
