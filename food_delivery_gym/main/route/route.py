@@ -1,7 +1,6 @@
 import uuid
 from typing import List
 
-from food_delivery_gym.main.base.dimensions import Dimensions
 from food_delivery_gym.main.base.types import Coordinate, Number
 from food_delivery_gym.main.environment.food_delivery_simpy_env import FoodDeliverySimpyEnv
 from food_delivery_gym.main.route.route_segment import RouteSegment
@@ -12,19 +11,11 @@ class Route:
         self.route_id = str(uuid.uuid4())  # ID único global, seguro para uso em processos paralelos
         self.environment = environment
         self.route_segments = route_segments
-        self.required_capacity = self.calculate_required_capacity()
-
-    def calculate_required_capacity(self):
-        dimensions = Dimensions(0, 0, 0, 0)
-        for route_segment in self.route_segments:
-            dimensions += route_segment.required_capacity
-        return dimensions
 
     def has_next(self):
         return len(self.route_segments) > 0
 
     def next(self):
-        self.required_capacity = self.calculate_required_capacity()
         return self.route_segments.pop(0)
     
     def get_current_order(self):
@@ -45,7 +36,6 @@ class Route:
 
     def extend_route(self, other_route):
         self.route_segments += other_route.route_segments
-        self.required_capacity = self.calculate_required_capacity()
 
     def size(self):
         return len(self.route_segments)

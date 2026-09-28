@@ -1,5 +1,6 @@
 from typing import List
 
+from food_delivery_gym.main.environment.state_log import format_environment_state
 from food_delivery_gym.main.order.order import Order
 
 
@@ -79,45 +80,10 @@ class DeliveryEnvState:
         for event in self.events:
             print(event)
 
-    def print_state(self, options=None):
-        if options is None:
-            options = {
-                "customers": True,
-                "establishments": True,
-                "drivers": True,
-                "orders": True,
-                "events": True,
-                "orders_delivered": True
-            }
-
-        print("=== Estado do DeliveryEnvState ===")
-
-        if options.get("customers", False):
-            print("Clientes:")
-            for idx, customer in enumerate(self.customers, start=1):
-                print(f"Cliente {idx}: {customer.__dict__}")
-
-        if options.get("establishments", False):
-            print("\nEstabelecimentos:")
-            for _, establishment in enumerate(self.establishments):
-                print(f"Estabelecimento {establishment.establishment_id}: Coordenadas = {establishment.coordinate}, Pedidos em preparação = {establishment.orders_in_preparation}, Lenght vetor de pedidos aceitos = {sum(cook.get_length_orders_accepted() for cook in establishment.cooks)}, Tempo ocupado = {establishment.calculate_mean_overload_time()}")
-
-        if options.get("drivers", False):
-            print("\nMotoristas:")
-            for _, driver in enumerate(self.drivers):
-                print(f"Motorista {driver.driver_id}: Coordenadas = {driver.coordinate}, Última coordenada futura = {driver.get_last_valid_coordinate()}, Status = {driver.status}, Quantidade de pedidos na lista = {len(driver.orders_list)}")
-                if driver.current_route_segment and driver.current_route_segment.order:
-                    print(f"             ID do Pedido Atual: {driver.current_route_segment.order.order_id}, Status do Pedido Atual: {driver.current_route_segment.order.status}, Estabelecimento do Pedido Atual = {driver.current_route_segment.order.establishment.establishment_id}")
-
-        if options.get("orders", False):
-            print("\nPedidos:")
-            for idx, order in enumerate(self.orders, start=1):
-                print(f"Pedido {idx}: {order.__dict__}")
-
-        if options.get("events", False):
-            print("\nEventos:")
-            for idx, event in enumerate(self.events, start=1):
-                print(f"Evento {idx}: {event}")
-
-        if options.get("orders_delivered", False):
-            print(f"\nTotal de pedidos entregues: {self.orders_delivered}")
+    def print_state(self, options=None, *, time_step=None, current_order=None):
+        print(format_environment_state(
+            self,
+            options,
+            time_step=time_step,
+            current_order=current_order,
+        ))

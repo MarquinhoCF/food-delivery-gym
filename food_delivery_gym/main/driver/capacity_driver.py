@@ -2,7 +2,7 @@ from typing import Optional
 
 from food_delivery_gym.main.base.dimensions import Dimensions
 from food_delivery_gym.main.base.types import Coordinate, Number
-from food_delivery_gym.main.driver.capacity import Capacity
+from food_delivery_gym.main.driver.capacity import Capacity, route_required_capacity
 from food_delivery_gym.main.driver.driver import Driver
 from food_delivery_gym.main.driver.driver_status import DriverStatus
 from food_delivery_gym.main.environment.food_delivery_simpy_env import FoodDeliverySimpyEnv
@@ -23,11 +23,11 @@ class CapacityDriver(Driver):
         status: Optional[DriverStatus] = DriverStatus.AVAILABLE,
         movement_rate: Optional[Number] = 5,
         reward_objective: Optional[Number] = 1,
+        start_processes: bool = True,
     ):
-        # Define capacidade padrão se não fornecida
         if capacity is None:
             capacity = Capacity(Dimensions(100, 100, 100, 100))
-        
+
         super().__init__(
             id=id,
             environment=environment,
@@ -37,7 +37,9 @@ class CapacityDriver(Driver):
             status=status,
             movement_rate=movement_rate,
             reward_objective=reward_objective,
+            start_processes=start_processes,
         )
+        self.capacity = capacity
     
     def receive_route_requests(self, route: Route) -> None:
         self.route_requests.append(route)
@@ -87,4 +89,4 @@ class CapacityDriver(Driver):
         return self.fits(route) and self.available
     
     def fits(self, route: Route) -> bool:
-        return self.capacity.fits(route.required_capacity)
+        return self.capacity.fits(route_required_capacity(route))

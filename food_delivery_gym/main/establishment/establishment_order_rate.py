@@ -21,6 +21,7 @@ class EstablishmentOrderRate(Establishment):
             min_prepare_time: Number = 20,
             id: Number = None,
             use_estimate: bool = False,
+            start_processes: bool = True,
     ):
         super().__init__(
             id=id, 
@@ -30,7 +31,8 @@ class EstablishmentOrderRate(Establishment):
             catalog=catalog, 
             percentage_allocation_driver=percentage_allocation_driver,
             production_capacity=production_capacity, 
-            use_estimate=use_estimate
+            use_estimate=use_estimate,
+            start_processes=start_processes,
         )
         self.order_production_time_rate = order_production_time_rate
         self.operating_radius = operating_radius
@@ -42,6 +44,9 @@ class EstablishmentOrderRate(Establishment):
         self.b = 7 - self.a
 
     def time_estimate_to_prepare_order(self) -> SimTime:
+        # TODO: quando o catálogo tiver preparation_time por item (sorteado na
+        # criação com esta mesma política beta), usar o tempo estimado de chegada
+        # do(s) item(ns) do pedido em vez de sortear de novo a cada accept.
         sample = self.rng.beta(self.a, self.b)
         estimated_time = self.min_prepare_time + (self.max_prepare_time - self.min_prepare_time) * sample
         return round(estimated_time)

@@ -29,7 +29,8 @@ class TimeShiftOrderEstablishmentRateGenerator(TimeShiftGenerator):
                 single_order=True
             )
 
-            items = self.rng.choice(establishment.catalog.items, size=2, replace=False).tolist()
+            # TODO: no futuro permitir multi-item por pedido (cooks paralelizam itens).
+            items = [self.rng.choice(establishment.catalog.items)]
 
             order = Order(
                 id=self.current_order_id,
@@ -50,8 +51,6 @@ class TimeShiftOrderEstablishmentRateGenerator(TimeShiftGenerator):
         for _ in self.range(env):
             # Verificar se o número de pedidos foi atingido
             if self.max_orders and (env.state.get_length_orders() >= self.max_orders):
-                # TODO: Logs
-                # print(f'Número máximo de pedidos atingido: {self.max_orders}')
                 return
 
             establishment = self.rng.choice(env.state.establishments, size=None)

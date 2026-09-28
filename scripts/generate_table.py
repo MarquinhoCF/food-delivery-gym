@@ -2,16 +2,17 @@
 generate_table.py
 
 Gera automaticamente a planilha de resultados (objective_table.xlsx) a partir
-dos dados produzidos pelo script evaluate_agents.py.
+dos dados produzidos pelo script run_batch_eval.
 
 - Descobre agentes e modelos PPO varrendo os diretórios de resultados
-- Tenta carregar metrics_data.npz; se não encontrar, tenta metrics_data.json
+- Prefere summary.csv / summary.json; fallback para metrics_data.npz/.json
 - Usa SimulationStats para acessar os dados agregados
 - Constrói o Excel dinamicamente: sem mapeamentos manuais de colunas
 - Replica o estilo visual do template original
 - Destaca em negrito o melhor agente por cenário/objetivo em cada aba
 """
 
+import csv
 import json
 import os
 import argparse
@@ -21,6 +22,8 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
 from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
+from food_delivery_gym.main.eval import experiment as exp
+from food_delivery_gym.main.optimizer import catalog as optimizer_catalog
 from food_delivery_gym.main.scenarios import get_all_scenarios, get_defaults_scenarios
 
 # ── Configuração de diretórios ────────────────────────────────────────────────
@@ -35,16 +38,6 @@ METRICS             = ["avg", "std_dev", "median", "mode"]
 METRIC_LABELS       = ["Média", "Desvio Padrão", "Mediana", "Moda"]
 ROWS_PER_OBJECTIVE  = len(METRICS)   # 4 linhas por objetivo
 HEADER_ROWS         = 2              # linhas de cabeçalho antes dos dados
-
-# Heurísticas conhecidas: dir_name → label legível
-KNOWN_HEURISTICS = {
-    "random":                    "Motorista Aleatório",
-    "first_driver":              "Primeiro Motorista",
-    "nearest_driver":            "Motorista mais Próximo",
-    "lowest_route_cost":         "Motorista de Menor Custo de Rota",
-    "lowest_marginal_route_cost":"Motorista de Menor Custo Marginal de Rota",
-    "weighted_score":            "Motorista de Score Ponderado",
-}
 
 # Chaves de SimulationStats.aggregate → nome da aba
 # Deve corresponder ao que finalize() grava em self.aggregate
@@ -185,13 +178,23 @@ def load_aggregate(agent_dir: str) -> dict | None:
     Carrega os agregados do diretório do agente.
 
     Ordem de tentativa:
-      1. metrics_data.npz  →  chaves agg__*
-      2. metrics_data.json →  campo "aggregate"
+      1. summary.json      →  campo "aggregate"
+      2. metrics_data.npz  →  chaves agg__*
+      3. metrics_data.json →  campo "aggregate"
 
     Retorna None se nenhum arquivo for encontrado ou ocorrer erro.
     """
+    summary_path = os.path.join(agent_dir, "summary.json")
     npz_path  = os.path.join(agent_dir, "metrics_data.npz")
     json_path = os.path.join(agent_dir, "metrics_data.json")
+
+    if os.path.exists(summary_path):
+        try:
+            with open(summary_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return data.get("aggregate", data)
+        except Exception as e:
+            print(f"  [Erro summary.json] {summary_path}: {e}")
 
     if os.path.exists(npz_path):
         try:
@@ -212,52 +215,79 @@ def _has_metrics_file(agent_dir: str) -> bool:
     """Verifica se há ao menos um arquivo de métricas no diretório do agente."""
     return (
         os.path.isfile(os.path.join(agent_dir, "metrics_data.npz")) or
-        os.path.isfile(os.path.join(agent_dir, "metrics_data.json"))
+        os.path.isfile(os.path.join(agent_dir, "metrics_data.json")) or
+        os.path.isfile(os.path.join(agent_dir, "summary.json"))
     )
 
 # ── Descoberta de agentes ─────────────────────────────────────────────────────
 
 def agent_label(dir_name: str) -> str:
     """Converte nome de diretório em label legível."""
-    if dir_name in KNOWN_HEURISTICS:
-        return KNOWN_HEURISTICS[dir_name]
-    if dir_name.startswith("ppo_"):
-        suffix = dir_name[4:]   # remove "ppo_"
-        return f"PPO — {suffix}"
+    labeled = optimizer_catalog.label_for_result_dir(dir_name)
+    if labeled:
+        return labeled
     return dir_name
 
 
 def discover_agents(results_dir: str, objectives: list, scenarios: list) -> list:
     """
-    Varre results_dir para descobrir todos os agentes presentes.
-
-    Um agente é válido se seu diretório contém metrics_data.npz ou
-    metrics_data.json. Retorna lista ordenada: heurísticas conhecidas
-    primeiro (na ordem de KNOWN_HEURISTICS), depois modelos PPO
-    em ordem alfabética.
+    Varre results_dir para descobrir todos os agentes presentes
+    (layout novo e legado).
     """
-    found = set()
-    for obj in objectives:
-        for scenario in scenarios:
-            path = os.path.join(results_dir, f"obj_{obj}", f"{scenario}_scenario")
-            if not os.path.isdir(path):
-                continue
-            for entry in os.scandir(path):
-                if entry.is_dir() and _has_metrics_file(entry.path):
-                    found.add(entry.name)
+    return exp.discover_agent_names(results_dir, objectives, scenarios)
 
-    heuristics = [k for k in KNOWN_HEURISTICS if k in found]
-    ppo_models = sorted(d for d in found if d not in KNOWN_HEURISTICS)
-    return heuristics + ppo_models
+
+def _load_summary_csv(results_dir: str) -> dict | None:
+    """
+    Lê summary.csv na raiz, se existir.
+
+    Retorna dict[(objective, scenario, agent)] -> row, ou None.
+    """
+    path = os.path.join(results_dir, "summary.csv")
+    if not os.path.isfile(path):
+        return None
+    index: dict = {}
+    with open(path, "r", encoding="utf-8", newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            try:
+                key = (int(row["objective"]), row["scenario"], row["agent"])
+            except (KeyError, ValueError):
+                continue
+            index[key] = row
+    return index or None
+
+
+def _aggregate_from_summary_row(row: dict, agg_key: str) -> dict | None:
+    """Monta um bloco aggregate parcial a partir de uma linha do summary.csv."""
+    mapping = {
+        "rewards": ("rewards_avg", "rewards_std"),
+        "delivery_time": ("delivery_time_avg", "delivery_time_std"),
+        "distance": ("distance_avg", "distance_std"),
+    }
+    if agg_key not in mapping:
+        return None
+    avg_k, std_k = mapping[agg_key]
+    try:
+        avg = float(row[avg_k]) if row.get(avg_k) not in (None, "") else None
+        std = float(row[std_k]) if row.get(std_k) not in (None, "") else None
+        n = int(float(row["n"])) if row.get("n") not in (None, "") else 0
+    except (TypeError, ValueError):
+        return None
+    if avg is None:
+        return None
+    return {"avg": avg, "std_dev": std if std is not None else 0.0, "n": n}
 
 # ── Construção do Excel ───────────────────────────────────────────────────────
 
 def build_workbook(results_dir: str, objectives: list, scenarios: list, agents: list) -> Workbook:
     wb = Workbook()
     wb.remove(wb.active)
+    summary_index = _load_summary_csv(results_dir)
 
     for agg_key, sheet_name in AGG_KEY_TO_SHEET.items():
         ws = wb.create_sheet(sheet_name)
+        ws._summary_index = summary_index  # type: ignore[attr-defined]
         _build_sheet(ws, sheet_name, agg_key, results_dir, objectives, scenarios, agents)
 
     return wb
@@ -293,7 +323,7 @@ def _build_sheet(ws, sheet_name: str, agg_key: str, results_dir: str,
         sep         = scenario_start(i)
         label_start = sep
         label_end   = sep + n
-        style_header(ws.cell(1, label_start), SCENARIO_LABELS[scenario])
+        style_header(ws.cell(1, label_start), SCENARIO_LABELS.get(scenario, scenario))
         if label_end > label_start:
             ws.merge_cells(
                 start_row=1, start_column=label_start,
@@ -347,16 +377,26 @@ def _build_sheet(ws, sheet_name: str, agg_key: str, results_dir: str,
                 # Rótulo estatístico
                 style_metric_label(ws.cell(row, sep), metric_label, m_i)
 
-                # Dados de cada agente via SimulationStats
+                # Dados de cada agente (layout novo ou legado; summary.csv se disponível)
+                summary_index = getattr(ws, "_summary_index", None)
                 for j, agent in enumerate(agents):
-                    agent_dir = os.path.join(
-                        results_dir, f"obj_{obj}", f"{scenario}_scenario", agent
-                    )
-
-                    value = _get_metric_value(agent_dir, agg_key, metric_key)
+                    value = None
+                    if summary_index is not None and metric_key in ("avg", "std_dev"):
+                        row_data = summary_index.get((obj, scenario, agent))
+                        if row_data is not None:
+                            partial = _aggregate_from_summary_row(row_data, agg_key)
+                            if partial is not None:
+                                value = partial.get(metric_key)
+                    if value is None:
+                        resolved = exp.resolve_agent_dir(
+                            results_dir, obj, scenario, agent
+                        )
+                        agent_path = str(resolved) if resolved else ""
+                        value = _get_metric_value(agent_path, agg_key, metric_key)
                     style_data_cell(ws.cell(row, first_agent_col(sc_i) + j), value, m_i)
 
     # ── Destacar melhor média por cenário/objetivo ────────────────────────────
+    # Acontece antes da anotação de truncamento: a comparação usa o número.
     _highlight_best(ws, sheet_name, objectives, scenarios, agents,
                     scenario_start, first_agent_col, n)
 
@@ -375,6 +415,11 @@ def _build_sheet(ws, sheet_name: str, agg_key: str, results_dir: str,
             label = agent_label(agents[j])
             ws.column_dimensions[get_column_letter(col)].width = max(18, min(len(label) * 1.1, 40))
 
+    if agg_key == "distance":
+        _annotate_truncated_distance(
+            ws, results_dir, objectives, scenarios, agents, first_agent_col,
+        )
+
     # ── Freeze panes ─────────────────────────────────────────────────────────
     ws.freeze_panes = "B3"
 
@@ -391,13 +436,108 @@ def _get_metric_value(agent_dir: str, agg_key: str, metric_key: str) -> float | 
     if aggregate is None:
         return None
 
-    value = aggregate.get(agg_key, {}).get(metric_key)
+    # A chave pode existir com valor null (ex.: distância sem episódio válido).
+    block = aggregate.get(agg_key) or {}
+    if not isinstance(block, dict):
+        return None
+    value = block.get(metric_key)
 
     if isinstance(value, (np.floating, np.integer)):
         return float(value)
     if isinstance(value, float) and value != value:   # NaN
         return None
     return value
+
+
+def _load_truncation(agent_dir: str) -> tuple[int, int] | None:
+    """
+    Retorna (episódios truncados, total de episódios).
+
+    Lê summary.json. Se o total não estiver lá, usa o n de rewards.
+    Sem summary, conta ep__truncated no NPZ.
+    """
+    if not agent_dir:
+        return None
+
+    summary_path = os.path.join(agent_dir, "summary.json")
+    if os.path.isfile(summary_path):
+        try:
+            with open(summary_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            truncated = int(data.get("truncated") or 0)
+            num_runs = int(data.get("num_runs") or 0)
+            if num_runs <= 0:
+                rewards = (data.get("aggregate") or {}).get("rewards") or {}
+                num_runs = int((rewards or {}).get("n") or 0)
+            if num_runs <= 0:
+                return None
+            return truncated, num_runs
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            return None
+
+    npz_path = os.path.join(agent_dir, "metrics_data.npz")
+    if not os.path.isfile(npz_path):
+        return None
+    try:
+        with np.load(npz_path, allow_pickle=False) as raw:
+            if "ep__truncated" not in raw.files:
+                return None
+            flags = np.asarray(raw["ep__truncated"]).astype(bool)
+        total = int(flags.size)
+        if total <= 0:
+            return None
+        return int(flags.sum()), total
+    except (OSError, ValueError, TypeError):
+        return None
+
+
+def _truncation_note(truncated: int, num_runs: int) -> str | None:
+    """Indicativo visível quando ao menos um episódio foi truncado."""
+    if truncated < 1 or num_runs < 1:
+        return None
+    return f"({truncated}/{num_runs} eps truncados)"
+
+
+def _annotate_truncated_distance(
+    ws,
+    results_dir: str,
+    objectives: list,
+    scenarios: list,
+    agents: list,
+    first_agent_col_fn,
+) -> None:
+    """
+    Na aba de distância, anexa o indicativo de truncamento à célula da média.
+
+    A média continua sendo a dos episódios que terminaram. Se nenhum terminou,
+    a célula fica só com o indicativo, fora do ranqueamento numérico.
+    """
+    for obj_i, obj in enumerate(objectives):
+        avg_row = HEADER_ROWS + 1 + obj_i * ROWS_PER_OBJECTIVE
+        for sc_i, scenario in enumerate(scenarios):
+            for j, agent in enumerate(agents):
+                resolved = exp.resolve_agent_dir(results_dir, obj, scenario, agent)
+                counts = _load_truncation(str(resolved) if resolved else "")
+                if counts is None:
+                    continue
+                note = _truncation_note(*counts)
+                if note is None:
+                    continue
+
+                col = first_agent_col_fn(sc_i) + j
+                cell = ws.cell(avg_row, col)
+                value = cell.value
+                if isinstance(value, (int, float, np.floating, np.integer)) and not (
+                    isinstance(value, float) and value != value
+                ):
+                    cell.value = f"{float(value):.4f} {note}"
+                else:
+                    cell.value = note
+
+                letter = get_column_letter(col)
+                current = ws.column_dimensions[letter].width or 18
+                needed = max(36, len(str(cell.value)) * 1.05)
+                ws.column_dimensions[letter].width = max(current, min(needed, 48))
 
 
 def _highlight_best(ws, sheet_name, objectives, scenarios, agents,
@@ -439,7 +579,7 @@ def _highlight_best(ws, sheet_name, objectives, scenarios, agents,
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Gera a planilha de resultados a partir dos dados do evaluate_agents.",
+        description="Gera a planilha de resultados a partir dos dados do run_batch_eval.",
         formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument(
@@ -471,27 +611,41 @@ def parse_args():
     return parser.parse_args()
 
 
-def main():
-    args = parse_args()
+def run(
+    results_dir: str,
+    objectives: list,
+    scenarios: list,
+    output: str,
+) -> str | None:
+    """
+    Gera a planilha Excel a partir de results_dir.
 
-    print(f"Varrendo diretório: {args.results_dir}")
-    agents = discover_agents(args.results_dir, args.objectives, args.scenarios)
+    Retorna o caminho do arquivo salvo, ou None se nenhum agente for encontrado.
+    """
+    print(f"Varrendo diretório: {results_dir}")
+    agents = discover_agents(results_dir, objectives, scenarios)
 
     if not agents:
         print(
             "[AVISO] Nenhum agente encontrado. Verifique o --results-dir e se os "
             "arquivos metrics_data.npz ou metrics_data.json existem."
         )
-        return
+        return None
 
     print(f"Agentes encontrados ({len(agents)}): {agents}")
-    print(f"Objetivos: {args.objectives}")
-    print(f"Cenários:  {args.scenarios}")
+    print(f"Objetivos: {objectives}")
+    print(f"Cenários:  {scenarios}")
 
-    wb = build_workbook(args.results_dir, args.objectives, args.scenarios, agents)
-    os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
-    wb.save(args.output)
-    print(f"\nPlanilha salva em: {args.output}")
+    wb = build_workbook(results_dir, objectives, scenarios, agents)
+    os.makedirs(os.path.dirname(os.path.abspath(output)), exist_ok=True)
+    wb.save(output)
+    print(f"\nPlanilha salva em: {output}")
+    return output
+
+
+def main():
+    args = parse_args()
+    run(args.results_dir, args.objectives, args.scenarios, args.output)
 
 
 if __name__ == "__main__":

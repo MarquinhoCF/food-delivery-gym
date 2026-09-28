@@ -10,23 +10,33 @@ from food_delivery_gym.main.environment.env_mode import EnvMode
 from food_delivery_gym.main.environment.delivery_env_state import DeliveryEnvState
 from food_delivery_gym.main.map.map import Map
 from food_delivery_gym.main.order.delivery_rejection import DeliveryRejection
+from food_delivery_gym.main.utils.rng_factory import RngFactory
 from food_delivery_gym.main.view.food_delivery_view import FoodDeliveryView
 
 
 class FoodDeliverySimpyEnv(Environment):
 
-    def __init__(self, map: Map, generators, optimizer, view: FoodDeliveryView = None):
+    def __init__(
+        self,
+        map: Map,
+        generators,
+        optimizer,
+        view: FoodDeliveryView = None,
+        rng_factory: RngFactory | None = None,
+        initialize: bool = True,
+    ):
         super().__init__()
         self.map = map
         self.generators = generators
         self.optimizer = optimizer
         self.view = view
+        self.rng_factory = rng_factory if rng_factory is not None else RngFactory()
         self.env_mode = EnvMode.TRAINING
         self.last_time_step = 0
         self._state = DeliveryEnvState()
-        self.init()
-
         self.core_events: deque = deque()
+        if initialize:
+            self.init()
 
     def set_env_mode(self, mode: EnvMode):
         self.env_mode = mode
@@ -137,9 +147,8 @@ class FoodDeliverySimpyEnv(Environment):
         if self.view is not None and not self.view.quited:
             self.view.quit()
 
-    def print_enviroment_state(self, options = None):
-        print(f'time_step = {self.now}')
-        self._state.print_state(options)
+    def print_environment_state(self, options=None, current_order=None):
+        self._state.print_state(options, time_step=self.now, current_order=current_order)
 
     def update_statistics_variables(self):
         for establishment in self._state.establishments:
@@ -147,8 +156,4 @@ class FoodDeliverySimpyEnv(Environment):
         
         for driver in self._state.drivers:
             driver.update_statistics_variables()
-    
-    def update_spent_drivers(self):
-        for driver in self._state.drivers:
-            driver.update_spent_time()
             

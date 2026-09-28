@@ -6,6 +6,8 @@ from food_delivery_gym.main.route.route_segment import RouteSegment
 
 
 class MarginalRouteCostFunction(CostFunction):
+    label = "Custo Marginal de Rota"
+
     def __init__(self, objective: int = 1):
         """
         :param objective: Define o critério de custo marginal.

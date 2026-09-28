@@ -6,8 +6,10 @@ import os
 import traceback
 
 from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
+from food_delivery_gym.main.eval import experiment as exp
+from food_delivery_gym.main.optimizer import catalog as optimizer_catalog
 from food_delivery_gym.main.scenarios import get_all_scenarios, get_defaults_scenarios
-from food_delivery_gym.main.statistic.simulation_stats import SimulationStats
+from food_delivery_gym.main.statistics.simulation_stats import SimulationStats
 
 DEFAULT_RESULTS_DIR = "./data/runs/execucoes"
 ALL_OBJECTIVES      = FoodDeliveryGymEnv.REWARD_OBJECTIVES
@@ -126,28 +128,17 @@ def _has_metrics_file(agent_dir: str) -> bool:
 # ── Descoberta de agentes ─────────────────────────────────────────────────────
 
 def discover_agent_dirs(results_dir: str, objectives: list, scenarios: list) -> list[str]:
-    KNOWN_ORDER = [
-        "random", "first_driver", "nearest_driver",
-        "lowest_route_cost", "lowest_marginal_route_cost",
-        "weighted_score"
-    ]
-
     dirs: list[str] = []
-
+    names = exp.discover_agent_names(results_dir, objectives, scenarios)
     for obj in objectives:
         for scenario in scenarios:
-            base = os.path.join(results_dir, f"obj_{obj}", f"{scenario}_scenario")
-            if not os.path.isdir(base):
-                continue
-
-            entries = [e for e in os.scandir(base) if e.is_dir() and _has_metrics_file(e.path)]
-
-            known = [e for k in KNOWN_ORDER for e in entries if e.name == k]
-            ppo   = sorted([e for e in entries if e.name not in KNOWN_ORDER], key=lambda e: e.name)
-
-            for entry in known + ppo:
-                dirs.append(entry.path)
-
+            by_name: dict[str, str] = {}
+            for name in names:
+                resolved = exp.resolve_agent_dir(results_dir, obj, scenario, name)
+                if resolved is not None:
+                    by_name[name] = str(resolved)
+            for name in optimizer_catalog.sort_discovered_result_dirs(by_name.keys()):
+                dirs.append(by_name[name])
     return dirs
 
 def generate_episode_plots(stats: SimulationStats, agent_dir: str) -> None:
@@ -236,11 +227,16 @@ def parse_args():
     return parser.parse_args()
 
 
-def main():
-    args = parse_args()
-
-    do_episode = not args.only_batch
-    do_batch   = not args.only_episode
+def run(
+    results_dir: str,
+    objectives: list,
+    scenarios: list,
+    *,
+    only_episode: bool = False,
+    only_batch: bool = False,
+) -> int:
+    do_episode = not only_batch
+    do_batch = not only_episode
 
     mode_label = (
         "episódios + lote" if (do_episode and do_batch) else
@@ -249,26 +245,25 @@ def main():
     )
 
     print("=== Geração de Gráficos ===")
-    print(f"  Diretório  : {args.results_dir}")
-    print(f"  Objetivos  : {args.objectives}")
-    print(f"  Cenários   : {args.scenarios}")
+    print(f"  Diretório  : {results_dir}")
+    print(f"  Objetivos  : {objectives}")
+    print(f"  Cenários   : {scenarios}")
     print(f"  Modo       : {mode_label}")
     print()
 
-    agent_dirs = discover_agent_dirs(args.results_dir, args.objectives, args.scenarios)
+    agent_dirs = discover_agent_dirs(results_dir, objectives, scenarios)
 
     if not agent_dirs:
         print(
             "[AVISO] Nenhum agente encontrado. "
             "Verifique --results-dir e se os arquivos metrics_data.npz/.json existem."
         )
-        return
+        return 0
 
     print(f"{len(agent_dirs)} diretório(s) de agente encontrado(s).\n")
 
     prev_scenario_key = None
     for agent_dir in agent_dirs:
-        # Extrai obj_N/scenario para exibir cabeçalhos de seção
         parts = agent_dir.replace("\\", "/").split("/")
         try:
             scenario_key = f"{parts[-3]}/{parts[-2]}"
@@ -282,6 +277,18 @@ def main():
         process_agent(agent_dir, do_episode=do_episode, do_batch=do_batch)
 
     print("\n=== Concluído ===")
+    return len(agent_dirs)
+
+
+def main():
+    args = parse_args()
+    run(
+        args.results_dir,
+        args.objectives,
+        args.scenarios,
+        only_episode=args.only_episode,
+        only_batch=args.only_batch,
+    )
 
 
 if __name__ == "__main__":

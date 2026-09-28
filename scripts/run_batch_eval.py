@@ -1,98 +1,78 @@
-from importlib.resources import files
+from food_delivery_gym.main.eval.silence import in_worker_process, silence_eval_noise
+
+if in_worker_process():
+    silence_eval_noise(filter_stderr=True)
+
 import os
+import time
 import traceback
 import argparse
+from datetime import datetime, timezone
 
-from stable_baselines3 import PPO
-from stable_baselines3.common.vec_env import DummyVecEnv
-from stable_baselines3.common.vec_env import VecNormalize
-from food_delivery_gym.main.environment.env_mode import EnvMode
-from food_delivery_gym.main.cost.route_cost_function import RouteCostFunction
-from food_delivery_gym.main.cost.marginal_route_cost_function import MarginalRouteCostFunction
-from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
-from food_delivery_gym.main.optimizer.optimizer_gym.first_driver_optimizer_gym import FirstDriverOptimizerGym
-from food_delivery_gym.main.optimizer.optimizer_gym.lowest_cost_driver_optimizer_gym import LowestCostDriverOptimizerGym
-from food_delivery_gym.main.optimizer.optimizer_gym.nearest_driver_optimizer_gym import NearestDriverOptimizerGym
-from food_delivery_gym.main.optimizer.optimizer_gym.random_driver_optimizer_gym import RandomDriverOptimizerGym
-from food_delivery_gym.main.optimizer.optimizer_gym.rl_model_optimizer_gym import RLModelOptimizerGym
-from food_delivery_gym.main.scenarios import get_all_scenarios, get_defaults_scenarios
+from food_delivery_gym.main.eval import experiment as exp
+from food_delivery_gym.main.eval.eval_parallel import (  # noqa: E402
+    EvalJobSpec,
+    create_eval_environment,
+)
+from food_delivery_gym.main.optimizer import catalog as optimizer_catalog  # noqa: E402
+from food_delivery_gym.main.scenarios import get_all_scenarios  # noqa: E402
 
 ALL_SCENARIOS = get_all_scenarios()
-DEFAULT_SCENARIOS = get_defaults_scenarios()
-ALL_OBJECTIVES = FoodDeliveryGymEnv.REWARD_OBJECTIVES
-DEFAULT_NUM_RUNS = 20
-DEFAULT_SEED = 123456789
-DEFAULT_MODEL_BASE_DIR = "./data/ppo_training/"
 DEFAULT_MODEL_SUBDIR = "treinamento"
-EXPERIMENT_MODES = ["cross_scenario", "same_scenario"]
-DEFAULT_EXPERIMENT_MODE = "cross_scenario"
-DEFAULT_TRAIN_SCENARIO = "medium"
-DEFAULT_RESULTS_BASE_DIR = "./data/runs/execucoes/obj_{}/{}_scenario/"
-METRICS_FMT_OPTIONS = ["npz", "json"]
-DEFAULT_METRICS_FMT = "npz"
-
-# Chave = identificador do argumento --heuristics
-#   "dir"   = subdiretório de saída (results_dir/<dir>/)
-#   "label" = nome legível usado nos logs
-ALL_HEURISTICS = {
-    "random": {
-        "dir":   "random",
-        "label": "Agente Aleatório",
-    },
-    "first_driver": {
-        "dir":   "first_driver",
-        "label": "Agente do Primeiro Motorista",
-    },
-    "nearest_driver": {
-        "dir":   "nearest_driver",
-        "label": "Agente do Motorista mais Próximo",
-    },
-    "lowest_route_cost": {
-        "dir":   "lowest_route_cost",
-        "label": "Agente do Motorista de Menor Custo de Rota",
-    },
-    "lowest_marginal_route_cost": {
-        "dir":   "lowest_marginal_route_cost",
-        "label": "Agente do Motorista de Menor Custo de Rota Marginal",
-    },
-    "weighted_score": {
-        "dir":   "weighted_score",
-        "label": "Agente do Score Ponderado",
-    },
-}
 
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Avalia agentes otimizadores (heurísticas e PPO) no ambiente de entrega de última milha.",
+        description=(
+            "Avalia agentes otimizadores (heurísticas e modelos de RL) "
+            "no ambiente de entrega de última milha.\n"
+            "Aceita um YAML de experimento (posicional) e/ou flags CLI.\n"
+            "Flags explícitas sobrescrevem o YAML. Sem YAML, --name é obrigatório."
+        ),
         formatter_class=argparse.RawTextHelpFormatter,
+    )
+
+    parser.add_argument(
+        "experiment_file",
+        nargs="?",
+        default=None,
+        metavar="EXPERIMENT.yaml",
+        help="Arquivo YAML do experimento (opcional).",
+    )
+
+    parser.add_argument(
+        "--name",
+        type=str,
+        default=None,
+        help="Nome do experimento (obrigatório sem YAML). Saída em data/runs/<name>/.",
     )
 
     parser.add_argument(
         "--objectives", "-o",
         nargs="+",
         type=int,
-        choices=ALL_OBJECTIVES,
-        default=ALL_OBJECTIVES,
+        default=None,
         metavar="N",
-        help=(
-            "Objetivos de recompensa a executar (1-13). Aceita múltiplos valores.\n"
-            "Padrão: todos (1 a 13)\n"
-            "Exemplo: --objectives 1 3 5"
-        ),
+        help="Objetivos de recompensa (1-13). Padrão: todos.",
     )
 
     parser.add_argument(
         "--scenarios", "-s",
         nargs="+",
         choices=ALL_SCENARIOS,
-        default=DEFAULT_SCENARIOS,
+        default=None,
         metavar="SCENARIO",
+        help=f"Cenários a executar. Opções: {ALL_SCENARIOS}",
+    )
+
+    parser.add_argument(
+        "--agents", "-a",
+        nargs="+",
+        default=None,
+        metavar="AGENT",
         help=(
-            "Cenários a executar. Aceita múltiplos valores.\n"
-            f"Opções: {ALL_SCENARIOS}\n"
-            f"Padrão: {DEFAULT_SCENARIOS}\n"
-            "Exemplo: --scenarios initial medium"
+            "Agentes a executar: heurísticas do catálogo ou modelos descobertos.\n"
+            f"Heurísticas: {optimizer_catalog.keys(is_heuristic=True)}"
         ),
     )
 
@@ -101,74 +81,109 @@ def parse_args():
         nargs="+",
         default=None,
         metavar="MODEL_NAME",
-        help=(
-            "Nomes dos modelos RL a executar (subdiretórios de obj_N/ que contêm best_model.zip).\n"
-            "Padrão: descoberta automática a partir de --model-base-dir\n"
-            "Exemplo: --models 18M_steps meu_experimento_v2"
-        ),
+        help="Filtra os modelos RL. Padrão: todos os descobertos.",
     )
 
     parser.add_argument(
         "--heuristics",
         nargs="+",
-        choices=list(ALL_HEURISTICS),
-        default=list(ALL_HEURISTICS),
+        default=None,
         metavar="HEURISTIC",
         help=(
-            "Heurísticas a executar. Aceita múltiplos valores.\n"
-            f"Opções: {list(ALL_HEURISTICS)}\n"
-            "Padrão: todas\n"
-            "Exemplo: --heuristics random nearest_driver"
+            "Filtra as heurísticas.\n"
+            f"Opções: {optimizer_catalog.keys(is_heuristic=True)}"
         ),
+    )
+
+    parser.add_argument(
+        "--lowest",
+        action="append",
+        default=None,
+        metavar="SPEC",
+        help=(
+            "Variante explícita de lowest (repetível). Formato: cost=route\n"
+            f"Opções de cost: {optimizer_catalog.COST_FUNCTION_CHOICES}\n"
+            "Ex.: --lowest cost=route --lowest cost=weighted_score"
+        ),
+    )
+
+    parser.add_argument(
+        "--rollout",
+        action="append",
+        default=None,
+        metavar="SPEC",
+        help=(
+            "Variante explícita de rollout (repetível). Formato key=value,...\n"
+            "Chaves: base, cost, horizon, alpha, terminal (0|model).\n"
+            f"Defaults: base={optimizer_catalog.DEFAULT_ROLLOUT_BASE}, "
+            f"horizon={optimizer_catalog.DEFAULT_ROLLOUT_HORIZON}, "
+            f"alpha={optimizer_catalog.DEFAULT_ROLLOUT_ALPHA}, "
+            f"terminal={optimizer_catalog.DEFAULT_ROLLOUT_TERMINAL}.\n"
+            "Ex.: --rollout base=lowest,cost=weighted_score,horizon=5,terminal=0,alpha=0.9"
+        ),
+    )
+
+    parser.add_argument(
+        "--rollout-record-decisions",
+        action="store_true",
+        default=None,
+        help="Grava o decision_log do rollout (desativado por padrão).",
     )
 
     parser.add_argument(
         "--no-rl",
         action="store_true",
-        help="Desativa a execução dos modelos de Aprendizado por Reforço (PPO).",
+        default=None,
+        help="Desativa a execução dos modelos de Aprendizado por Reforço.",
     )
 
     parser.add_argument(
         "--no-heuristics",
         action="store_true",
+        default=None,
         help="Desativa a execução de todas as heurísticas.",
     )
 
     parser.add_argument(
         "--num-runs", "-n",
         type=int,
-        default=DEFAULT_NUM_RUNS,
-        help=f"Número de simulações por agente. Padrão: {DEFAULT_NUM_RUNS}.",
+        default=None,
+        help=f"Número de simulações por agente. Padrão: {exp.DEFAULT_NUM_RUNS}.",
+    )
+
+    parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=None,
+        help="Processos paralelos por agente. 1 = serial (padrão).",
     )
 
     parser.add_argument(
         "--seed",
         type=int,
-        default=DEFAULT_SEED,
-        help=f"Seed para reprodutibilidade. Padrão: {DEFAULT_SEED}.",
+        default=None,
+        help=f"Seed para reprodutibilidade. Padrão: {exp.DEFAULT_SEED}.",
     )
 
     parser.add_argument(
         "--model-base-dir",
         type=str,
-        default=DEFAULT_MODEL_BASE_DIR,
+        default=None,
         help=(
-            "Diretório raiz dos modelos PPO treinados.\n"
-            f"Estrutura esperada: <model-base-dir>/<scenario>/{DEFAULT_MODEL_SUBDIR}/obj_N/<model_name>/best_model.zip\n"
-            f"Padrão: {DEFAULT_MODEL_BASE_DIR}"
+            "Diretório raiz dos modelos treinados.\n"
+            f"Padrão: {exp.DEFAULT_MODEL_BASE_DIR}"
         ),
     )
 
     parser.add_argument(
         "--experiment-mode",
-        choices=EXPERIMENT_MODES,
-        default=DEFAULT_EXPERIMENT_MODE,
+        choices=list(exp.EXPERIMENT_MODES),
+        default=None,
         help=(
             "Modo de seleção dos modelos RL:\n"
-            "  cross_scenario  – usa modelos treinados em --train-scenario para avaliar\n"
-            "                    em todos os cenários selecionados (comportamento anterior).\n"
-            "  same_scenario   – usa o modelo treinado no próprio cenário de avaliação.\n"
-            f"Padrão: {DEFAULT_EXPERIMENT_MODE}"
+            "  cross_scenario  – modelos de --train-scenario em todos os cenários\n"
+            "  same_scenario   – modelo do próprio cenário de avaliação\n"
+            f"Padrão: {exp.DEFAULT_EXPERIMENT_MODE}"
         ),
     )
 
@@ -176,272 +191,425 @@ def parse_args():
         "--train-scenario",
         type=str,
         choices=ALL_SCENARIOS,
-        default=DEFAULT_TRAIN_SCENARIO,
+        default=None,
         help=(
             "Cenário cujos modelos serão usados no modo cross_scenario.\n"
-            "Ignorado no modo same_scenario.\n"
-            f"Padrão: {DEFAULT_TRAIN_SCENARIO}"
-        ),
-    )
-
-    parser.add_argument(
-        "--results-base-dir",
-        type=str,
-        default=DEFAULT_RESULTS_BASE_DIR,
-        help=(
-            "Diretório base para salvar resultados.\n"
-            "Use '{}' como placeholder para objetivo e cenário respectivamente.\n"
-            f"Padrão: {DEFAULT_RESULTS_BASE_DIR}"
+            f"Padrão: {exp.DEFAULT_TRAIN_SCENARIO}"
         ),
     )
 
     parser.add_argument(
         "--metrics-fmt",
-        choices=METRICS_FMT_OPTIONS,
-        default=DEFAULT_METRICS_FMT,
-        help=(
-            "Formato do arquivo de métricas gerado por simulação.\n"
-            "  npz  – comprimido, menor tamanho em disco (padrão)\n"
-            "  json – legível, estrutura orientada por simulação\n"
-            f"Padrão: {DEFAULT_METRICS_FMT}"
-        ),
+        choices=list(exp.METRICS_FMT_OPTIONS),
+        default=None,
+        help=f"Formato das métricas: npz ou json. Padrão: {exp.DEFAULT_METRICS_FMT}",
     )
 
     parser.add_argument(
         "--batch-plots",
         action="store_true",
+        default=None,
         help="Ativa a geração de gráficos agregados.",
     )
 
     parser.add_argument(
         "--all-plots",
         action="store_true",
-        help="Ativa todos os gráficos (equivale a --batch-plots e ativa a geração de gráficos por episódio).",
+        default=None,
+        help="Ativa todos os gráficos (individuais + agregados).",
     )
 
     return parser, parser.parse_args()
 
+
+def _cli_overrides(args) -> dict:
+    """Coleta só os campos efetivamente passados na linha de comando."""
+    overrides: dict = {}
+    mapping = {
+        "name": args.name,
+        "objectives": args.objectives,
+        "scenarios": args.scenarios,
+        "agents": args.agents,
+        "heuristics": args.heuristics,
+        "models": args.models,
+        "lowest": args.lowest,
+        "rollout": args.rollout,
+        "num_runs": args.num_runs,
+        "num_workers": args.num_workers,
+        "seed": args.seed,
+        "model_base_dir": args.model_base_dir,
+        "experiment_mode": args.experiment_mode,
+        "train_scenario": args.train_scenario,
+        "metrics_fmt": args.metrics_fmt,
+    }
+    for key, value in mapping.items():
+        if value is not None:
+            overrides[key] = value
+
+    # store_true: None = ausente, True = passado
+    if args.no_rl is not None:
+        overrides["no_rl"] = bool(args.no_rl)
+    if args.no_heuristics is not None:
+        overrides["no_heuristics"] = bool(args.no_heuristics)
+    if args.rollout_record_decisions is not None:
+        overrides["rollout_record_decisions"] = bool(args.rollout_record_decisions)
+    if args.batch_plots is not None:
+        overrides["batch_plots"] = bool(args.batch_plots)
+    if args.all_plots is not None:
+        overrides["all_plots"] = bool(args.all_plots)
+    return overrides
+
+
 def create_environment(reward_objective: int, scenario_name: str):
-    if reward_objective not in range(1, 14):
-        raise ValueError("reward_objective deve ser um valor entre 1 e 13.")
-
-    scenario_file = scenario_name + ".json"
-    scenario_path = str(files("food_delivery_gym.main.scenarios").joinpath(scenario_file))
-
-    # Atualiza o cache ANTES de instanciar — workers herdarão o dict via fork.
-    FoodDeliveryGymEnv.set_scenario(scenario_path)
- 
-    gym_env = FoodDeliveryGymEnv(reward_objective=reward_objective, mode=EnvMode.EVALUATING)
-    return gym_env
+    return create_eval_environment(reward_objective, scenario_name)
 
 
-def find_vecnormalize(model_dir: str) -> str | None:
-    """Procura o vecnormalize.pkl no diretório do modelo.
-
-    O rl_zoo3 salva o arquivo em um subdiretório com o nome do ambiente
-    registrado. Como o nome pode variar (ex: diferentes versões ou cenários
-    de treino), a busca é feita de forma recursiva para ser resiliente a
-    variações no nome do subdiretório.
-    """
-    for root, _dirs, files_found in os.walk(model_dir):
-        if "vecnormalize.pkl" in files_found:
-            return os.path.join(root, "vecnormalize.pkl")
-    return None
+def build_eval_job_spec(variant, scenario: str, objective: int) -> EvalJobSpec:
+    """Monta o payload serializável para workers a partir de uma EvalVariant."""
+    return EvalJobSpec(
+        scenario=scenario,
+        objective=objective,
+        optimizer_key=variant.spec.key,
+        extras=dict(variant.extras),
+        model_path=variant.spec.model_path,
+        model_search_root=variant.spec.model_search_root,
+    )
 
 
-def load_rl_model(model_path: str, model_dir: str, reward_objective: int, scenario_name: str):
-    """Carrega o modelo PPO e monta o ambiente adequado.
+def select_agents_for_run(
+    available: list,
+    agents: list[str] | None,
+    heuristics: list[str] | None,
+    models: list[str] | None,
+    no_heuristics: bool,
+    no_rl: bool,
+) -> list:
+    """Aplica --agents, --heuristics, --models, --no-heuristics e --no-rl."""
+    selected = list(available)
+    if agents:
+        selected = optimizer_catalog.select_agents(available, agents)
 
-    Casos tratados:
-    - Com vecnormalize.pkl  → VecNormalize carregado do arquivo (ambiente normalizado)
-    - Sem vecnormalize.pkl  → DummyVecEnv simples (ambiente sem normalização)
-    """
-    model = PPO.load(model_path)
+    if heuristics:
+        wanted = {
+            spec.key
+            for spec in optimizer_catalog.select_agents(
+                [spec for spec in available if spec.is_heuristic],
+                heuristics,
+            )
+        }
+        selected = [
+            spec for spec in selected
+            if not spec.is_heuristic or spec.key in wanted
+        ]
 
-    base_env = create_environment(reward_objective=reward_objective, scenario_name=scenario_name)
-    
-    # Captura o valor atual de base_env no default do argumento para evitar o bug de closure em loop.
-    vec_env = DummyVecEnv([lambda env=base_env: env])
+    if models:
+        wanted_models = {
+            spec.key
+            for spec in optimizer_catalog.select_agents(
+                [spec for spec in available if not spec.is_heuristic],
+                models,
+            )
+        }
+        selected = [
+            spec for spec in selected
+            if spec.is_heuristic or spec.key in wanted_models
+        ]
 
-    vecnormalize_path = find_vecnormalize(model_dir)
-
-    if vecnormalize_path:
-        print(f"  [VecNormalize] Carregando: {vecnormalize_path}")
-        env = VecNormalize.load(vecnormalize_path, vec_env)
-        env.training = False
-        env.norm_reward = False
-    else:
-        print("  [VecNormalize] Não encontrado — usando ambiente sem normalização.")
-        env = vec_env
-
-    return model, env
-
-
-def discover_models(model_base_dir: str, objective: int) -> list:
-    """Descobre automaticamente subdiretórios que contêm best_model.zip
-    dentro de model_base_dir/obj_{objective}/."""
-    search_root = os.path.join(model_base_dir, f"obj_{objective}")
-    found = []
-    if not os.path.isdir(search_root):
-        return found
-    for entry in sorted(os.scandir(search_root), key=lambda e: e.name):
-        if entry.is_dir() and os.path.isfile(os.path.join(entry.path, "best_model.zip")):
-            found.append(entry.name)
-    return found
-
-
-def build_heuristic_optimizer(key: str, base_env, objective):
-    """Instancia o otimizador correspondente à chave da heurística."""
-    if key == "random":
-        return RandomDriverOptimizerGym(base_env)
-    if key == "first_driver":
-        return FirstDriverOptimizerGym(base_env)
-    if key == "nearest_driver":
-        return NearestDriverOptimizerGym(base_env)
-    if key == "lowest_route_cost":
-        cost_obj = RouteCostFunction.get_cost_objective(objective)
-        return LowestCostDriverOptimizerGym(base_env, cost_function=RouteCostFunction(objective=cost_obj))
-    if key == "lowest_marginal_route_cost":
-        cost_obj = MarginalRouteCostFunction.get_cost_objective(objective)
-        return LowestCostDriverOptimizerGym(base_env, cost_function=MarginalRouteCostFunction(objective=cost_obj))
-    raise ValueError(f"Heurística desconhecida: '{key}'")
+    if no_heuristics:
+        selected = [spec for spec in selected if not spec.is_heuristic]
+    if no_rl:
+        selected = [spec for spec in selected if spec.is_heuristic]
+    return selected
 
 
-def run_heuristics(
-    base_env, scenario: str, heuristics: list, objective: int,
-    results_dir: str, num_runs: int, seed: int,
-    save_individual_plots: bool, save_mean_plots: bool,
+def run_agents(
+    *,
+    experiment_name: str,
+    scenario: str,
+    variants: list,
+    objective: int,
+    num_runs: int,
+    seed: int,
+    save_individual_plots: bool,
+    save_mean_plots: bool,
     metrics_fmt: str,
+    num_workers: int,
+    completed_result_keys: list[str],
 ):
-    for key in heuristics:
-        meta = ALL_HEURISTICS[key]
-        output_dir = os.path.join(results_dir, meta["dir"]) + "/"
-        print(f"\n=== Executando simulações com o {meta['label']} no cenário '{scenario}' ===")
-        build_heuristic_optimizer(key, base_env, objective).run_simulations(
-            num_runs, output_dir, seed=seed,
-            save_individual_plots=save_individual_plots,
-            save_mean_plots=save_mean_plots,
-            metrics_fmt=metrics_fmt,
-        )
+    for variant in variants:
+        output_dir = str(
+            exp.agent_dir(experiment_name, objective, scenario, variant.result_key)
+        ) + "/"
 
-
-def run_rl_models(
-    objective: int, scenario: str, models: list, model_base_dir: str,
-    results_dir: str, num_runs: int, seed: int,
-    save_individual_plots: bool, save_mean_plots: bool,
-    metrics_fmt: str,
-):
-    print("\n=== Tentando executar modelos de Aprendizado por Reforço ===")
-
-    if not models:
-        print(f"[AVISO] Nenhum modelo encontrado em '{model_base_dir}/obj_{objective}/'.")
-        return
-
-    for model_name in models:
-        model_dir = os.path.join(model_base_dir, f"obj_{objective}", model_name)
-        model_path = os.path.join(model_dir, "best_model.zip")
-
-        if not os.path.exists(model_path):
-            print(f"\n[AVISO] Modelo não encontrado: {model_path}")
+        if exp.agent_complete(output_dir):
+            print(
+                f"\n=== Pulando {variant.spec.label} ({variant.result_key}) "
+                f"— já completo em {output_dir} ==="
+            )
+            if variant.result_key not in completed_result_keys:
+                completed_result_keys.append(variant.result_key)
             continue
 
-        print(f"\nExecutando PPO — Objetivo {objective}, cenário '{scenario}', modelo '{model_name}'")
+        print(
+            f"\n=== Executando {variant.spec.label} ({variant.result_key}) "
+            f"no cenário '{scenario}' ==="
+        )
         try:
-            model, rl_env = load_rl_model(
-                model_path, model_dir,
-                reward_objective=objective,
-                scenario_name=scenario,
+            env = create_environment(reward_objective=objective, scenario_name=scenario)
+            optimizer = optimizer_catalog.instantiate(
+                variant.spec,
+                env,
+                objective,
+                **variant.extras,
             )
-            rl_optimizer = RLModelOptimizerGym(rl_env, model)
-            rl_optimizer.run_simulations(
-                num_runs,
-                os.path.join(results_dir, f"ppo_{model_name}") + "/",
-                seed=seed,
+            eval_spec = build_eval_job_spec(variant, scenario, objective)
+            optimizer.run_simulations(
+                num_runs, output_dir, seed=seed,
                 save_individual_plots=save_individual_plots,
                 save_mean_plots=save_mean_plots,
                 metrics_fmt=metrics_fmt,
+                num_workers=num_workers,
+                eval_spec=eval_spec,
             )
+            if variant.result_key not in completed_result_keys:
+                completed_result_keys.append(variant.result_key)
+        except KeyboardInterrupt:
+            print("\nInterrompido pelo usuário — encerrando avaliação.")
+            raise
         except Exception as e:
-            print(f"Erro ao executar PPO — objetivo {objective}, cenário '{scenario}', modelo '{model_name}': {e}")
+            print(
+                f"Erro ao executar {variant.result_key} — "
+                f"objetivo {objective}, cenário '{scenario}': {e}"
+            )
             traceback.print_exc()
 
 
 def main():
     parser, args = parse_args()
 
-    if args.all_plots:
-        args.batch_plots = True
-        save_individual_plots = True
-    else:
-        save_individual_plots = False
+    try:
+        spec = exp.resolve_experiment(
+            yaml_path=args.experiment_file,
+            cli_overrides=_cli_overrides(args),
+        )
+    except (ValueError, FileNotFoundError, KeyError) as exc:
+        parser.error(str(exc))
 
-    save_mean_plots       = args.batch_plots
+    save_individual_plots = bool(spec["all_plots"])
+    save_mean_plots = bool(spec["batch_plots"])
+    lowest_variants = spec["_lowest_variants"]
+    rollout_variants = spec["_rollout_variants"]
 
     print("=== Avaliando Agentes no Ambiente de Entrega de Última Milha ===")
-    print(f"  Objetivos    : {args.objectives}")
-    print(f"  Cenários     : {args.scenarios}")
-    print(f"  Modelos RL   : {args.models if args.models else 'descoberta automática'}")
-    print(f"  Heurísticas  : {args.heuristics if not args.no_heuristics else 'desativadas'}")
-    print(f"  RL (PPO)     : {'desativado' if args.no_rl else 'ativado'}")
-    print(f"  Runs         : {args.num_runs} | Seed: {args.seed}")
-    print(f"  Modo experim.: {args.experiment_mode}")
-    print(f"  Model base   : {args.model_base_dir}")
-    if args.experiment_mode == "cross_scenario":
-        print(f"  Train scenario: {args.train_scenario}")
-    print(f"  Results base : {args.results_base_dir}")
+    print(f"  Experimento  : {spec['name']}")
+    print(f"  Saída        : {exp.experiment_dir(spec['name'])}/")
+    print(f"  Objetivos    : {spec['objectives']}")
+    print(f"  Cenários     : {spec['scenarios']}")
+    print(f"  Agentes      : {spec['agents'] if spec['agents'] else 'todos os disponíveis'}")
+    print(
+        f"  Heurísticas  : {spec['heuristics'] if spec['heuristics'] else 'todas'}"
+        f"{' (desativadas)' if spec['no_heuristics'] else ''}"
+    )
+    print(
+        f"  Modelos RL   : {spec['models'] if spec['models'] else 'descoberta automática'}"
+        f"{' (desativados)' if spec['no_rl'] else ''}"
+    )
+    if lowest_variants:
+        print("  Lowest:")
+        for variant in lowest_variants:
+            print(f"    - {optimizer_catalog.lowest_result_key(variant.cost_function)}")
+    else:
+        print("  Lowest       : (nenhum --lowest)")
+    if rollout_variants:
+        print("  Rollouts:")
+        for variant in rollout_variants:
+            key = optimizer_catalog.rollout_result_key(
+                variant.base_optimizer,
+                variant.cost_function,
+                horizon=variant.horizon,
+                alpha=variant.alpha,
+                terminal=variant.terminal,
+            )
+            print(f"    - {key}")
+    else:
+        print("  Rollouts     : (nenhum --rollout)")
+    print(f"  Runs         : {spec['num_runs']} | Seed: {spec['seed']}")
+    print(f"  Workers      : {spec['num_workers']}")
+    print(f"  Modo experim.: {spec['experiment_mode']}")
+    print(f"  Model base   : {spec['model_base_dir']}")
+    if spec["experiment_mode"] == "cross_scenario":
+        print(f"  Train scenario: {spec['train_scenario']}")
     print(f"  Plots indiv. : {'desativados' if not save_individual_plots else 'ativados'}")
     print(f"  Plot médias  : {'desativado' if not save_mean_plots else 'ativado'}")
-    print(f"  Formato métr.: {args.metrics_fmt}")
+    print(f"  Formato métr.: {spec['metrics_fmt']}")
 
-    if not args.no_rl and args.experiment_mode == "cross_scenario":
+    heuristics_filter = set(spec["heuristics"] or [])
+    agents_filter = set(spec["agents"] or [])
+
+    def _heuristic_selected(name: str) -> bool:
+        return (
+            not spec["no_heuristics"]
+            and (not agents_filter or name in agents_filter)
+            and (not heuristics_filter or name in heuristics_filter)
+        )
+
+    rollout_selected = _heuristic_selected("rollout")
+    lowest_selected = _heuristic_selected("lowest")
+
+    explicit_lowest = (
+        ("lowest" in agents_filter) or ("lowest" in heuristics_filter)
+    )
+    explicit_rollout = (
+        ("rollout" in agents_filter) or ("rollout" in heuristics_filter)
+    )
+
+    if spec["rollout"] and not rollout_selected:
+        parser.error(
+            "Erro: --rollout só pode ser usado se rollout estiver entre os agentes"
+        )
+    if explicit_rollout and not rollout_variants:
+        parser.error(
+            "Erro: rollout selecionado exige ao menos um --rollout "
+            "(ex.: --rollout base=lowest,cost=weighted_score,horizon=5,terminal=0)"
+        )
+    if spec["lowest"] and not lowest_selected:
+        parser.error(
+            "Erro: --lowest só pode ser usado se lowest estiver na seleção"
+        )
+    if explicit_lowest and not lowest_variants:
+        parser.error(
+            "Erro: lowest selecionado exige ao menos um --lowest "
+            "(ex.: --lowest cost=route)"
+        )
+
+    heuristic_names = set(optimizer_catalog.keys(is_heuristic=True)) | set(
+        optimizer_catalog.cli_choices(is_heuristic=True)
+    )
+    may_run_rl = not spec["no_rl"] and (
+        not spec["agents"] or any(name not in heuristic_names for name in spec["agents"])
+    )
+    if may_run_rl and spec["experiment_mode"] == "cross_scenario":
         expected_dir = os.path.join(
-            args.model_base_dir, args.train_scenario, DEFAULT_MODEL_SUBDIR
+            spec["model_base_dir"], spec["train_scenario"], DEFAULT_MODEL_SUBDIR
         )
         if not os.path.isdir(expected_dir):
             parser.error(
-                f"--train-scenario '{args.train_scenario}': diretório de modelos não encontrado.\n"
+                f"--train-scenario '{spec['train_scenario']}': "
+                "diretório de modelos não encontrado.\n"
                 f"  Esperado: {expected_dir}\n"
                 "  Verifique --model-base-dir e --train-scenario."
             )
 
-    for objective in args.objectives:
-        for scenario in args.scenarios:
-            results_dir = args.results_base_dir.format(objective, scenario)
+    run_json_path = exp.write_run_json(spec)
+    print(f"  run.json     : {run_json_path}")
 
-            print(f"\n\n=== Iniciando avaliações para Objetivo {objective} no cenário '{scenario}' ===")
-            base_env = create_environment(reward_objective=objective, scenario_name=scenario)
+    wall_t0 = time.perf_counter()
+    started_at = datetime.now(timezone.utc)
+    completed_result_keys: list[str] = []
 
-            if not args.no_heuristics:
-                print("\n=== Executando Heurísticas ===")
-                run_heuristics(
-                    base_env, scenario, args.heuristics, objective, results_dir,
-                    args.num_runs, args.seed,
+    try:
+        for objective in spec["objectives"]:
+            for scenario in spec["scenarios"]:
+                print(
+                    f"\n\n=== Iniciando avaliações para Objetivo {objective} "
+                    f"no cenário '{scenario}' ==="
+                )
+
+                if spec["experiment_mode"] == "same_scenario":
+                    train_scenario = scenario
+                else:
+                    train_scenario = spec["train_scenario"]
+
+                try:
+                    available = optimizer_catalog.available_agents(
+                        spec["model_base_dir"],
+                        train_scenario,
+                        objective,
+                    )
+                    agents = select_agents_for_run(
+                        available,
+                        spec["agents"],
+                        spec["heuristics"],
+                        spec["models"],
+                        spec["no_heuristics"],
+                        spec["no_rl"],
+                    )
+                except KeyError as exc:
+                    parser.error(str(exc))
+
+                if not agents:
+                    print("[AVISO] Nenhum agente selecionado para este objetivo.")
+                    continue
+
+                # lowest/rollout só entram com variantes explícitas
+                if not lowest_variants:
+                    agents = [a for a in agents if a.key != "lowest"]
+                if not rollout_variants:
+                    agents = [a for a in agents if a.key != "rollout"]
+
+                if not agents:
+                    print("[AVISO] Nenhum agente selecionado para este objetivo.")
+                    continue
+
+                try:
+                    variants = optimizer_catalog.expand_evaluations(
+                        agents,
+                        lowest_variants=lowest_variants,
+                        rollout_variants=rollout_variants,
+                        record_decisions=spec["rollout_record_decisions"],
+                    )
+                except (KeyError, ValueError) as exc:
+                    parser.error(str(exc))
+
+                print(
+                    f"  Execuções neste objetivo: "
+                    f"{[variant.result_key for variant in variants]}"
+                )
+                run_agents(
+                    experiment_name=spec["name"],
+                    scenario=scenario,
+                    variants=variants,
+                    objective=objective,
+                    num_runs=spec["num_runs"],
+                    seed=spec["seed"],
                     save_individual_plots=save_individual_plots,
                     save_mean_plots=save_mean_plots,
-                    metrics_fmt=args.metrics_fmt,
+                    metrics_fmt=spec["metrics_fmt"],
+                    num_workers=spec["num_workers"],
+                    completed_result_keys=completed_result_keys,
                 )
 
-            if not args.no_rl:
-                # Resolve o diretório de modelos de acordo com o modo de experimento.
-                if args.experiment_mode == "same_scenario":
-                    train_scenario = scenario          # modelo treinado no próprio cenário
-                else:                                  # cross_scenario
-                    train_scenario = args.train_scenario
-
-                effective_model_dir = os.path.join(
-                    args.model_base_dir, train_scenario, DEFAULT_MODEL_SUBDIR
+                # Atualiza summary.csv após cada cenário
+                all_keys = list(dict.fromkeys(
+                    completed_result_keys
+                    + [v.result_key for v in variants]
+                ))
+                exp.rebuild_summary_csv(
+                    name=spec["name"],
+                    objectives=spec["objectives"],
+                    scenarios=spec["scenarios"],
+                    agent_keys=all_keys,
                 )
 
-                models = args.models if args.models else discover_models(effective_model_dir, objective)
-                run_rl_models(
-                    objective, scenario, models, effective_model_dir, results_dir,
-                    args.num_runs, args.seed,
-                    save_individual_plots=save_individual_plots,
-                    save_mean_plots=save_mean_plots,
-                    metrics_fmt=args.metrics_fmt,
-                )
-
-    print("\n=== Avaliação concluída ===")
+        # Summary final
+        exp.rebuild_summary_csv(
+            name=spec["name"],
+            objectives=spec["objectives"],
+            scenarios=spec["scenarios"],
+            agent_keys=completed_result_keys,
+        )
+    finally:
+        duration = time.perf_counter() - wall_t0
+        finished_path = exp.finalize_run_json(
+            spec["name"],
+            started_at=started_at,
+            duration_seconds=duration,
+        )
+        print(
+            f"\n=== Avaliação concluída — {exp.experiment_dir(spec['name'])}/ "
+            f"(duração={duration:.2f}s) ==="
+        )
+        print(f"  run.json     : {finished_path}")
 
 
 if __name__ == "__main__":

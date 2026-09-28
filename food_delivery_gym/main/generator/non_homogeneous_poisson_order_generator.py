@@ -19,7 +19,7 @@ class NonHomogeneousPoissonOrderGenerator(PoissonOrderGenerator):
     """
 
     def __init__(self, estimated_num_orders: int, time_window: float,
-                 rate_function: callable, max_rate: float = None):
+                 rate_function: callable, max_rate: float = None, rng=None):
         self.rate_function = rate_function
         if max_rate is None:
             n_samples = max(500, int(time_window * 20))
@@ -29,14 +29,17 @@ class NonHomogeneousPoissonOrderGenerator(PoissonOrderGenerator):
         else:
             self.max_rate = max_rate
 
-        super().__init__(estimated_num_orders, time_window, lambda_rate=None)
+        super().__init__(estimated_num_orders, time_window, lambda_rate=None, rng=rng)
 
     def get_rate_function(self):
         return self.rate_function
 
     def generate_arrival_times(self) -> list:
+        return self.sample_arrivals_after(0)
+
+    def sample_arrivals_after(self, now: float) -> list:
         arrival_times = []
-        current_time = 0
+        current_time = now
 
         while current_time < self.time_window:
             interarrival = self.rng.exponential(1.0 / self.max_rate)

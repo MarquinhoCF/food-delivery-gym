@@ -1,0 +1,308 @@
+from typing import List, Literal, Optional, Type, Tuple
+
+import numpy as np
+
+from food_delivery_gym.main.driver.driver import Driver
+from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
+from food_delivery_gym.main.optimizer.optimizer_gym.optmizer_gym import (
+    OptimizerGym,
+    jsonable_hyperparameter,
+)
+from food_delivery_gym.main.optimizer.optimizer_gym.nearest_driver_optimizer_gym import NearestDriverOptimizerGym
+from food_delivery_gym.main.route.route import Route
+
+TerminalCostMode = Literal["0", "model"]
+
+
+def _coord_to_list(coord) -> list[float]:
+    return [float(coord[0]), float(coord[1])]
+
+
+class RolloutOptimizerGym(OptimizerGym):
+    """
+    Heurística de Rollout sobre o OptimizerGym.
+
+    Para o pedido/estado atual, e para cada motorista candidato (ação):
+      1. Clona o ambiente real (snapshot/restore SimPy), preservando-o intacto.
+         O futuro ainda não realizado é reamostrado: todos os candidatos da
+         mesma decisão compartilham um cenário independente do RNG real.
+      2. Aplica a ação candidata no ambiente clonado (1 passo real).
+      3. A partir daí, executa a política de base (base_optimizer) no
+         ambiente clonado, acumulando recompensa descontada por α, até:
+           - o episódio terminar (done/truncated), ou
+           - atingir o horizonte `horizon` (se definido), somando nesse
+             caso uma aproximação de custo terminal.
+      4. Escolhe a ação com o maior Q-factor estimado (reward imediato +
+         α * valor do rollout) e a retorna para ser executada no ambiente
+         REAL (isso é feito pelo framework, via assign_driver_to_order).
+    """
+
+    def __init__(
+        self,
+        environment: FoodDeliveryGymEnv,
+        base_optimizer_cls: Type[OptimizerGym] = NearestDriverOptimizerGym,
+        base_optimizer_kwargs: Optional[dict] = None,
+        alpha: float = 1.0,
+        horizon: Optional[int] = None,
+        record_decisions: bool = True,
+        scenario_seed: int = 0,
+        terminal_cost_mode: TerminalCostMode = "0",
+    ):
+        """
+        Args:
+            environment: ambiente real (FoodDeliveryGymEnv), não vetorizado.
+            base_optimizer_cls: classe do otimizador usado como política de
+                base para completar as trajetórias de rollout.
+            base_optimizer_kwargs: kwargs extras para instanciar a base
+                (ex.: {"cost_function": ...}).
+            alpha: fator de desconto aplicado a cada passo adicional do
+                rollout (alpha=1.0 -> sem desconto).
+            horizon: número de passos de rollout após a ação candidata. Se
+                None, o rollout roda até o episódio terminar.
+            record_decisions: se True, grava Q-values e trajetórias de
+                rollout em `decision_log` a cada chamada de select_driver.
+            scenario_seed: semente do RNG próprio do rollout. Cada decisão
+                sorteia um cenário hipotético independente do ambiente real;
+                todos os candidatos dessa decisão compartilham o mesmo cenário.
+            terminal_cost_mode: "0" força custo terminal 0.0; "model" carrega
+                o modelo linear e falha se o artefato estiver ausente ou
+                incompatível com alpha.
+        """
+        super().__init__(environment)
+        if terminal_cost_mode not in ("0", "model"):
+            raise ValueError(
+                f"terminal_cost_mode inválido: '{terminal_cost_mode}'. "
+                "Opções: '0', 'model'"
+            )
+        self.base_optimizer_cls = base_optimizer_cls
+        self.base_optimizer_kwargs = base_optimizer_kwargs or {}
+        self.alpha = alpha
+        self.horizon = horizon
+        self.record_decisions = record_decisions
+        self.scenario_seed = int(scenario_seed)
+        self.terminal_cost_mode = terminal_cost_mode
+        self._scenario_rng = np.random.default_rng(self.scenario_seed)
+        self.decision_log: list[dict] = []
+        self._terminal_cost_model = None
+
+    def prepare_episode(self, seed: int | None = None):
+        """Reseta ambiente e o RNG de cenários hipotéticos do rollout."""
+        super().prepare_episode(seed=seed)
+        episode_seed = 0 if seed is None else int(seed)
+        self.scenario_seed = episode_seed
+        self._scenario_rng = np.random.default_rng(episode_seed)
+
+    def get_title(self):
+        base_name = self.base_optimizer_cls.__name__
+        horizon_str = f"H={self.horizon}" if self.horizon is not None else "H=inf"
+        return f"Rollout({base_name}, alpha={self.alpha}, {horizon_str}, TC={self.terminal_cost_mode})"
+
+    def get_hyperparameters(self):
+        return {
+            "base_optimizer": self.base_optimizer_cls.__name__,
+            "base_optimizer_kwargs": jsonable_hyperparameter(self.base_optimizer_kwargs),
+            "alpha": jsonable_hyperparameter(self.alpha),
+            "horizon": jsonable_hyperparameter(self.horizon),
+            "record_decisions": jsonable_hyperparameter(self.record_decisions),
+            "scenario_seed": jsonable_hyperparameter(self.scenario_seed),
+            "terminal_cost_mode": jsonable_hyperparameter(self.terminal_cost_mode),
+        }
+
+    def _load_terminal_cost_model(self):
+        """
+        Localiza o modelo linear treinado por scripts/collect_terminal_cost.py
+        para (cenário, objetivo, base). Em modo "model", ausência ou
+        incompatibilidade de alpha levantam exceção.
+        """
+        from food_delivery_gym.main.optimizer import catalog
+        from food_delivery_gym.main.optimizer.terminal_cost.linear_model import (
+            LinearTerminalCostModel,
+            linear_model_path,
+        )
+
+        scenario = FoodDeliveryGymEnv.SCENARIO_NAME
+        objective = self.gym_env.get_reward_objective()
+        base_key = catalog.base_variant_key_for_instance(
+            self.base_optimizer_cls, self.base_optimizer_kwargs
+        )
+        if scenario is None:
+            raise ValueError(
+                "terminal_cost_mode='model' requer FoodDeliveryGymEnv.SCENARIO_NAME "
+                "definido (chame set_scenario antes)."
+            )
+        if base_key is None:
+            raise ValueError(
+                "terminal_cost_mode='model' não conseguiu identificar a base do "
+                "rollout no catálogo (classe/cost_function)."
+            )
+
+        path = linear_model_path(scenario, objective, base_key)
+        if not path.is_file():
+            raise FileNotFoundError(
+                "Modelo de custo terminal não encontrado para "
+                f"scenario={scenario!r}, objective={objective}, base={base_key!r}.\n"
+                f"  Esperado: {path}\n"
+                "  Rode scripts/collect_terminal_cost.py ou use terminal=0."
+            )
+
+        model = LinearTerminalCostModel.load(path)
+        if abs(model.alpha - self.alpha) > 1e-9:
+            raise ValueError(
+                "Modelo de custo terminal com alpha incompatível: "
+                f"modelo alpha={model.alpha}, rollout alpha={self.alpha} "
+                f"(scenario={scenario!r}, objective={objective}, base={base_key!r}, "
+                f"path={path})."
+            )
+        return model
+
+    def terminal_cost_to_go(self, cloned_env: FoodDeliveryGymEnv) -> float:
+        """
+        Valor estimado (retorno descontado restante) da política de base a
+        partir do estado atual do clone, usado para compensar o truncamento
+        do rollout em `self.horizon` passos.
+
+        Com terminal_cost_mode='0' retorna 0.0. Com 'model', usa a regressão
+        linear de scripts/collect_terminal_cost.py e falha se o artefato
+        estiver ausente ou incompatível.
+        """
+        if self.terminal_cost_mode == "0":
+            return 0.0
+
+        if self._terminal_cost_model is None:
+            self._terminal_cost_model = self._load_terminal_cost_model()
+
+        from food_delivery_gym.main.optimizer.terminal_cost.features import extract_features
+
+        return self._terminal_cost_model.predict(extract_features(cloned_env))
+
+    def _next_scenario_seed(self) -> int:
+        return int(self._scenario_rng.integers(0, 2**31 - 1))
+
+    def _clone_env(self, scenario_seed: int) -> FoodDeliveryGymEnv:
+        return self.gym_env.clone(future="resample", scenario_seed=scenario_seed)
+
+    def _rollout_from(self, cloned_env: FoodDeliveryGymEnv, obs, done: bool, truncated: bool) -> Tuple[float, list[dict], dict | None]:
+        """
+        Executa a política de base no clone e retorna
+        (valor_descontado, trajetória_de_passos, custo_terminal).
+
+        `custo_terminal` é None se o horizonte não truncou a trajetória.
+        Quando presente, `estimate` é o valor cru de `terminal_cost_to_go` e
+        `discounted` é o que foi somado ao valor do rollout.
+        """
+        trajectory: list[dict] = []
+
+        if done or truncated:
+            return 0.0, trajectory, None
+
+        base_optimizer = self.base_optimizer_cls(cloned_env, **self.base_optimizer_kwargs)
+        base_optimizer.state = obs
+        base_optimizer.done = done
+        base_optimizer.truncated = truncated
+
+        total_reward = 0.0
+        discount = self.alpha
+        steps = 0
+
+        while not (base_optimizer.done or base_optimizer.truncated):
+            if self.horizon is not None and steps >= self.horizon:
+                estimate = float(self.terminal_cost_to_go(cloned_env))
+                discounted = discount * estimate
+                total_reward += discounted
+                return total_reward, trajectory, {
+                    "estimate": estimate,
+                    "discounted": float(discounted),
+                }
+
+            order = cloned_env.get_current_order()
+            action = base_optimizer.assign_driver_to_order(base_optimizer.state, order)
+
+            drivers = cloned_env.get_drivers()
+            driver = drivers[action] if 0 <= action < len(drivers) else None
+
+            obs, reward, terminated, truncated_flag, info = cloned_env.step(action)
+
+            discounted_reward = discount * reward
+            if self.record_decisions:
+                trajectory.append({
+                    "step": steps,
+                    "action": int(action),
+                    "driver_id": int(driver.driver_id) if driver is not None else None,
+                    "order_id": int(order.order_id) if order is not None else None,
+                    "reward": float(reward),
+                    "discounted_reward": float(discounted_reward),
+                    "terminated": bool(terminated),
+                    "truncated": bool(truncated_flag),
+                })
+
+            base_optimizer.state = obs
+            base_optimizer.done = terminated
+            base_optimizer.truncated = truncated_flag
+
+            total_reward += discounted_reward
+            discount *= self.alpha
+            steps += 1
+
+        return total_reward, trajectory, None
+
+    # Seleção da ação (motorista) via rollout
+    def select_driver(self, obs: dict, drivers: List[Driver], route: Route):
+        best_action = None
+        best_value = float("-inf")
+        candidates: list[dict] = []
+        scenario_seed = self._next_scenario_seed()
+
+        for action in range(len(drivers)):
+            cloned_env = self._clone_env(scenario_seed)
+
+            order_before = self.gym_env.get_current_order()
+            obs_after, reward, terminated, truncated, info = cloned_env.step(action)
+
+            rollout_value, trajectory, terminal = self._rollout_from(
+                cloned_env, obs_after, terminated, truncated
+            )
+            q_value = reward + self.alpha * rollout_value
+
+            if self.record_decisions:
+                driver = drivers[action]
+                candidates.append({
+                    "action": action,
+                    "driver_id": int(driver.driver_id),
+                    "coord": _coord_to_list(driver.coordinate),
+                    "order_id": int(order_before.order_id) if order_before is not None else None,
+                    "immediate_reward": float(reward),
+                    "rollout_value": float(rollout_value),
+                    "terminal_cost": None if terminal is None else float(terminal["estimate"]),
+                    "terminal_cost_discounted": (
+                        None if terminal is None else float(terminal["discounted"])
+                    ),
+                    "q_value": float(q_value),
+                    "terminated_after_action": bool(terminated),
+                    "truncated_after_action": bool(truncated),
+                    "trajectory": trajectory,
+                })
+
+            if q_value > best_value:
+                best_value = q_value
+                best_action = action
+
+        if self.record_decisions:
+            order = self.gym_env.get_current_order()
+            simpy_env = self.gym_env.get_simpy_env()
+            chosen_driver = drivers[best_action] if best_action is not None else None
+            self.decision_log.append({
+                "decision_idx": len(self.decision_log),
+                "sim_time": float(simpy_env.now),
+                "order_id": int(order.order_id) if order is not None else None,
+                "chosen_action": best_action,
+                "chosen_driver_id": (
+                    int(chosen_driver.driver_id) if chosen_driver is not None else None
+                ),
+                "best_q": float(best_value) if best_action is not None else None,
+                "alpha": float(self.alpha),
+                "horizon": self.horizon,
+                "scenario_seed": int(scenario_seed),
+                "candidates": candidates,
+            })
+
+        return best_action

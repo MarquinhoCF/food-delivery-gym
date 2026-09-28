@@ -38,6 +38,7 @@ class DynamicRouteDriver(Driver):
         status: Optional[DriverStatus] = DriverStatus.AVAILABLE,
         movement_rate: Optional[Number] = 5,
         reward_objective: Optional[Number] = 1,
+        start_processes: bool = True,
     ):
         super().__init__(
             id=id,
@@ -48,6 +49,7 @@ class DynamicRouteDriver(Driver):
             status=status,
             movement_rate=movement_rate,
             reward_objective=reward_objective,
+            start_processes=start_processes,
         )
         
         self.tolerance_percentage = tolerance_percentage  # Limite de piora percentual aceitável

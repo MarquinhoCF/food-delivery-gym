@@ -12,7 +12,8 @@ class InitialOrderGenerator(InitialGenerator):
             establishment = self.rng.choice(env.state.establishments, size=None)
             customer = self.rng.choice(env.state.customers, size=None)
 
-            items = self.rng.choice(establishment.catalog.items, size=2, replace=False).tolist()
+            # TODO: no futuro permitir multi-item por pedido (cooks paralelizam itens).
+            items = [self.rng.choice(establishment.catalog.items)]
 
             order = Order(customer, establishment, env.now, items)
 

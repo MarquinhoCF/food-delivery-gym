@@ -1,14 +1,17 @@
 from abc import ABC, abstractmethod
 from typing import List
 
+import numpy as np
+
 from food_delivery_gym.main.base.types import Coordinate, Number
-from food_delivery_gym.main.utils.random_manager import RandomManager
+from food_delivery_gym.main.utils.rng_factory import RngFactory
+
 
 class Map(ABC):
 
-    def __init__(self, size):
+    def __init__(self, size, rng: np.random.Generator | None = None):
         self.size = size
-        self.rng = RandomManager().get_random_instance()
+        self.rng = rng if rng is not None else RngFactory().next()
 
     @abstractmethod
     def distance(self, coord1: Coordinate, coord2: Coordinate) -> Number:
