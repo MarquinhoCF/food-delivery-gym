@@ -379,13 +379,6 @@ class OptimizerGym(Optimizer, ABC):
             episode = result["episode"]
             stats.register_episode_dict(episode)
             episode_idx = len(stats._raw_episodes) - 1
-            eval_s = episode.get("eval_seconds")
-            eval_str = f" | eval = {eval_s:.2f}s" if eval_s is not None else ""
-            print(
-                f"  Execução {idx + 1}: Retorno = {episode['reward']:.4f} | "
-                f"Passos = {episode['length']} | SimPy t = {episode['simpy_time']} | "
-                f"Truncada = {episode['truncated']}{eval_str}"
-            )
             if save_individual_plots:
                 try:
                     board: Board = stats.get_episode_board(episode_idx=episode_idx)

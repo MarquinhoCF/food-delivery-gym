@@ -81,8 +81,10 @@ def main():
         ).format(optimizer_lines="\n".join(
             f" - {name}: {optimizer_catalog.cli_label(name)}"
             + (
-                " (requer --cost-function)"
-                if "cost_function" in optimizer_catalog.requires(name)
+                " (requer --lowest cost=...)"
+                if optimizer_catalog.resolve_key(name) == "lowest"
+                else " (requer --rollout base=...,...)"
+                if optimizer_catalog.resolve_key(name) == "rollout"
                 else " (aceita --model-path)"
                 if "model" in optimizer_catalog.requires(name)
                 else ""
@@ -97,25 +99,32 @@ def main():
                         help="Modo de execução")
     parser.add_argument("--optimizer", default="random",
                         help="Otimizador do catálogo ou chave de modelo descoberta (ex.: ppo_18M_steps)")
-    parser.add_argument("--cost-function", choices=optimizer_catalog.COST_FUNCTION_CHOICES, default=None,
-                        help="Função de custo (obrigatória com --optimizer lowest, ou com --optimizer rollout e --base-optimizer lowest)")
-    parser.add_argument("--base-optimizer", choices=optimizer_catalog.cli_choices(rollout_base=True), default=None,
-                        help=f"Política de base do rollout (apenas com --optimizer rollout; padrão: {optimizer_catalog.DEFAULT_ROLLOUT_BASE})")
-    parser.add_argument("--alpha", type=float, default=optimizer_catalog.DEFAULT_ROLLOUT_ALPHA,
-                        help=f"Fator de desconto do rollout (padrão: {optimizer_catalog.DEFAULT_ROLLOUT_ALPHA})")
-    parser.add_argument("--horizon", type=int, default=optimizer_catalog.DEFAULT_ROLLOUT_HORIZON,
-                        help=f"Passos de rollout após a ação candidata (padrão: {optimizer_catalog.DEFAULT_ROLLOUT_HORIZON})")
     parser.add_argument(
-        "--terminal-cost",
-        choices=optimizer_catalog.TERMINAL_COST_MODES,
-        default=optimizer_catalog.DEFAULT_ROLLOUT_TERMINAL,
+        "--lowest",
+        default=None,
+        metavar="SPEC",
         help=(
-            "Custo terminal do rollout: '0' força zero; 'model' carrega o linear model "
-            f"(padrão: {optimizer_catalog.DEFAULT_ROLLOUT_TERMINAL})."
+            "Variante de lowest (mesmo formato do run_batch_eval). "
+            f"Formato: cost=route. Opções de cost: {optimizer_catalog.COST_FUNCTION_CHOICES}. "
+            "Ex.: --lowest cost=route"
         ),
     )
     parser.add_argument(
-        "--model-path", 
+        "--rollout",
+        default=None,
+        metavar="SPEC",
+        help=(
+            "Variante de rollout (mesmo formato do run_batch_eval). "
+            "Formato: base=...,cost=...,horizon=...,alpha=...,terminal=0|model. "
+            f"Defaults: base={optimizer_catalog.DEFAULT_ROLLOUT_BASE}, "
+            f"horizon={optimizer_catalog.DEFAULT_ROLLOUT_HORIZON}, "
+            f"alpha={optimizer_catalog.DEFAULT_ROLLOUT_ALPHA}, "
+            f"terminal={optimizer_catalog.DEFAULT_ROLLOUT_TERMINAL}. "
+            "Ex.: --rollout base=lowest,cost=route,horizon=5,terminal=0"
+        ),
+    )
+    parser.add_argument(
+        "--model-path",
         default=None,
         help=(
             "Caminho para um best_model.zip avulso (atalho com --optimizer rl).\n"
@@ -154,27 +163,36 @@ def main():
         )
         parser.error(f"Otimizador '{args.optimizer}' não reconhecido. Opções: {known}")
 
-    if is_catalog:
-        needed = optimizer_catalog.requires(args.optimizer)
-        is_rollout = optimizer_catalog.resolve_key(args.optimizer) == "rollout"
-    else:
-        needed = ()
-        is_rollout = False
+    optimizer_key = (
+        optimizer_catalog.resolve_key(args.optimizer) if is_catalog else None
+    )
+    is_lowest = optimizer_key == "lowest"
+    is_rollout = optimizer_key == "rollout"
 
-    base_name = args.base_optimizer or optimizer_catalog.DEFAULT_ROLLOUT_BASE
-    base_needs_cost = is_rollout and "cost_function" in optimizer_catalog.requires(base_name)
+    if args.lowest and not is_lowest:
+        parser.error("Erro: --lowest só pode ser usado com --optimizer lowest")
+    if args.rollout and not is_rollout:
+        parser.error("Erro: --rollout só pode ser usado com --optimizer rollout")
+    if is_lowest and not args.lowest:
+        parser.error(
+            "Erro: --optimizer lowest exige --lowest "
+            "(ex.: --lowest cost=route)"
+        )
+    if is_rollout and not args.rollout:
+        parser.error(
+            "Erro: --optimizer rollout exige --rollout "
+            "(ex.: --rollout base=lowest,cost=route,horizon=5,terminal=0)"
+        )
 
-    if args.base_optimizer and not is_rollout:
-        parser.error("Erro: --base-optimizer só pode ser usado com --optimizer rollout")
-
-    if args.cost_function and "cost_function" not in needed and not base_needs_cost:
-        parser.error("Erro: --cost-function só pode ser usado com --optimizer lowest, ou com --optimizer rollout e --base-optimizer lowest")
-
-    if "cost_function" in needed and not args.cost_function:
-        parser.error("Erro: --optimizer lowest requer --cost-function")
-
-    if base_needs_cost and not args.cost_function:
-        parser.error("Erro: --base-optimizer lowest requer --cost-function")
+    lowest_variant = None
+    rollout_variant = None
+    try:
+        if args.lowest:
+            lowest_variant = optimizer_catalog.parse_lowest_cli(args.lowest)
+        if args.rollout:
+            rollout_variant = optimizer_catalog.parse_rollout_cli(args.rollout)
+    except ValueError as exc:
+        parser.error(str(exc))
 
     if uses_model_path and not args.model_path:
         parser.error("Erro: --optimizer rl requer --model-path com o caminho para best_model.zip")
@@ -202,15 +220,23 @@ def main():
             env = optimizer.gym_env
         else:
             env = prepare_env(args.scenario, args.objective, seed=args.seed, render=args.render)
+            build_kwargs = {}
+            if lowest_variant is not None:
+                build_kwargs["cost_function"] = lowest_variant.cost_function
+            if rollout_variant is not None:
+                build_kwargs.update(
+                    base_optimizer=rollout_variant.base_optimizer,
+                    alpha=rollout_variant.alpha,
+                    horizon=rollout_variant.horizon,
+                    terminal_cost_mode=rollout_variant.terminal,
+                )
+                if rollout_variant.cost_function:
+                    build_kwargs["cost_function"] = rollout_variant.cost_function
             optimizer = optimizer_catalog.build(
                 args.optimizer,
                 env,
                 args.objective,
-                cost_function=args.cost_function,
-                base_optimizer=base_name,
-                alpha=args.alpha,
-                horizon=args.horizon,
-                terminal_cost_mode=args.terminal_cost,
+                **build_kwargs,
             )
 
         print(f"=== Ambiente pronto com otimizador: {optimizer.get_title()} ===")
