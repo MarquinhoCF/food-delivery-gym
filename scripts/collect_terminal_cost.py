@@ -1,39 +1,9 @@
-"""
-Coleta o retorno restante da política de base e ajusta a regressão linear
-do custo terminal usada por RolloutOptimizerGym.terminal_cost_to_go.
-
-Para cada (cenário, objetivo, base do rollout), roda episódios completos da
-base no ambiente real e grava, por decisão, as features do estado, a
-observação bruta (para uma rede neural futura) e o retorno descontado
-G_t = r_t + alpha*r_{t+1} + ...
-
-Saída por variante:
-    data/terminal_cost/{scenario}/obj_{objective}/{base_key}/samples.npz
-    data/terminal_cost/{scenario}/obj_{objective}/{base_key}/linear_model.npz
-
-Exemplo:
-    python3 -m scripts.collect_terminal_cost --scenarios simple --objectives 3 \
-        --bases lowest --cost-functions weighted_score --episodes 2000
-"""
-
-import argparse
-import time
-from collections import defaultdict
-from importlib.resources import files
-from pathlib import Path
-
-import numpy as np
-
-from food_delivery_gym.main.environment.env_mode import EnvMode
 from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
 from food_delivery_gym.main.optimizer import catalog
 from food_delivery_gym.main.optimizer.terminal_cost.features import FEATURE_NAMES, extract_features
 from food_delivery_gym.main.optimizer.terminal_cost.linear_model import (
     discounted_returns,
-    fit_linear_model,
-    linear_model_path,
     samples_path,
-    save_linear_model,
 )
 from food_delivery_gym.main.scenarios import get_all_scenarios, get_defaults_scenarios
 
@@ -236,25 +206,11 @@ def main():
                 out_samples = samples_path(scenario, objective, base_key, root)
                 out_samples.parent.mkdir(parents=True, exist_ok=True)
                 np.savez_compressed(out_samples, **dataset)
-
-                coef, mean, std = fit_linear_model(dataset["features"], dataset["returns"])
-                out_model = linear_model_path(scenario, objective, base_key, root)
-                save_linear_model(
-                    out_model, coef, mean, std,
-                    alpha=args.alpha, scenario=scenario, objective=objective, base_key=base_key,
-                )
-
-                standardized = (dataset["features"] - mean) / std
-                predictions = coef[0] + standardized @ coef[1:]
-                residual = dataset["returns"] - predictions
-                total = dataset["returns"] - dataset["returns"].mean()
-                r_squared = 1.0 - (residual @ residual) / max((total @ total), 1e-12)
                 elapsed = time.perf_counter() - start
 
                 print(
                     f"[{scenario} | obj {objective} | {base_key}] "
-                    f"{len(dataset['returns'])} amostras, R²={r_squared:.4f}, "
-                    f"{elapsed:.1f}s -> {out_model}"
+                    f"{len(dataset['returns'])} amostras, {elapsed:.1f}s -> {out_samples}"
                 )
 
 

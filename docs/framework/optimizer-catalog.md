@@ -115,7 +115,7 @@ Exemplos:
 
 Pastas antigas só com `rollout_<base_variant>` ainda são reconhecidas (defaults de horizonte/alpha/terminal).
 
-Calibração do modo `terminal=model`: [collect_terminal_cost](../tools/collect-terminal-cost.md).  
+Calibração do modo `terminal=model`: [collect_terminal_cost](../tools/collect-terminal-cost.md) e [fit_terminal_cost](../tools/fit-terminal-cost.md).  
 Visualização de decisões: [visualize_rollout_decisions](../tools/visualize-rollout-decisions.md).
 
 ## Modelos RL

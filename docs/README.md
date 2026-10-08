@@ -40,6 +40,7 @@ Este é o índice central da documentação. O [README principal](../README.md) 
 | [generate_boxplots](tools/generate-boxplots.md) | Boxplots comparativos |
 | [convert_metrics](tools/convert-metrics.md) | Conversão NPZ ↔ JSON |
 | [collect_terminal_cost](tools/collect-terminal-cost.md) | Coleta de custo terminal para rollout |
+| [fit_terminal_cost](tools/fit-terminal-cost.md) | Ajuste da regressão linear do custo terminal |
 | [visualize_rollout_decisions](tools/visualize-rollout-decisions.md) | Visualização de decisões do rollout |
 
 ## RL Baselines3 Zoo

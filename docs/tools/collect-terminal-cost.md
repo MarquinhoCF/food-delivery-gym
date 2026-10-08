@@ -1,6 +1,6 @@
 # Script `collect_terminal_cost`
 
-Coleta o retorno restante da política de base e ajusta a regressão linear do custo terminal usada por `RolloutOptimizerGym` quando `terminal=model`.
+Coleta o retorno restante da política de base do rollout e grava `samples.npz` por variante. O ajuste da regressão linear fica em [`fit_terminal_cost`](fit-terminal-cost.md).
 
 ```bash
 python -m scripts.collect_terminal_cost [opções]
@@ -28,6 +28,12 @@ python -m scripts.collect_terminal_cost \
   --bases lowest \
   --cost-functions weighted_score \
   --episodes 2000
+
+python -m scripts.fit_terminal_cost \
+  --scenarios simple \
+  --objectives 3 \
+  --bases lowest \
+  --cost-functions weighted_score
 ```
 
 ## Saída
@@ -35,9 +41,8 @@ python -m scripts.collect_terminal_cost \
 ```
 data/terminal_cost/<scenario>/obj_<N>/<base_key>/
   samples.npz
-  linear_model.npz
 ```
 
-Após a coleta, use `terminal: model` no YAML de rollout ou inclua `terminal=model` na flag `--rollout` do `test_runner` / `run_batch_eval`.
+Depois de ajustar com `fit_terminal_cost` (gera `linear_model.npz`), use `terminal: model` no YAML de rollout ou inclua `terminal=model` na flag `--rollout` do `test_runner` / `run_batch_eval`.
 
-Consulte também [visualize_rollout_decisions](visualize-rollout-decisions.md) e [Otimizadores](../framework/optimizers.md).
+Consulte também [fit_terminal_cost](fit-terminal-cost.md), [visualize_rollout_decisions](visualize-rollout-decisions.md) e [Otimizadores](../framework/optimizers.md).

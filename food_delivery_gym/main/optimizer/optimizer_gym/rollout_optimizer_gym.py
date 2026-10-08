@@ -110,8 +110,9 @@ class RolloutOptimizerGym(OptimizerGym):
 
     def _load_terminal_cost_model(self):
         """
-        Localiza o modelo linear treinado por scripts/collect_terminal_cost.py
-        para (cenário, objetivo, base). Em modo "model", ausência ou
+        Localiza o modelo linear treinado por scripts/fit_terminal_cost.py
+        (a partir de samples de scripts/collect_terminal_cost.py) para
+        (cenário, objetivo, base). Em modo "model", ausência ou
         incompatibilidade de alpha levantam exceção.
         """
         from food_delivery_gym.main.optimizer import catalog
@@ -142,7 +143,8 @@ class RolloutOptimizerGym(OptimizerGym):
                 "Modelo de custo terminal não encontrado para "
                 f"scenario={scenario!r}, objective={objective}, base={base_key!r}.\n"
                 f"  Esperado: {path}\n"
-                "  Rode scripts/collect_terminal_cost.py ou use terminal=0."
+                "  Rode scripts/collect_terminal_cost.py e "
+                "scripts/fit_terminal_cost.py, ou use terminal=0."
             )
 
         model = LinearTerminalCostModel.load(path)
@@ -162,7 +164,7 @@ class RolloutOptimizerGym(OptimizerGym):
         do rollout em `self.horizon` passos.
 
         Com terminal_cost_mode='0' retorna 0.0. Com 'model', usa a regressão
-        linear de scripts/collect_terminal_cost.py e falha se o artefato
+        linear de scripts/fit_terminal_cost.py e falha se o artefato
         estiver ausente ou incompatível.
         """
         if self.terminal_cost_mode == "0":

@@ -33,4 +33,4 @@ python -m scripts.visualize_rollout_decisions \
   --terminal-cost 0
 ```
 
-Consulte também [collect_terminal_cost](collect-terminal-cost.md) e [test_runner](test-runner.md).
+Consulte também [collect_terminal_cost](collect-terminal-cost.md), [fit_terminal_cost](fit-terminal-cost.md) e [test_runner](test-runner.md).

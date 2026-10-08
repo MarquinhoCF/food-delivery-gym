@@ -40,6 +40,7 @@ python -m scripts.convert_metrics data/runs/execucoes --dry-run
 
 ```bash
 python -m scripts.collect_terminal_cost --help
+python -m scripts.fit_terminal_cost --help
 python -m scripts.visualize_rollout_decisions --help
 ```
 
