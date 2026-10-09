@@ -42,6 +42,7 @@ Este é o índice central da documentação. O [README principal](../README.md) 
 | [collect_terminal_cost](tools/collect-terminal-cost.md) | Coleta de custo terminal para rollout |
 | [fit_terminal_cost](tools/fit-terminal-cost.md) | Ajuste da regressão linear do custo terminal |
 | [visualize_rollout_decisions](tools/visualize-rollout-decisions.md) | Visualização de decisões do rollout |
+| [visualize_mcts_decisions](tools/visualize-mcts-decisions.md) | Visualização da árvore MCTS |
 
 ## RL Baselines3 Zoo
 

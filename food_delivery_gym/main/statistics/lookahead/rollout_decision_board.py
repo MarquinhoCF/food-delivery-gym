@@ -38,18 +38,28 @@ class RolloutDecisionBoard(Board):
             plt.show()
             plt.close(fig)
 
-    def save(self, dir_path: str) -> None:
+    def save(self, dir_path: str, decision_idx: int) -> None:
         matplotlib.use("Agg")
+        decision = self._require_decision(decision_idx)
         out_dir = os.path.join(dir_path, "rollout_decisions")
         os.makedirs(out_dir, exist_ok=True)
+        fig = self._build_figure(decision)
+        name = f"decision_{decision_idx + 1:03d}.png"
+        fig.savefig(os.path.join(out_dir, name), dpi=150, bbox_inches="tight")
+        plt.close(fig)
 
-        # Uma figura por vez: evita acumular centenas de Figure abertas.
+    def _require_decision(self, decision_idx: int) -> dict[str, Any]:
+        n = len(self.decision_log)
+        if n == 0:
+            raise SystemExit("decision_log vazio: nenhuma decisão gravada")
+        if decision_idx < 0 or decision_idx >= n:
+            raise SystemExit(
+                f"--decision={decision_idx} fora do range; disponíveis: 0..{n - 1}"
+            )
         for decision in self.decision_log:
-            fig = self._build_figure(decision)
-            idx = int(decision.get("decision_idx", 0)) + 1
-            name = f"decision_{idx:03d}.png"
-            fig.savefig(os.path.join(out_dir, name), dpi=150, bbox_inches="tight")
-            plt.close(fig)
+            if int(decision.get("decision_idx", -1)) == decision_idx:
+                return decision
+        return self.decision_log[decision_idx]
 
     def dump_json(self, path: str) -> None:
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)

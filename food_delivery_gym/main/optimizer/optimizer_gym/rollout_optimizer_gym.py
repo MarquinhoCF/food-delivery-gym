@@ -180,9 +180,6 @@ class RolloutOptimizerGym(OptimizerGym):
     def _next_scenario_seed(self) -> int:
         return int(self._scenario_rng.integers(0, 2**31 - 1))
 
-    def _clone_env(self, scenario_seed: int) -> FoodDeliveryGymEnv:
-        return self.gym_env.clone(future="resample", scenario_seed=scenario_seed)
-
     def _rollout_from(self, cloned_env: FoodDeliveryGymEnv, obs, done: bool, truncated: bool) -> Tuple[float, list[dict], dict | None]:
         """
         Executa a política de base no clone e retorna
@@ -247,6 +244,32 @@ class RolloutOptimizerGym(OptimizerGym):
 
         return total_reward, trajectory, None
 
+    def _record_decision(
+        self,
+        drivers: List[Driver],
+        best_action: int | None,
+        best_value: float,
+        scenario_seed: int,
+        candidates: list[dict],
+    ) -> None:
+        order = self.gym_env.get_current_order()
+        simpy_env = self.gym_env.get_simpy_env()
+        chosen_driver = drivers[best_action] if best_action is not None else None
+        self.decision_log.append({
+            "decision_idx": len(self.decision_log),
+            "sim_time": float(simpy_env.now),
+            "order_id": int(order.order_id) if order is not None else None,
+            "chosen_action": best_action,
+            "chosen_driver_id": (
+                int(chosen_driver.driver_id) if chosen_driver is not None else None
+            ),
+            "best_q": float(best_value) if best_action is not None else None,
+            "alpha": float(self.alpha),
+            "horizon": self.horizon,
+            "scenario_seed": int(scenario_seed),
+            "candidates": candidates,
+        })
+
     # Seleção da ação (motorista) via rollout
     def select_driver(self, obs: dict, drivers: List[Driver], route: Route):
         best_action = None
@@ -255,7 +278,7 @@ class RolloutOptimizerGym(OptimizerGym):
         scenario_seed = self._next_scenario_seed()
 
         for action in range(len(drivers)):
-            cloned_env = self._clone_env(scenario_seed)
+            cloned_env = self.gym_env.clone(future="resample", scenario_seed=scenario_seed)
 
             order_before = self.gym_env.get_current_order()
             obs_after, reward, terminated, truncated, info = cloned_env.step(action)
@@ -289,22 +312,8 @@ class RolloutOptimizerGym(OptimizerGym):
                 best_action = action
 
         if self.record_decisions:
-            order = self.gym_env.get_current_order()
-            simpy_env = self.gym_env.get_simpy_env()
-            chosen_driver = drivers[best_action] if best_action is not None else None
-            self.decision_log.append({
-                "decision_idx": len(self.decision_log),
-                "sim_time": float(simpy_env.now),
-                "order_id": int(order.order_id) if order is not None else None,
-                "chosen_action": best_action,
-                "chosen_driver_id": (
-                    int(chosen_driver.driver_id) if chosen_driver is not None else None
-                ),
-                "best_q": float(best_value) if best_action is not None else None,
-                "alpha": float(self.alpha),
-                "horizon": self.horizon,
-                "scenario_seed": int(scenario_seed),
-                "candidates": candidates,
-            })
+            self._record_decision(
+                drivers, best_action, best_value, scenario_seed, candidates
+            )
 
         return best_action

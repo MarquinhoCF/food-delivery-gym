@@ -3,17 +3,17 @@ from __future__ import annotations
 import argparse
 import os
 import textwrap
-from importlib.resources import files
 from datetime import datetime
+from importlib.resources import files
 
 from food_delivery_gym.main.environment.env_mode import EnvMode
 from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
 from food_delivery_gym.main.optimizer import catalog as optimizer_catalog
-from food_delivery_gym.main.optimizer.optimizer_gym.rollout_optimizer_gym import (
-    RolloutOptimizerGym,
+from food_delivery_gym.main.optimizer.optimizer_gym.monte_carlo_tree_search_optimizer_gym import (
+    MonteCarloTreeSearchOptimizerGym,
 )
-from food_delivery_gym.main.statistics.lookahead.rollout_decision_board import (
-    RolloutDecisionBoard,
+from food_delivery_gym.main.statistics.lookahead.mcts_decision_board import (
+    MCTSDecisionBoard,
 )
 
 DEFAULT_SEED = 5434
@@ -21,7 +21,7 @@ DEFAULT_OBJECTIVE = 1
 DEFAULT_ALPHA = optimizer_catalog.DEFAULT_ROLLOUT_ALPHA
 DEFAULT_BASE_OPTIMIZER = optimizer_catalog.DEFAULT_ROLLOUT_BASE
 DEFAULT_HORIZON = optimizer_catalog.DEFAULT_ROLLOUT_HORIZON
-DEFAULT_OUT_DIR = "data/visualization/rollout_viz"
+DEFAULT_OUT_DIR = "data/visualization/mcts_viz"
 ALL_OBJECTIVES = FoodDeliveryGymEnv.REWARD_OBJECTIVES
 BASE_OPTIMIZER_CHOICES = optimizer_catalog.cli_choices(rollout_base=True)
 
@@ -44,7 +44,6 @@ def resolve_base_optimizer(
     objective: int,
     cost_function_name: str | None,
 ):
-    """Retorna (classe, kwargs) da política de base do rollout."""
     try:
         return optimizer_catalog.constructor_args(
             name,
@@ -60,11 +59,10 @@ def parse_args() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=textwrap.dedent(
             """
-            Visualização pós-episódio da seleção de ações do RolloutOptimizerGym.
+            Visualização pós-episódio da árvore do MonteCarloTreeSearchOptimizerGym.
 
-            Executa um episódio, grava o decision_log (Q por motorista, trajetória
-            da política base e custo terminal estimado) e salva JSON completo + um
-            PNG da decisão pedida em --decision.
+            Executa um episódio, grava o decision_log (árvore explorada + valores
+            na raiz) e salva JSON completo + um PNG da decisão pedida em --decision.
 
             Com --from-json, pula o episódio e só renderiza o PNG a partir do JSON.
 
@@ -108,7 +106,7 @@ def parse_args() -> argparse.Namespace:
         "--base-optimizer",
         choices=BASE_OPTIMIZER_CHOICES,
         default=DEFAULT_BASE_OPTIMIZER,
-        help="Política de base usada no rollout (default: nearest)",
+        help="Política de base nas folhas (default: nearest)",
     )
     parser.add_argument(
         "--cost-function",
@@ -120,13 +118,13 @@ def parse_args() -> argparse.Namespace:
         "--horizon",
         type=int,
         default=DEFAULT_HORIZON,
-        help="Horizonte de rollout após a ação candidata (default: 5)",
+        help="Horizonte do rollout nas folhas (default: 5)",
     )
     parser.add_argument(
         "--alpha",
         type=float,
         default=DEFAULT_ALPHA,
-        help="Fator de desconto do rollout (default: 0.9)",
+        help="Fator de desconto (default: 0.9)",
     )
     parser.add_argument(
         "--terminal-cost",
@@ -135,6 +133,45 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Custo terminal: '0' força zero; 'model' exige o linear model "
             f"(default: {optimizer_catalog.DEFAULT_ROLLOUT_TERMINAL})"
+        ),
+    )
+    parser.add_argument(
+        "--iterations",
+        type=int,
+        default=optimizer_catalog.DEFAULT_MCTS_ITERATIONS,
+        help=f"Iterações MCTS (default: {optimizer_catalog.DEFAULT_MCTS_ITERATIONS})",
+    )
+    parser.add_argument(
+        "--exploration-weight",
+        type=float,
+        default=optimizer_catalog.DEFAULT_MCTS_EXPLORATION_WEIGHT,
+        help=(
+            "Peso de exploração UCT "
+            f"(default: {optimizer_catalog.DEFAULT_MCTS_EXPLORATION_WEIGHT})"
+        ),
+    )
+    parser.add_argument(
+        "--depth",
+        type=int,
+        default=None,
+        help="Profundidade máxima da árvore (default: igual ao horizon)",
+    )
+    parser.add_argument(
+        "--max-outcomes",
+        type=int,
+        default=optimizer_catalog.DEFAULT_MCTS_MAX_OUTCOMES,
+        help=(
+            "Máx. futuros W por ação "
+            f"(default: {optimizer_catalog.DEFAULT_MCTS_MAX_OUTCOMES})"
+        ),
+    )
+    parser.add_argument(
+        "--max-expanded-actions",
+        type=int,
+        default=None,
+        help=(
+            "Limiar d_thr: máx. ações expandidas por nó "
+            "(default: todos os motoristas)"
         ),
     )
     parser.add_argument(
@@ -161,15 +198,15 @@ def main() -> None:
         json_path = args.from_json
         if not os.path.isfile(json_path):
             raise SystemExit(f"--from-json não encontrado: {json_path}")
-        board = RolloutDecisionBoard.from_json(json_path)
+        board = MCTSDecisionBoard.from_json(json_path)
         out_dir = args.out_dir or (os.path.dirname(os.path.abspath(json_path)) or ".")
-        print(f"=== Rollout from JSON ({len(board.decision_log)} decisões) ===")
+        print(f"=== MCTS from JSON ({len(board.decision_log)} decisões) ===")
         print(f"from_json={json_path}")
         print(f"decision={args.decision} out_dir={out_dir}\n")
         os.makedirs(out_dir, exist_ok=True)
         board.save(out_dir, decision_idx=args.decision)
         print(
-            f"Figura: {os.path.join(out_dir, 'rollout_decisions', f'decision_{args.decision + 1:03d}.png')}"
+            f"Figura: {os.path.join(out_dir, 'mcts_decisions', f'decision_{args.decision + 1:03d}.png')}"
         )
         return
 
@@ -192,7 +229,7 @@ def main() -> None:
     )
 
     env = prepare_env(args.scenario, args.objective, seed=args.seed)
-    optimizer = RolloutOptimizerGym(
+    optimizer = MonteCarloTreeSearchOptimizerGym(
         env,
         base_optimizer_cls=base_optimizer_cls,
         base_optimizer_kwargs=base_optimizer_kwargs,
@@ -200,8 +237,12 @@ def main() -> None:
         horizon=args.horizon,
         record_decisions=True,
         terminal_cost_mode=args.terminal_cost,
+        iterations=args.iterations,
+        exploration_weight=args.exploration_weight,
+        depth=args.depth,
+        max_outcomes=args.max_outcomes,
+        max_expanded_actions=args.max_expanded_actions,
     )
-    # prepare_env já fez reset; sincroniza o estado do otimizador
     optimizer.state = env.get_observation()
     optimizer.done = False
     optimizer.truncated = False
@@ -211,15 +252,20 @@ def main() -> None:
     out_dir = os.path.join(
         out_base,
         args.scenario.split(".")[0],
-        optimizer_catalog.rollout_result_key(
+        optimizer_catalog.mcts_result_key(
             args.base_optimizer,
             args.cost_function,
             horizon=args.horizon,
             alpha=args.alpha,
             terminal=args.terminal_cost,
+            iterations=args.iterations,
+            exploration_weight=args.exploration_weight,
+            depth=args.depth,
+            max_outcomes=args.max_outcomes,
+            max_expanded_actions=args.max_expanded_actions,
         ),
         f"obj_{args.objective}",
-        datetime.now().strftime('%d_%m_%Y-%H_%M_%S'),
+        datetime.now().strftime("%d_%m_%Y-%H_%M_%S"),
     )
     print(f"scenario={args.scenario} seed={args.seed} objective={args.objective}")
     print(f"base_optimizer={args.base_optimizer} cost_function={args.cost_function}")
@@ -248,14 +294,14 @@ def main() -> None:
     print(f"Decisões gravadas: {len(optimizer.decision_log)}")
 
     os.makedirs(out_dir, exist_ok=True)
-    board = RolloutDecisionBoard(optimizer.decision_log)
+    board = MCTSDecisionBoard(optimizer.decision_log)
     json_path = os.path.join(out_dir, "decisions.json")
     board.dump_json(json_path)
     board.save(out_dir, decision_idx=args.decision)
 
     print(f"JSON: {json_path}")
     print(
-        f"Figura: {os.path.join(out_dir, 'rollout_decisions', f'decision_{args.decision + 1:03d}.png')}"
+        f"Figura: {os.path.join(out_dir, 'mcts_decisions', f'decision_{args.decision + 1:03d}.png')}"
     )
 
 

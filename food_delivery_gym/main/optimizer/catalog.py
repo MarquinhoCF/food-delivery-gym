@@ -37,6 +37,9 @@ from food_delivery_gym.main.optimizer.optimizer_gym.random_driver_optimizer_gym 
 from food_delivery_gym.main.optimizer.optimizer_gym.rl_model_optimizer_gym import (
     RLModelOptimizerGym,
 )
+from food_delivery_gym.main.optimizer.optimizer_gym.monte_carlo_tree_search_optimizer_gym import (
+    MonteCarloTreeSearchOptimizerGym,
+)
 from food_delivery_gym.main.optimizer.optimizer_gym.rollout_optimizer_gym import (
     RolloutOptimizerGym,
 )
@@ -46,6 +49,10 @@ DEFAULT_ROLLOUT_HORIZON = 5
 DEFAULT_ROLLOUT_RECORD_DECISIONS = False
 DEFAULT_ROLLOUT_BASE = "nearest"
 DEFAULT_ROLLOUT_TERMINAL = "0"
+DEFAULT_MCTS_ITERATIONS = 8
+DEFAULT_MCTS_EXPLORATION_WEIGHT = 1.0
+DEFAULT_MCTS_MAX_OUTCOMES = 1
+DEFAULT_MCTS_MAX_EXPANDED_ACTIONS: int | None = None
 TERMINAL_COST_MODES = ("0", "model")
 TerminalCostMode = Literal["0", "model"]
 
@@ -106,6 +113,89 @@ class RolloutVariantSpec:
             horizon=self.horizon,
             alpha=float(self.alpha),
             terminal=self.terminal,  # type: ignore[arg-type]
+        )
+
+
+@dataclass(frozen=True)
+class MCTSVariantSpec:
+    """Uma variante explícita de MCTS (base + hiperparâmetros da árvore)."""
+
+    base_optimizer: str
+    cost_function: str | None = None
+    horizon: int | None = DEFAULT_ROLLOUT_HORIZON
+    alpha: float = DEFAULT_ROLLOUT_ALPHA
+    terminal: TerminalCostMode = DEFAULT_ROLLOUT_TERMINAL
+    iterations: int = DEFAULT_MCTS_ITERATIONS
+    exploration_weight: float = DEFAULT_MCTS_EXPLORATION_WEIGHT
+    depth: int | None = None
+    max_outcomes: int = DEFAULT_MCTS_MAX_OUTCOMES
+    max_expanded_actions: int | None = DEFAULT_MCTS_MAX_EXPANDED_ACTIONS
+
+    def resolved_depth(self) -> int:
+        if self.depth is not None:
+            return int(self.depth)
+        if self.horizon is None:
+            return 5
+        return int(self.horizon)
+
+    def normalized(self) -> MCTSVariantSpec:
+        base = get(self.base_optimizer)
+        if not base.rollout_base:
+            known = ", ".join(cli_choices(rollout_base=True))
+            raise ValueError(
+                f"Otimizador '{self.base_optimizer}' não pode ser base do MCTS. "
+                f"Opções: {known}"
+            )
+        cost = self.cost_function
+        if needs_cost_function(base.key):
+            if not cost:
+                raise ValueError(
+                    f"Base '{base.key}' requer cost_function "
+                    f"(ex.: cost={COST_FUNCTION_CHOICES[0]})"
+                )
+            cost = get_cost_function(cost).key
+        elif cost:
+            raise ValueError(
+                f"cost_function só se aplica quando a base é lowest; "
+                f"recebido base='{base.key}'"
+            )
+        if self.terminal not in TERMINAL_COST_MODES:
+            raise ValueError(
+                f"terminal inválido: '{self.terminal}'. "
+                f"Opções: {TERMINAL_COST_MODES}"
+            )
+        if self.horizon is not None and self.horizon < 0:
+            raise ValueError(f"horizon deve ser >= 0 ou None; recebido {self.horizon}")
+        if self.iterations < 1:
+            raise ValueError(f"iterations deve ser >= 1; recebido {self.iterations}")
+        if self.exploration_weight < 0:
+            raise ValueError(
+                f"exploration_weight deve ser >= 0; recebido {self.exploration_weight}"
+            )
+        if self.max_outcomes < 1:
+            raise ValueError(f"max_outcomes deve ser >= 1; recebido {self.max_outcomes}")
+        if self.depth is not None and self.depth < 0:
+            raise ValueError(f"depth deve ser >= 0 ou None; recebido {self.depth}")
+        if self.max_expanded_actions is not None and self.max_expanded_actions < 1:
+            raise ValueError(
+                f"max_expanded_actions deve ser >= 1 ou None; "
+                f"recebido {self.max_expanded_actions}"
+            )
+        return MCTSVariantSpec(
+            base_optimizer=base.key,
+            cost_function=cost,
+            horizon=self.horizon,
+            alpha=float(self.alpha),
+            terminal=self.terminal,  # type: ignore[arg-type]
+            iterations=int(self.iterations),
+            exploration_weight=float(self.exploration_weight),
+            depth=None if self.depth is None else int(self.depth),
+            max_outcomes=int(self.max_outcomes),
+            max_expanded_actions=(
+                None
+                if self.max_expanded_actions is None
+                else int(self.max_expanded_actions)
+            ),
         )
 
 
@@ -221,6 +311,35 @@ def _rollout(env, objective: int | None = None, **extras) -> OptimizerGym:
     )
 
 
+def _mcts(env, objective: int | None = None, **extras) -> OptimizerGym:
+    base_name = extras.get("base_optimizer", DEFAULT_ROLLOUT_BASE)
+    cost_function = extras.get("cost_function")
+    base_cls, base_kwargs = constructor_args(
+        base_name,
+        objective=objective,
+        cost_function=cost_function,
+    )
+    horizon = extras["horizon"] if "horizon" in extras else DEFAULT_ROLLOUT_HORIZON
+    return MonteCarloTreeSearchOptimizerGym(
+        env,
+        base_optimizer_cls=base_cls,
+        base_optimizer_kwargs=base_kwargs,
+        alpha=extras.get("alpha", DEFAULT_ROLLOUT_ALPHA),
+        horizon=horizon,
+        record_decisions=extras.get("record_decisions", DEFAULT_ROLLOUT_RECORD_DECISIONS),
+        terminal_cost_mode=extras.get("terminal_cost_mode", DEFAULT_ROLLOUT_TERMINAL),
+        iterations=extras.get("iterations", DEFAULT_MCTS_ITERATIONS),
+        exploration_weight=extras.get(
+            "exploration_weight", DEFAULT_MCTS_EXPLORATION_WEIGHT
+        ),
+        depth=extras.get("depth"),
+        max_outcomes=extras.get("max_outcomes", DEFAULT_MCTS_MAX_OUTCOMES),
+        max_expanded_actions=extras.get(
+            "max_expanded_actions", DEFAULT_MCTS_MAX_EXPANDED_ACTIONS
+        ),
+    )
+
+
 def _rl(env, objective: int | None = None, **extras) -> OptimizerGym:
     model = extras.get("model")
     if model is None:
@@ -293,6 +412,15 @@ _SPECS: tuple[OptimizerSpec, ...] = (
         short_label="Rollout",
         cls=RolloutOptimizerGym,
         builder=_rollout,
+        rollout_base=False,
+    ),
+    OptimizerSpec(
+        key="mcts",
+        aliases=("mcts",),
+        label="Monte Carlo Tree Search",
+        short_label="MCTS",
+        cls=MonteCarloTreeSearchOptimizerGym,
+        builder=_mcts,
         rollout_base=False,
     ),
     OptimizerSpec(
@@ -624,6 +752,195 @@ def parse_rollout_cli(raw: str) -> RolloutVariantSpec:
     ).normalized()
 
 
+def mcts_result_key(
+    base_optimizer: str,
+    cost_function: str | None = None,
+    *,
+    horizon: int | None = DEFAULT_ROLLOUT_HORIZON,
+    alpha: float = DEFAULT_ROLLOUT_ALPHA,
+    terminal: TerminalCostMode = DEFAULT_ROLLOUT_TERMINAL,
+    iterations: int = DEFAULT_MCTS_ITERATIONS,
+    exploration_weight: float = DEFAULT_MCTS_EXPLORATION_WEIGHT,
+    depth: int | None = None,
+    max_outcomes: int = DEFAULT_MCTS_MAX_OUTCOMES,
+    max_expanded_actions: int | None = DEFAULT_MCTS_MAX_EXPANDED_ACTIONS,
+) -> str:
+    """Nome de pasta: mcts_<base>_h5_a0p9_tc0_i8_ew1_d5_o1[_dthrK]."""
+    variant = MCTSVariantSpec(
+        base_optimizer=base_optimizer,
+        cost_function=cost_function,
+        horizon=horizon,
+        alpha=alpha,
+        terminal=terminal,
+        iterations=iterations,
+        exploration_weight=exploration_weight,
+        depth=depth,
+        max_outcomes=max_outcomes,
+        max_expanded_actions=max_expanded_actions,
+    ).normalized()
+    base_key = base_variant_key(variant.base_optimizer, variant.cost_function)
+    resolved_depth = variant.resolved_depth()
+    key = (
+        f"mcts_{base_key}"
+        f"_{_format_horizon_token(variant.horizon)}"
+        f"_a{_format_alpha_token(variant.alpha)}"
+        f"_tc{variant.terminal}"
+        f"_i{int(variant.iterations)}"
+        f"_ew{_format_alpha_token(variant.exploration_weight)}"
+        f"_d{int(resolved_depth)}"
+        f"_o{int(variant.max_outcomes)}"
+    )
+    # Sufixo só quando d_thr é finito: pastas legadas sem _dthr continuam válidas.
+    if variant.max_expanded_actions is not None:
+        key = f"{key}_dthr{int(variant.max_expanded_actions)}"
+    return key
+
+
+_MCTS_RESULT_KEY_RE = re.compile(
+    r"^mcts_(.+)_h(\d+|inf)_a([0-9p]+)_tc(0|model)"
+    r"_i(\d+)_ew([0-9p]+)_d(\d+)_o(\d+)(?:_dthr(\d+))?$"
+)
+
+
+def parse_mcts_result_key(dir_name: str) -> MCTSVariantSpec | None:
+    """Reconstrói a variante a partir do nome da pasta."""
+    match = _MCTS_RESULT_KEY_RE.match(dir_name)
+    if not match:
+        return None
+    (
+        base_variant,
+        horizon_body,
+        alpha_token,
+        terminal,
+        iterations,
+        ew_token,
+        depth,
+        max_outcomes,
+        max_expanded_actions,
+    ) = match.groups()
+    try:
+        base_optimizer, cost_function = _base_variant_from_key(base_variant)
+        return MCTSVariantSpec(
+            base_optimizer=base_optimizer,
+            cost_function=cost_function,
+            horizon=_parse_horizon_token(f"h{horizon_body}"),
+            alpha=_parse_alpha_token(alpha_token),
+            terminal=terminal,  # type: ignore[arg-type]
+            iterations=int(iterations),
+            exploration_weight=_parse_alpha_token(ew_token),
+            depth=int(depth),
+            max_outcomes=int(max_outcomes),
+            max_expanded_actions=(
+                None
+                if max_expanded_actions is None
+                else int(max_expanded_actions)
+            ),
+        ).normalized()
+    except (ValueError, KeyError):
+        return None
+
+
+def mcts_result_label(spec: MCTSVariantSpec, *, short: bool = False) -> str:
+    """Label legível para uma variante de MCTS."""
+    variant = spec.normalized()
+    if variant.cost_function:
+        cost = get_cost_function(variant.cost_function)
+        base_label = cost.result_short_label if short else cost.result_label
+    else:
+        base = get(variant.base_optimizer)
+        base_label = base.short_label if short else base.label
+    horizon_str = "inf" if variant.horizon is None else str(variant.horizon)
+    tc_str = "0" if variant.terminal == "0" else "model"
+    dthr_str = (
+        "all"
+        if variant.max_expanded_actions is None
+        else str(variant.max_expanded_actions)
+    )
+    return (
+        f"MCTS ({base_label}, H={horizon_str}, α={variant.alpha:g}, TC={tc_str}, "
+        f"i={variant.iterations}, ew={variant.exploration_weight:g}, "
+        f"d={variant.resolved_depth()}, o={variant.max_outcomes}, dthr={dthr_str})"
+    )
+
+
+def parse_mcts_cli(raw: str) -> MCTSVariantSpec:
+    """
+    Parseia variante MCTS em formato chave=valor.
+
+    Chaves: base, cost, horizon, alpha, terminal, iterations,
+    exploration_weight, depth, max_outcomes, max_expanded_actions.
+    """
+    values = _parse_key_value_spec(
+        raw,
+        flag="--mcts",
+        known_keys={
+            "base",
+            "cost",
+            "horizon",
+            "alpha",
+            "terminal",
+            "iterations",
+            "exploration_weight",
+            "depth",
+            "max_outcomes",
+            "max_expanded_actions",
+        },
+    )
+
+    base = values.get("base", DEFAULT_ROLLOUT_BASE)
+    cost = values.get("cost")
+
+    if "horizon" in values:
+        horizon_raw = values["horizon"].lower()
+        if horizon_raw in ("inf", "none", "null"):
+            horizon: int | None = None
+        else:
+            horizon = int(horizon_raw)
+    else:
+        horizon = DEFAULT_ROLLOUT_HORIZON
+
+    alpha = float(values["alpha"]) if "alpha" in values else DEFAULT_ROLLOUT_ALPHA
+    terminal = values.get("terminal", DEFAULT_ROLLOUT_TERMINAL)
+    iterations = (
+        int(values["iterations"])
+        if "iterations" in values
+        else DEFAULT_MCTS_ITERATIONS
+    )
+    exploration_weight = (
+        float(values["exploration_weight"])
+        if "exploration_weight" in values
+        else DEFAULT_MCTS_EXPLORATION_WEIGHT
+    )
+    depth = int(values["depth"]) if "depth" in values else None
+
+    max_outcomes = (
+        int(values["max_outcomes"])
+        if "max_outcomes" in values
+        else DEFAULT_MCTS_MAX_OUTCOMES
+    )
+
+    if "max_expanded_actions" in values:
+        dthr_raw = values["max_expanded_actions"].lower()
+        if dthr_raw in ("none", "null", "all"):
+            max_expanded_actions: int | None = None
+        else:
+            max_expanded_actions = int(values["max_expanded_actions"])
+    else:
+        max_expanded_actions = DEFAULT_MCTS_MAX_EXPANDED_ACTIONS
+
+    return MCTSVariantSpec(
+        base_optimizer=base,
+        cost_function=cost,
+        horizon=horizon,
+        alpha=alpha,
+        terminal=terminal,  # type: ignore[arg-type]
+        iterations=iterations,
+        exploration_weight=exploration_weight,
+        depth=depth,
+        max_outcomes=max_outcomes,
+        max_expanded_actions=max_expanded_actions,
+    ).normalized()
+
 def base_variant_key(base_optimizer: str, cost_function: str | None = None) -> str:
     """Chave da variante da política de base (ex.: nearest_driver, lowest_weighted_score)."""
     base = get(base_optimizer)
@@ -675,15 +992,19 @@ def expand_evaluations(
     *,
     lowest_variants: list[LowestVariantSpec] | None = None,
     rollout_variants: list[RolloutVariantSpec] | None = None,
+    mcts_variants: list[MCTSVariantSpec] | None = None,
     record_decisions: bool = DEFAULT_ROLLOUT_RECORD_DECISIONS,
 ) -> list[EvalVariant]:
-    """Expande lowest e rollout por variantes explícitas."""
+    """Expande lowest, rollout e mcts por variantes explícitas."""
     variants: list[EvalVariant] = []
     normalized_lowest = [
         variant.normalized() for variant in (lowest_variants or [])
     ]
     normalized_rollouts = [
         variant.normalized() for variant in (rollout_variants or [])
+    ]
+    normalized_mcts = [
+        variant.normalized() for variant in (mcts_variants or [])
     ]
 
     for spec in specs:
@@ -734,6 +1055,47 @@ def expand_evaluations(
                 )
             continue
 
+        if spec.key == "mcts":
+            if not normalized_mcts:
+                raise ValueError(
+                    "mcts selecionado exige ao menos uma variante "
+                    "(passe --mcts base=...,iterations=...,...)"
+                )
+            for mcts in normalized_mcts:
+                extras = {
+                    "base_optimizer": mcts.base_optimizer,
+                    "alpha": mcts.alpha,
+                    "horizon": mcts.horizon,
+                    "terminal_cost_mode": mcts.terminal,
+                    "record_decisions": record_decisions,
+                    "iterations": mcts.iterations,
+                    "exploration_weight": mcts.exploration_weight,
+                    "depth": mcts.resolved_depth(),
+                    "max_outcomes": mcts.max_outcomes,
+                    "max_expanded_actions": mcts.max_expanded_actions,
+                }
+                if mcts.cost_function:
+                    extras["cost_function"] = mcts.cost_function
+                variants.append(
+                    EvalVariant(
+                        spec=spec,
+                        result_key=mcts_result_key(
+                            mcts.base_optimizer,
+                            mcts.cost_function,
+                            horizon=mcts.horizon,
+                            alpha=mcts.alpha,
+                            terminal=mcts.terminal,
+                            iterations=mcts.iterations,
+                            exploration_weight=mcts.exploration_weight,
+                            depth=mcts.depth,
+                            max_outcomes=mcts.max_outcomes,
+                            max_expanded_actions=mcts.max_expanded_actions,
+                        ),
+                        extras=extras,
+                    )
+                )
+            continue
+
         variants.append(EvalVariant(spec=spec, result_key=spec.key, extras={}))
 
     return variants
@@ -749,8 +1111,8 @@ def result_labels(*, short: bool = False) -> dict[str, str]:
                     cost.result_short_label if short else cost.result_label
                 )
             continue
-        if spec.key == "rollout":
-            # Rollouts parametrizados são rotulados via label_for_result_dir.
+        if spec.key in ("rollout", "mcts"):
+            # Variantes parametrizadas são rotuladas via label_for_result_dir.
             continue
         labels_by_key[spec.key] = spec.short_label if short else spec.label
     return labels_by_key
@@ -761,12 +1123,14 @@ def result_keys() -> list[str]:
 
 
 def is_heuristic_result_dir(dir_name: str) -> bool:
-    """True se a pasta é heurística conhecida (inclui rollout parametrizado/legacy)."""
+    """True se a pasta é heurística conhecida (rollout/mcts parametrizados inclusos)."""
     if dir_name in result_labels():
         return True
     if parse_rollout_result_key(dir_name) is not None:
         return True
     if parse_legacy_rollout_result_key(dir_name) is not None:
+        return True
+    if parse_mcts_result_key(dir_name) is not None:
         return True
     return False
 
@@ -775,7 +1139,7 @@ def label_for_result_dir(dir_name: str, *, short: bool = False) -> str | None:
     """
     Label para uma pasta de resultado.
 
-    Reconhece heurísticas fixas, rollout parametrizado, rollout legacy e RL.
+    Reconhece heurísticas fixas, rollout, mcts e RL.
     Retorna None se desconhecido.
     """
     fixed = result_labels(short=short)
@@ -790,12 +1154,16 @@ def label_for_result_dir(dir_name: str, *, short: bool = False) -> str | None:
     if legacy is not None:
         return rollout_result_label(legacy, short=short)
 
+    mcts = parse_mcts_result_key(dir_name)
+    if mcts is not None:
+        return mcts_result_label(mcts, short=short)
+
     return rl_result_label(dir_name)
 
 
 def sort_discovered_result_dirs(names: list[str] | set[str]) -> list[str]:
     """
-    Ordena pastas descobertas: heurísticas fixas -> rollouts -> demais (RL).
+    Ordena pastas: heurísticas fixas -> rollouts -> mcts -> demais (RL).
     """
     found = set(names)
     fixed_order = result_keys()
@@ -809,10 +1177,19 @@ def sort_discovered_result_dirs(names: list[str] | set[str]) -> list[str]:
             or parse_legacy_rollout_result_key(name) is not None
         )
     )
-    others = sorted(
-        name for name in found if name not in fixed_order and name not in rollouts
+    mcts_dirs = sorted(
+        name
+        for name in found
+        if name not in fixed_order
+        and name not in rollouts
+        and parse_mcts_result_key(name) is not None
     )
-    return fixed + rollouts + others
+    others = sorted(
+        name
+        for name in found
+        if name not in fixed_order and name not in rollouts and name not in mcts_dirs
+    )
+    return fixed + rollouts + mcts_dirs + others
 
 # ── Modelos de aprendizado por reforço ───────────────────────────────────────
 

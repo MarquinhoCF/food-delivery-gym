@@ -85,6 +85,8 @@ def main():
                 if optimizer_catalog.resolve_key(name) == "lowest"
                 else " (requer --rollout base=...,...)"
                 if optimizer_catalog.resolve_key(name) == "rollout"
+                else " (requer --mcts base=...,...)"
+                if optimizer_catalog.resolve_key(name) == "mcts"
                 else " (aceita --model-path)"
                 if "model" in optimizer_catalog.requires(name)
                 else ""
@@ -121,6 +123,27 @@ def main():
             f"alpha={optimizer_catalog.DEFAULT_ROLLOUT_ALPHA}, "
             f"terminal={optimizer_catalog.DEFAULT_ROLLOUT_TERMINAL}. "
             "Ex.: --rollout base=lowest,cost=route,horizon=5,terminal=0"
+        ),
+    )
+    parser.add_argument(
+        "--mcts",
+        default=None,
+        metavar="SPEC",
+        help=(
+            "Variante de MCTS (mesmo formato do run_batch_eval). "
+            "Formato: base=...,cost=...,horizon=...,alpha=...,terminal=0|model,"
+            "iterations=...,exploration_weight=...,depth=...,"
+            "max_outcomes=...,max_expanded_actions=.... "
+            f"Defaults: base={optimizer_catalog.DEFAULT_ROLLOUT_BASE}, "
+            f"horizon={optimizer_catalog.DEFAULT_ROLLOUT_HORIZON}, "
+            f"alpha={optimizer_catalog.DEFAULT_ROLLOUT_ALPHA}, "
+            f"terminal={optimizer_catalog.DEFAULT_ROLLOUT_TERMINAL}, "
+            f"iterations={optimizer_catalog.DEFAULT_MCTS_ITERATIONS}, "
+            f"exploration_weight={optimizer_catalog.DEFAULT_MCTS_EXPLORATION_WEIGHT}, "
+            f"max_outcomes={optimizer_catalog.DEFAULT_MCTS_MAX_OUTCOMES}, "
+            "max_expanded_actions=all. "
+            "Ex.: --mcts base=nearest,horizon=5,iterations=8,depth=2,"
+            "max_expanded_actions=4"
         ),
     )
     parser.add_argument(
@@ -168,11 +191,14 @@ def main():
     )
     is_lowest = optimizer_key == "lowest"
     is_rollout = optimizer_key == "rollout"
+    is_mcts = optimizer_key == "mcts"
 
     if args.lowest and not is_lowest:
         parser.error("Erro: --lowest só pode ser usado com --optimizer lowest")
     if args.rollout and not is_rollout:
         parser.error("Erro: --rollout só pode ser usado com --optimizer rollout")
+    if args.mcts and not is_mcts:
+        parser.error("Erro: --mcts só pode ser usado com --optimizer mcts")
     if is_lowest and not args.lowest:
         parser.error(
             "Erro: --optimizer lowest exige --lowest "
@@ -183,14 +209,22 @@ def main():
             "Erro: --optimizer rollout exige --rollout "
             "(ex.: --rollout base=lowest,cost=route,horizon=5,terminal=0)"
         )
+    if is_mcts and not args.mcts:
+        parser.error(
+            "Erro: --optimizer mcts exige --mcts "
+            "(ex.: --mcts base=nearest,horizon=5,iterations=8,depth=2)"
+        )
 
     lowest_variant = None
     rollout_variant = None
+    mcts_variant = None
     try:
         if args.lowest:
             lowest_variant = optimizer_catalog.parse_lowest_cli(args.lowest)
         if args.rollout:
             rollout_variant = optimizer_catalog.parse_rollout_cli(args.rollout)
+        if args.mcts:
+            mcts_variant = optimizer_catalog.parse_mcts_cli(args.mcts)
     except ValueError as exc:
         parser.error(str(exc))
 
@@ -232,6 +266,20 @@ def main():
                 )
                 if rollout_variant.cost_function:
                     build_kwargs["cost_function"] = rollout_variant.cost_function
+            if mcts_variant is not None:
+                build_kwargs.update(
+                    base_optimizer=mcts_variant.base_optimizer,
+                    alpha=mcts_variant.alpha,
+                    horizon=mcts_variant.horizon,
+                    terminal_cost_mode=mcts_variant.terminal,
+                    iterations=mcts_variant.iterations,
+                    exploration_weight=mcts_variant.exploration_weight,
+                    depth=mcts_variant.resolved_depth(),
+                    max_outcomes=mcts_variant.max_outcomes,
+                    max_expanded_actions=mcts_variant.max_expanded_actions,
+                )
+                if mcts_variant.cost_function:
+                    build_kwargs["cost_function"] = mcts_variant.cost_function
             optimizer = optimizer_catalog.build(
                 args.optimizer,
                 env,

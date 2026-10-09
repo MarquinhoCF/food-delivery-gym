@@ -1,6 +1,6 @@
 # Otimizadores
 
-Agentes de decisão herdam de `OptimizerGym` e implementam `select_driver`. As chaves CLI, aliases, funções de custo, variantes de `lowest`/`rollout` e a descoberta de modelos RL estão documentadas no [catálogo de otimizadores](optimizer-catalog.md) (`food_delivery_gym/main/optimizer/catalog.py`).
+Agentes de decisão herdam de `OptimizerGym` e implementam `select_driver`. As chaves CLI, aliases, funções de custo, variantes de `lowest`/`rollout`/`mcts` e a descoberta de modelos RL estão documentadas no [catálogo de otimizadores](optimizer-catalog.md) (`food_delivery_gym/main/optimizer/catalog.py`).
 
 Este guia cobre o uso prático e como criar um otimizador customizado.
 
@@ -16,6 +16,10 @@ python -m scripts.test_runner --mode auto --optimizer lowest --lowest cost=route
 # Rollout
 python -m scripts.test_runner --mode auto --optimizer rollout \
   --rollout base=lowest,cost=route,horizon=5,terminal=0
+
+# MCTS
+python -m scripts.test_runner --mode auto --optimizer mcts \
+  --mcts base=nearest,horizon=5,iterations=8,depth=2
 
 # Batch com variantes explícitas
 python -m scripts.run_batch_eval --name costs --agents lowest --no-rl \

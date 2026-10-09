@@ -29,7 +29,8 @@ Fluxo recomendado: [Avaliação em lote](../experiments/batch-eval.md).
 | `-m` / `--models` | Filtro de modelos RL | descoberta automática |
 | `--lowest` | Variante `cost=...` (repetível) | (nenhum) |
 | `--rollout` | Variante `base=...,cost=...,horizon=...` (repetível) | (nenhum) |
-| `--rollout-record-decisions` | Grava log de decisões | desligado |
+| `--mcts` | Variante `base=...,iterations=...,depth=...,max_expanded_actions=...` (repetível) | (nenhum) |
+| `--rollout-record-decisions` | Grava log de decisões do rollout/MCTS | desligado |
 | `--no-rl` | Exclui modelos RL | (ausente) |
 | `--no-heuristics` | Exclui heurísticas | (ausente) |
 | `-n` / `--num-runs` | Episódios por agente | `20` |
@@ -79,6 +80,10 @@ python -m scripts.run_batch_eval --name cross_med \
 python -m scripts.run_batch_eval --name costs --agents lowest rollout --no-rl \
   --lowest cost=route \
   --rollout base=lowest,cost=route,horizon=5,terminal=0
+
+# MCTS
+python -m scripts.run_batch_eval --name mcts_smoke --agents mcts --no-rl \
+  --mcts base=nearest,horizon=5,iterations=8,depth=2,exploration_weight=1
 ```
 
 ## Modos RL e estrutura de modelos

@@ -49,6 +49,7 @@ ALLOWED_YAML_KEYS = frozenset({
     "no_heuristics",
     "lowest",
     "rollout",
+    "mcts",
     "rollout_record_decisions",
     "num_runs",
     "num_workers",
@@ -72,6 +73,7 @@ FIELD_DEFAULTS: dict[str, Any] = {
     "no_heuristics": False,
     "lowest": None,
     "rollout": None,
+    "mcts": None,
     "rollout_record_decisions": False,
     "num_runs": DEFAULT_NUM_RUNS,
     "num_workers": 1,
@@ -194,13 +196,14 @@ def _normalize_lowest_list(raw: Any) -> list[str] | None:
     return specs
 
 
-def _normalize_rollout_list(raw: Any) -> list[str] | None:
+def _normalize_key_value_variant_list(raw: Any, *, field_name: str) -> list[str] | None:
+    """Converte YAML/CLI de variantes chave=valor (rollout, mcts) em strings."""
     if raw is None:
         return None
     if isinstance(raw, str):
         raw = [raw]
     if not isinstance(raw, list):
-        raise ValueError("rollout deve ser uma lista de strings ou mapas")
+        raise ValueError(f"{field_name} deve ser uma lista de strings ou mapas")
     specs: list[str] = []
     for item in raw:
         if isinstance(item, str):
@@ -212,8 +215,16 @@ def _normalize_rollout_list(raw: Any) -> list[str] | None:
                 parts.append(f"{k}={value}")
             specs.append(",".join(parts))
         else:
-            raise ValueError(f"item de rollout inválido: {item!r}")
+            raise ValueError(f"item de {field_name} inválido: {item!r}")
     return specs
+
+
+def _normalize_rollout_list(raw: Any) -> list[str] | None:
+    return _normalize_key_value_variant_list(raw, field_name="rollout")
+
+
+def _normalize_mcts_list(raw: Any) -> list[str] | None:
+    return _normalize_key_value_variant_list(raw, field_name="mcts")
 
 
 def resolve_experiment(
@@ -255,6 +266,7 @@ def resolve_experiment(
     # Listas especiais
     resolved["lowest"] = _normalize_lowest_list(resolved.get("lowest"))
     resolved["rollout"] = _normalize_rollout_list(resolved.get("rollout"))
+    resolved["mcts"] = _normalize_mcts_list(resolved.get("mcts"))
 
     all_objectives = list(FoodDeliveryGymEnv.REWARD_OBJECTIVES)
     all_scenarios = get_all_scenarios()
@@ -320,8 +332,13 @@ def resolve_experiment(
         optimizer_catalog.parse_rollout_cli(raw)
         for raw in (resolved["rollout"] or [])
     ]
+    mcts_variants = [
+        optimizer_catalog.parse_mcts_cli(raw)
+        for raw in (resolved["mcts"] or [])
+    ]
     resolved["_lowest_variants"] = lowest_variants
     resolved["_rollout_variants"] = rollout_variants
+    resolved["_mcts_variants"] = mcts_variants
 
     return resolved
 
@@ -383,6 +400,21 @@ def write_run_json(
             "terminal": v.terminal,
         }
         for v in spec.get("_rollout_variants", [])
+    ] or None
+    serializable["mcts"] = [
+        {
+            "base": v.base_optimizer,
+            "cost": v.cost_function,
+            "horizon": v.horizon,
+            "alpha": v.alpha,
+            "terminal": v.terminal,
+            "iterations": v.iterations,
+            "exploration_weight": v.exploration_weight,
+            "depth": v.resolved_depth(),
+            "max_outcomes": v.max_outcomes,
+            "max_expanded_actions": v.max_expanded_actions,
+        }
+        for v in spec.get("_mcts_variants", [])
     ] or None
 
     started = started_at or datetime.now(timezone.utc)

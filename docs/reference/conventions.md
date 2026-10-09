@@ -20,6 +20,7 @@ FoodDelivery-{cenário}-obj{N}-v1
 | `lowest` + `marginal_route` | `lowest_marginal_route_cost` |
 | `lowest` + `weighted_score` | `lowest_weighted_score` |
 | rollout | `rollout_<base_variant>_h..._a..._tc...` |
+| mcts | `mcts_<base_variant>_h..._a..._tc..._i..._ew..._d..._o...[_dthrK]` |
 | modelo PPO | nome da pasta sob `treinamento/obj_N/` (exemplo: `18M_steps`) |
 
 Detalhes de aliases, specs e expansão de variantes: [Catálogo de otimizadores](../framework/optimizer-catalog.md).

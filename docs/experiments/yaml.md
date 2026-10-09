@@ -40,7 +40,8 @@ Defaults importantes:
 | `no_heuristics` | `--no-heuristics` | Não executa heurísticas |
 | `lowest` | `--lowest` | Variantes `cost=...` |
 | `rollout` | `--rollout` | Variantes com `base`, `cost`, `horizon`, `alpha`, `terminal` |
-| `rollout_record_decisions` | `--rollout-record-decisions` | Grava log de decisões |
+| `mcts` | `--mcts` | Variantes com `base`, `cost`, `horizon`, `alpha`, `terminal`, `iterations`, `exploration_weight`, `depth`, `max_outcomes`, `max_expanded_actions` |
+| `rollout_record_decisions` | `--rollout-record-decisions` | Grava log de decisões do rollout/MCTS |
 | `num_runs` | `-n` / `--num-runs` | Episódios por agente |
 | `num_workers` | `--num-workers` | Paralelismo por agente |
 | `seed` | `--seed` | Semente |
@@ -68,13 +69,13 @@ num_runs: 5
 seed: 42
 ```
 
-## Exemplo com rollout e PPO
+## Exemplo com rollout, MCTS e PPO
 
-Consulte [`experiments/example.yaml`](../../experiments/example.yaml): objetivo 3, três cenários, heurísticas, várias variantes de rollout e modelos `ppo_18M_steps` / `ppo_18M_steps_otimizado`.
+Consulte [`experiments/example.yaml`](../../experiments/example.yaml): objetivo 3, três cenários, heurísticas, variantes de rollout e MCTS, e modelos `ppo_18M_steps` / `ppo_18M_steps_otimizado`.
 
 ## Regras de validação
 
-- Se `lowest` ou `rollout` estiverem em `agents`, as variantes correspondentes devem ser declaradas (`lowest:` / `rollout:` no YAML ou flags `--lowest` / `--rollout`).
+- Se `lowest`, `rollout` ou `mcts` estiverem em `agents`, as variantes correspondentes devem ser declaradas (`lowest:` / `rollout:` / `mcts:` no YAML ou flags `--lowest` / `--rollout` / `--mcts`).
 - `num_workers > 1` usa processos paralelos por agente.
 
 ## Execução

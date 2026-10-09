@@ -10,7 +10,7 @@ Guia de uso e extensão: [Otimizadores](optimizers.md).
 |----------|--------|
 | `OptimizerSpec` | Entrada canônica: chave, aliases CLI, labels, classe, builder, requisitos |
 | `CostFunctionSpec` | Funções de custo do `lowest` e nomes de pasta de resultado |
-| `LowestVariantSpec` / `RolloutVariantSpec` | Variantes explícitas usadas na CLI e no YAML |
+| `LowestVariantSpec` / `RolloutVariantSpec` / `MCTSVariantSpec` | Variantes explícitas usadas na CLI e no YAML |
 | `EvalVariant` | Par `(spec, result_key, extras)` expandido para uma execução |
 | `discover_rl_models` | Descoberta de modelos sob `data/ppo_training/` |
 
@@ -25,6 +25,7 @@ A **ordem** das entradas em `_SPECS` é a ordem canônica usada em plots, tabela
 | `nearest_driver` | `nearest`, `nearest_driver` | `NearestDriverOptimizerGym` | sim | sim | (nenhum) |
 | `lowest` | `lowest` | `LowestCostDriverOptimizerGym` | sim | sim | `cost_function` |
 | `rollout` | `rollout` | `RolloutOptimizerGym` | sim | **não** | variantes `--rollout` |
+| `mcts` | `mcts` | `MonteCarloTreeSearchOptimizerGym` | sim | **não** | variantes `--mcts` |
 | `rl` | `rl` | `RLModelOptimizerGym` | não | **não** | `model` (ou descoberta / `--model-path`) |
 
 Comportamento resumido:
@@ -36,6 +37,7 @@ Comportamento resumido:
 | `nearest_driver` | Motorista mais próximo do próximo segmento da rota |
 | `lowest` | Minimiza a função de custo informada |
 | `rollout` | Avalia ações candidatas com lookahead a partir de uma política base |
+| `mcts` | Monte Carlo tree search com simulação por política base nas folhas |
 | `rl` | Política SB3 (`predict`); carregada por caminho ou descoberta |
 
 ## Funções de custo (`lowest`)
@@ -84,7 +86,7 @@ Formato: `base=...,cost=...,horizon=...,alpha=...,terminal=...`
 | `terminal` | não (default `0`) | `0` ou `model` |
 
 Bases válidas hoje: `random`, `first_driver` / `first`, `nearest_driver` / `nearest`, `lowest`.  
-`rollout` e `rl` **não** podem ser base.
+`rollout`, `mcts` e `rl` **não** podem ser base.
 
 Exemplos:
 
@@ -116,7 +118,50 @@ Exemplos:
 Pastas antigas só com `rollout_<base_variant>` ainda são reconhecidas (defaults de horizonte/alpha/terminal).
 
 Calibração do modo `terminal=model`: [collect_terminal_cost](../tools/collect-terminal-cost.md) e [fit_terminal_cost](../tools/fit-terminal-cost.md).  
-Visualização de decisões: [visualize_rollout_decisions](../tools/visualize-rollout-decisions.md).
+Visualização de decisões: [visualize_rollout_decisions](../tools/visualize-rollout-decisions.md), [visualize_mcts_decisions](../tools/visualize-mcts-decisions.md).
+
+## MCTS
+
+### Spec CLI / YAML
+
+Formato: `base=...,cost=...,horizon=...,alpha=...,terminal=...,iterations=...,exploration_weight=...,depth=...,max_outcomes=...,max_expanded_actions=...`
+
+| Chave | Obrigatório | Descrição |
+|-------|-------------|-----------|
+| `base` | não (default `nearest`) | Política base nas folhas; mesmas bases do rollout |
+| `cost` | só se a base for `lowest` | Função de custo da base |
+| `horizon` | não (default `5`) | Horizonte do rollout na folha |
+| `alpha` | não (default `0.9`) | Fator de desconto |
+| `terminal` | não (default `0`) | `0` ou `model` |
+| `iterations` | não (default `8`) | Simulações da árvore por decisão |
+| `exploration_weight` | não (default `1`) | Peso do bônus para ações pouco visitadas |
+| `depth` | não (default = `horizon`, ou `5` se infinito) | Profundidade máxima da árvore |
+| `max_outcomes` | não (default `1`) | Futuros reamostrados por ação |
+| `max_expanded_actions` | não (default `all` / omitido) | Limiar d_thr: máx. ações expandidas por nó (ordenação míope por recompensa imediata). Use inteiro `>= 1`, ou `all`/`none`/`null` para todos os motoristas |
+
+Exemplos:
+
+```bash
+python -m scripts.test_runner --mode auto --optimizer mcts \
+  --mcts base=nearest,horizon=5,iterations=8,depth=2,exploration_weight=1
+
+python -m scripts.run_batch_eval --name mcts_smoke --agents mcts --no-rl \
+  --mcts base=lowest,cost=route,horizon=5,iterations=8,exploration_weight=50,depth=2,max_expanded_actions=4
+```
+
+### Nome da pasta de resultado
+
+```
+mcts_<base_variant>_h<H>_a<alpha>_tc<terminal>_i<iterations>_ew<exploration_weight>_d<depth>_o<max_outcomes>[_dthrK]
+```
+
+O sufixo `_dthrK` só aparece quando `max_expanded_actions` é um inteiro (omitido = todos os motoristas; pastas legadas sem o sufixo continuam válidas).
+
+| Spec | `result_key` |
+|------|----------------|
+| `base=nearest,horizon=5,alpha=0.9,terminal=0,iterations=8,exploration_weight=1,depth=2,max_outcomes=1` | `mcts_nearest_driver_h5_a0p9_tc0_i8_ew1_d2_o1` |
+| `base=lowest,cost=route,...,iterations=8,exploration_weight=50,depth=2` | `mcts_lowest_route_cost_h5_a0p9_tc0_i8_ew50_d2_o1` |
+| `...,depth=2,max_outcomes=1,max_expanded_actions=4` | `mcts_..._d2_o1_dthr4` |
 
 ## Modelos RL
 
@@ -138,7 +183,7 @@ Organização após o treino no Zoo: [Artefatos](../rl-baselines3-zoo/artifacts.
 
 ## Expansão de variantes (`expand_evaluations`)
 
-Quando a lista de agentes inclui `lowest` ou `rollout`, o batch **exige** variantes explícitas (`--lowest` / `--rollout` ou blocos YAML). Cada variante vira um `EvalVariant` com:
+Quando a lista de agentes inclui `lowest`, `rollout` ou `mcts`, o batch **exige** variantes explícitas (`--lowest` / `--rollout` / `--mcts` ou blocos YAML). Cada variante vira um `EvalVariant` com:
 
 - `result_key`: nome da pasta em `data/runs/<name>/obj_N/<cenário>/`
 - `extras`: kwargs passados ao builder (`cost_function`, `base_optimizer`, `horizon`, …)
@@ -156,6 +201,9 @@ optimizer_catalog.resolve_key("nearest")          # -> "nearest_driver"
 optimizer_catalog.parse_lowest_cli("cost=route")
 optimizer_catalog.parse_rollout_cli(
     "base=lowest,cost=route,horizon=5,terminal=0"
+)
+optimizer_catalog.parse_mcts_cli(
+    "base=nearest,horizon=5,iterations=8,depth=2"
 )
 optimizer_catalog.build("lowest", env, objective=3, cost_function="route")
 optimizer_catalog.discover_rl_models(

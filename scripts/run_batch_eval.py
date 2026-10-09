@@ -124,10 +124,32 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--mcts",
+        action="append",
+        default=None,
+        metavar="SPEC",
+        help=(
+            "Variante explícita de MCTS (repetível). Formato key=value,...\n"
+            "Chaves: base, cost, horizon, alpha, terminal, iterations,\n"
+            "exploration_weight, depth, max_outcomes, max_expanded_actions.\n"
+            f"Defaults: base={optimizer_catalog.DEFAULT_ROLLOUT_BASE}, "
+            f"horizon={optimizer_catalog.DEFAULT_ROLLOUT_HORIZON}, "
+            f"alpha={optimizer_catalog.DEFAULT_ROLLOUT_ALPHA}, "
+            f"terminal={optimizer_catalog.DEFAULT_ROLLOUT_TERMINAL}, "
+            f"iterations={optimizer_catalog.DEFAULT_MCTS_ITERATIONS}, "
+            f"exploration_weight={optimizer_catalog.DEFAULT_MCTS_EXPLORATION_WEIGHT}, "
+            f"max_outcomes={optimizer_catalog.DEFAULT_MCTS_MAX_OUTCOMES}, "
+            "max_expanded_actions=all (todos os motoristas).\n"
+            "Ex.: --mcts base=nearest,horizon=5,iterations=8,depth=2,"
+            "exploration_weight=1,max_expanded_actions=4"
+        ),
+    )
+
+    parser.add_argument(
         "--rollout-record-decisions",
         action="store_true",
         default=None,
-        help="Grava o decision_log do rollout (desativado por padrão).",
+        help="Grava o decision_log do rollout/MCTS (desativado por padrão).",
     )
 
     parser.add_argument(
@@ -234,6 +256,7 @@ def _cli_overrides(args) -> dict:
         "models": args.models,
         "lowest": args.lowest,
         "rollout": args.rollout,
+        "mcts": args.mcts,
         "num_runs": args.num_runs,
         "num_workers": args.num_workers,
         "seed": args.seed,
@@ -399,6 +422,7 @@ def main():
     save_mean_plots = bool(spec["batch_plots"])
     lowest_variants = spec["_lowest_variants"]
     rollout_variants = spec["_rollout_variants"]
+    mcts_variants = spec["_mcts_variants"]
 
     print("=== Avaliando Agentes no Ambiente de Entrega de Última Milha ===")
     print(f"  Experimento  : {spec['name']}")
@@ -433,6 +457,24 @@ def main():
             print(f"    - {key}")
     else:
         print("  Rollouts     : (nenhum --rollout)")
+    if mcts_variants:
+        print("  MCTS:")
+        for variant in mcts_variants:
+            key = optimizer_catalog.mcts_result_key(
+                variant.base_optimizer,
+                variant.cost_function,
+                horizon=variant.horizon,
+                alpha=variant.alpha,
+                terminal=variant.terminal,
+                iterations=variant.iterations,
+                exploration_weight=variant.exploration_weight,
+                depth=variant.depth,
+                max_outcomes=variant.max_outcomes,
+                max_expanded_actions=variant.max_expanded_actions,
+            )
+            print(f"    - {key}")
+    else:
+        print("  MCTS         : (nenhum --mcts)")
     print(f"  Runs         : {spec['num_runs']} | Seed: {spec['seed']}")
     print(f"  Workers      : {spec['num_workers']}")
     print(f"  Modo experim.: {spec['experiment_mode']}")
@@ -454,6 +496,7 @@ def main():
         )
 
     rollout_selected = _heuristic_selected("rollout")
+    mcts_selected = _heuristic_selected("mcts")
     lowest_selected = _heuristic_selected("lowest")
 
     explicit_lowest = (
@@ -461,6 +504,9 @@ def main():
     )
     explicit_rollout = (
         ("rollout" in agents_filter) or ("rollout" in heuristics_filter)
+    )
+    explicit_mcts = (
+        ("mcts" in agents_filter) or ("mcts" in heuristics_filter)
     )
 
     if spec["rollout"] and not rollout_selected:
@@ -471,6 +517,15 @@ def main():
         parser.error(
             "Erro: rollout selecionado exige ao menos um --rollout "
             "(ex.: --rollout base=lowest,cost=weighted_score,horizon=5,terminal=0)"
+        )
+    if spec["mcts"] and not mcts_selected:
+        parser.error(
+            "Erro: --mcts só pode ser usado se mcts estiver entre os agentes"
+        )
+    if explicit_mcts and not mcts_variants:
+        parser.error(
+            "Erro: mcts selecionado exige ao menos um --mcts "
+            "(ex.: --mcts base=nearest,horizon=5,iterations=8,depth=2)"
         )
     if spec["lowest"] and not lowest_selected:
         parser.error(
@@ -541,11 +596,13 @@ def main():
                     print("[AVISO] Nenhum agente selecionado para este objetivo.")
                     continue
 
-                # lowest/rollout só entram com variantes explícitas
+                # lowest/rollout/mcts só entram com variantes explícitas
                 if not lowest_variants:
                     agents = [a for a in agents if a.key != "lowest"]
                 if not rollout_variants:
                     agents = [a for a in agents if a.key != "rollout"]
+                if not mcts_variants:
+                    agents = [a for a in agents if a.key != "mcts"]
 
                 if not agents:
                     print("[AVISO] Nenhum agente selecionado para este objetivo.")
@@ -556,6 +613,7 @@ def main():
                         agents,
                         lowest_variants=lowest_variants,
                         rollout_variants=rollout_variants,
+                        mcts_variants=mcts_variants,
                         record_decisions=spec["rollout_record_decisions"],
                     )
                 except (KeyError, ValueError) as exc:
