@@ -1,0 +1,36 @@
+---
+description: Proíbe alterar testes existentes sem aprovação explícita do usuário
+alwaysApply: true
+---
+
+# Não alterar testes
+
+É expressamente proibido alterar um teste existente. Isso inclui assertions, valores esperados, fixtures, `conftest.py`, skips, deletes e qualquer mudança que faça um teste passar por outro motivo.
+
+Testes novos são permitidos. Eles não substituem nem enfraquecem um teste que já existe.
+
+## Quando uma mudança pode ser proposta
+
+Só proponha alterar um teste quando o código sob teste foi refatorado e o teste precisa acompanhar a mesma estrutura, sem mudar o comportamento que ele verifica.
+
+Falha do teste, implementação nova ou resultado diferente não justificam editar o teste. Corrija o código de produção.
+
+## Como pedir aprovação
+
+Pare antes de editar qualquer teste. Explique em português, de forma explícita:
+
+1. Qual teste muda e por quê a refatoração do código torna a forma atual inválida.
+2. O antes e o depois, com o trecho exato.
+3. Qual comportamento continua coberto e o que deixaria de ser verificado.
+
+Continue somente depois de uma aprovação explícita dessa mudança. Silêncio, um "ok" sobre o código de produção ou seguir em frente não contam como aprovação.
+
+```python
+# ❌ PROIBIDO — ajustar o teste para o código novo passar
+def test_reward():
+    assert env.reward(order) == 0.5  # antes era 1.0
+
+# ✅ PERMITIDO pedir aprovação — mesma verificação, após extrair a função
+def test_reward():
+    assert compute_reward(order) == 1.0
+```

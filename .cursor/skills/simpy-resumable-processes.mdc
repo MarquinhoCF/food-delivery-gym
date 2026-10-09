@@ -1,0 +1,78 @@
+---
+description: Regras para criar processos SimPy clonáveis (ResumeCursor) no food-delivery-gym
+globs: food_delivery_gym/main/{actors,driver,establishment,customer,generator,environment}/**/*.py
+alwaysApply: false
+---
+
+# Processos SimPy auto-resumíveis
+
+Todo processo que possa estar vivo no momento de `env.clone()` deve ser **auto-resumível**. Não criar métodos `resume_*` paralelos.
+
+## Checklist obrigatório
+
+1. Assinatura com `*, resume: Optional[ResumeCursor] = None`
+2. Esperas via `_await_timeout` / `_resume_remaining` / `r.enter` + `r.delay` — nunca `yield self.timeout(...)` solto sem fase nomeada
+3. Delays com RNG: passar **callable** (`self.time_to_foo`), não `self.time_to_foo()`
+4. Locals no wait: `phase = "..."` e objetos de domínio (`order`, `cook`, `driver`, …) que o clone precisa
+5. Registrar o nome do método em `PROCESS_RESUME_SPEC` em `env_clone.py`
+6. Rodar `python -m pytest tests/test_env_clone.py -v`
+
+Processo sem registro → `RuntimeError` em `_make_resume_generator`.
+
+## Padrões
+
+### One-shot (espera no início)
+
+```python
+def receive_order(self, order, driver, *, resume: Optional[ResumeCursor] = None):
+    r = resume or ResumeCursor()
+    phase = "receive"
+    yield from self._await_timeout(phase, self.time_to_receive_order, r)from langchain_community.llms import Ollama
+
+llm = Ollama(model="llama2")
+
+llm.invoke("tell me about partial functions in python")
+    # efeitos pós-espera...
+```
+
+`PROCESS_RESUME_SPEC`: `{"args": ("order", "driver"), "phase": "receive"}`
+
+### Loop de poll (espera no fim da iteração)
+
+```python
+def process_route_requests(self, *, resume: Optional[ResumeCursor] = None):
+    yield from self._resume_remaining(resume)
+    while True:
+        # ... trabalho ...
+        phase = "poll"
+        yield from self._await_timeout(phase, self.time_to_accept_or_reject_route, ResumeCursor())
+```
+
+`PROCESS_RESUME_SPEC`: `{}`
+
+### Multi-fase
+
+```python
+def prepare_order(self, cook, order, *, resume=None):
+    r = resume or ResumeCursor()
+    if r.at_start:
+        # setup + RNG só na 1ª entrada
+        ...
+    if r.enter("alloc_wait"):
+        phase = "alloc_wait"
+        yield self.timeout(r.delay(alloc_full))
+        self._publish_driver_allocation(order)
+    if r.enter("remaining_prep"):
+        phase = "remaining_prep"
+        yield self.timeout(r.delay(remaining_prep))
+    self.finish_order(cook, order)
+```
+
+`PROCESS_RESUME_SPEC`: `{"args": ("cook", "order"), "use_phase": True, "extras_keys": (...)}`
+
+## Não fazer
+
+- ❌ Método `resume_foo` separado do `foo`
+- ❌ Reavaliar RNG no caminho de resume (`delay()` já usa `remaining`)
+- ❌ Esquecer objetos/extras no `PROCESS_RESUME_SPEC` (clone falha ou diverge)
+- ❌ Setup com efeitos colaterais fora de `if r.at_start` em processos multi-fase
