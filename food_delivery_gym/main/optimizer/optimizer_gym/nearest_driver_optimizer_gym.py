@@ -14,6 +14,14 @@ class NearestDriverOptimizerGym(OptimizerGym):
     def get_title(self):
         return "Otimizador do Motorista Mais Próximo"
 
+    def ranked_actions(self, obs: dict, drivers: List[Driver], route: Route, *, rng=None) -> list[int]:
+        del obs, rng # obs e rng não são usados
+        map_ = self.gym_env.simpy_env.map
+        return sorted(
+            range(len(drivers)),
+            key=lambda i: (self.compare_distance(map_, drivers[i], route), i),
+        )
+
     def select_driver(self, obs: dict, drivers: List[Driver], route: Route):
         # drivers = list(filter(lambda driver: driver.current_route is None or
         # driver.current_route.size() <= 1, drivers))

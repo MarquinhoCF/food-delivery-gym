@@ -133,7 +133,7 @@ def main():
             "Variante de MCTS (mesmo formato do run_batch_eval). "
             "Formato: base=...,cost=...,horizon=...,alpha=...,terminal=0|model,"
             "iterations=...,exploration_weight=...,depth=...,"
-            "max_outcomes=...,max_expanded_actions=.... "
+            "max_outcomes=...,max_expanded_actions=...,expansion_order=.... "
             f"Defaults: base={optimizer_catalog.DEFAULT_ROLLOUT_BASE}, "
             f"horizon={optimizer_catalog.DEFAULT_ROLLOUT_HORIZON}, "
             f"alpha={optimizer_catalog.DEFAULT_ROLLOUT_ALPHA}, "
@@ -141,9 +141,10 @@ def main():
             f"iterations={optimizer_catalog.DEFAULT_MCTS_ITERATIONS}, "
             f"exploration_weight={optimizer_catalog.DEFAULT_MCTS_EXPLORATION_WEIGHT}, "
             f"max_outcomes={optimizer_catalog.DEFAULT_MCTS_MAX_OUTCOMES}, "
-            "max_expanded_actions=all. "
+            "max_expanded_actions=all, "
+            f"expansion_order={optimizer_catalog.DEFAULT_MCTS_EXPANSION_ORDER}. "
             "Ex.: --mcts base=nearest,horizon=5,iterations=8,depth=2,"
-            "max_expanded_actions=4"
+            "max_expanded_actions=4,expansion_order=heuristic"
         ),
     )
     parser.add_argument(
@@ -277,6 +278,7 @@ def main():
                     depth=mcts_variant.resolved_depth(),
                     max_outcomes=mcts_variant.max_outcomes,
                     max_expanded_actions=mcts_variant.max_expanded_actions,
+                    expansion_order=mcts_variant.expansion_order,
                 )
                 if mcts_variant.cost_function:
                     build_kwargs["cost_function"] = mcts_variant.cost_function

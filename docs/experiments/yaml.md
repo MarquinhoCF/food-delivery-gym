@@ -40,7 +40,7 @@ Defaults importantes:
 | `no_heuristics` | `--no-heuristics` | Não executa heurísticas |
 | `lowest` | `--lowest` | Variantes `cost=...` |
 | `rollout` | `--rollout` | Variantes com `base`, `cost`, `horizon`, `alpha`, `terminal` |
-| `mcts` | `--mcts` | Variantes com `base`, `cost`, `horizon`, `alpha`, `terminal`, `iterations`, `exploration_weight`, `depth`, `max_outcomes`, `max_expanded_actions` |
+| `mcts` | `--mcts` | Variantes com `base`, `cost`, `horizon`, `alpha`, `terminal`, `iterations`, `exploration_weight`, `depth`, `max_outcomes`, `max_expanded_actions`, `expansion_order` |
 | `rollout_record_decisions` | `--rollout-record-decisions` | Grava log de decisões do rollout/MCTS |
 | `num_runs` | `-n` / `--num-runs` | Episódios por agente |
 | `num_workers` | `--num-workers` | Paralelismo por agente |

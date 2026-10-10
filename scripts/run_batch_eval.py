@@ -131,7 +131,8 @@ def parse_args():
         help=(
             "Variante explícita de MCTS (repetível). Formato key=value,...\n"
             "Chaves: base, cost, horizon, alpha, terminal, iterations,\n"
-            "exploration_weight, depth, max_outcomes, max_expanded_actions.\n"
+            "exploration_weight, depth, max_outcomes, max_expanded_actions,\n"
+            "expansion_order.\n"
             f"Defaults: base={optimizer_catalog.DEFAULT_ROLLOUT_BASE}, "
             f"horizon={optimizer_catalog.DEFAULT_ROLLOUT_HORIZON}, "
             f"alpha={optimizer_catalog.DEFAULT_ROLLOUT_ALPHA}, "
@@ -139,9 +140,11 @@ def parse_args():
             f"iterations={optimizer_catalog.DEFAULT_MCTS_ITERATIONS}, "
             f"exploration_weight={optimizer_catalog.DEFAULT_MCTS_EXPLORATION_WEIGHT}, "
             f"max_outcomes={optimizer_catalog.DEFAULT_MCTS_MAX_OUTCOMES}, "
-            "max_expanded_actions=all (todos os motoristas).\n"
+            "max_expanded_actions=all (todos os motoristas), "
+            f"expansion_order={optimizer_catalog.DEFAULT_MCTS_EXPANSION_ORDER}.\n"
             "Ex.: --mcts base=nearest,horizon=5,iterations=8,depth=2,"
-            "exploration_weight=1,max_expanded_actions=4"
+            "exploration_weight=1,max_expanded_actions=4,"
+            "expansion_order=heuristic"
         ),
     )
 
@@ -471,6 +474,7 @@ def main():
                 depth=variant.depth,
                 max_outcomes=variant.max_outcomes,
                 max_expanded_actions=variant.max_expanded_actions,
+                expansion_order=variant.expansion_order,
             )
             print(f"    - {key}")
     else:

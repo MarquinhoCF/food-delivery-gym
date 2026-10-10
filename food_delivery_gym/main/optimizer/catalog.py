@@ -53,8 +53,11 @@ DEFAULT_MCTS_ITERATIONS = 8
 DEFAULT_MCTS_EXPLORATION_WEIGHT = 1.0
 DEFAULT_MCTS_MAX_OUTCOMES = 1
 DEFAULT_MCTS_MAX_EXPANDED_ACTIONS: int | None = None
+DEFAULT_MCTS_EXPANSION_ORDER = "immediate"
+MCTS_EXPANSION_ORDER_CHOICES = ("immediate", "heuristic")
 TERMINAL_COST_MODES = ("0", "model")
 TerminalCostMode = Literal["0", "model"]
+MCTSExpansionOrder = Literal["immediate", "heuristic"]
 
 Builder = Callable[..., OptimizerGym]
 
@@ -130,6 +133,7 @@ class MCTSVariantSpec:
     depth: int | None = None
     max_outcomes: int = DEFAULT_MCTS_MAX_OUTCOMES
     max_expanded_actions: int | None = DEFAULT_MCTS_MAX_EXPANDED_ACTIONS
+    expansion_order: MCTSExpansionOrder = DEFAULT_MCTS_EXPANSION_ORDER  # type: ignore[assignment]
 
     def resolved_depth(self) -> int:
         if self.depth is not None:
@@ -181,6 +185,19 @@ class MCTSVariantSpec:
                 f"max_expanded_actions deve ser >= 1 ou None; "
                 f"recebido {self.max_expanded_actions}"
             )
+        if self.expansion_order not in MCTS_EXPANSION_ORDER_CHOICES:
+            raise ValueError(
+                f"expansion_order inválido: '{self.expansion_order}'. "
+                f"Opções: {MCTS_EXPANSION_ORDER_CHOICES}"
+            )
+        if self.expansion_order == "heuristic":
+            if base.cls is None or not callable(
+                getattr(base.cls, "ranked_actions", None)
+            ):
+                raise ValueError(
+                    "expansion_order='heuristic' exige base com ranked_actions "
+                    f"(base '{base.key}' não tem)"
+                )
         return MCTSVariantSpec(
             base_optimizer=base.key,
             cost_function=cost,
@@ -196,6 +213,7 @@ class MCTSVariantSpec:
                 if self.max_expanded_actions is None
                 else int(self.max_expanded_actions)
             ),
+            expansion_order=self.expansion_order,  # type: ignore[arg-type]
         )
 
 
@@ -336,6 +354,9 @@ def _mcts(env, objective: int | None = None, **extras) -> OptimizerGym:
         max_outcomes=extras.get("max_outcomes", DEFAULT_MCTS_MAX_OUTCOMES),
         max_expanded_actions=extras.get(
             "max_expanded_actions", DEFAULT_MCTS_MAX_EXPANDED_ACTIONS
+        ),
+        expansion_order=extras.get(
+            "expansion_order", DEFAULT_MCTS_EXPANSION_ORDER
         ),
     )
 
@@ -764,8 +785,9 @@ def mcts_result_key(
     depth: int | None = None,
     max_outcomes: int = DEFAULT_MCTS_MAX_OUTCOMES,
     max_expanded_actions: int | None = DEFAULT_MCTS_MAX_EXPANDED_ACTIONS,
+    expansion_order: MCTSExpansionOrder = DEFAULT_MCTS_EXPANSION_ORDER,  # type: ignore[assignment]
 ) -> str:
-    """Nome de pasta: mcts_<base>_h5_a0p9_tc0_i8_ew1_d5_o1[_dthrK]."""
+    """Nome de pasta: mcts_<base>_h5_a0p9_tc0_i8_ew1_d5_o1[_maxexpK][_ordheur]."""
     variant = MCTSVariantSpec(
         base_optimizer=base_optimizer,
         cost_function=cost_function,
@@ -777,6 +799,7 @@ def mcts_result_key(
         depth=depth,
         max_outcomes=max_outcomes,
         max_expanded_actions=max_expanded_actions,
+        expansion_order=expansion_order,
     ).normalized()
     base_key = base_variant_key(variant.base_optimizer, variant.cost_function)
     resolved_depth = variant.resolved_depth()
@@ -790,15 +813,18 @@ def mcts_result_key(
         f"_d{int(resolved_depth)}"
         f"_o{int(variant.max_outcomes)}"
     )
-    # Sufixo só quando d_thr é finito: pastas legadas sem _dthr continuam válidas.
+    # Sufixo só quando max_expanded_actions é finito: sem ele, vale todos os motoristas.
     if variant.max_expanded_actions is not None:
-        key = f"{key}_dthr{int(variant.max_expanded_actions)}"
+        key = f"{key}_maxexp{int(variant.max_expanded_actions)}"
+    # Sufixo só quando a ordem não é a padrão (immediate).
+    if variant.expansion_order == "heuristic":
+        key = f"{key}_ordheur"
     return key
 
 
 _MCTS_RESULT_KEY_RE = re.compile(
     r"^mcts_(.+)_h(\d+|inf)_a([0-9p]+)_tc(0|model)"
-    r"_i(\d+)_ew([0-9p]+)_d(\d+)_o(\d+)(?:_dthr(\d+))?$"
+    r"_i(\d+)_ew([0-9p]+)_d(\d+)_o(\d+)(?:_maxexp(\d+))?(?:_ordheur)?$"
 )
 
 
@@ -818,6 +844,9 @@ def parse_mcts_result_key(dir_name: str) -> MCTSVariantSpec | None:
         max_outcomes,
         max_expanded_actions,
     ) = match.groups()
+    expansion_order: MCTSExpansionOrder = (
+        "heuristic" if dir_name.endswith("_ordheur") else "immediate"
+    )
     try:
         base_optimizer, cost_function = _base_variant_from_key(base_variant)
         return MCTSVariantSpec(
@@ -835,6 +864,7 @@ def parse_mcts_result_key(dir_name: str) -> MCTSVariantSpec | None:
                 if max_expanded_actions is None
                 else int(max_expanded_actions)
             ),
+            expansion_order=expansion_order,
         ).normalized()
     except (ValueError, KeyError):
         return None
@@ -851,7 +881,7 @@ def mcts_result_label(spec: MCTSVariantSpec, *, short: bool = False) -> str:
         base_label = base.short_label if short else base.label
     horizon_str = "inf" if variant.horizon is None else str(variant.horizon)
     tc_str = "0" if variant.terminal == "0" else "model"
-    dthr_str = (
+    maxexp_str = (
         "all"
         if variant.max_expanded_actions is None
         else str(variant.max_expanded_actions)
@@ -859,7 +889,8 @@ def mcts_result_label(spec: MCTSVariantSpec, *, short: bool = False) -> str:
     return (
         f"MCTS ({base_label}, H={horizon_str}, α={variant.alpha:g}, TC={tc_str}, "
         f"i={variant.iterations}, ew={variant.exploration_weight:g}, "
-        f"d={variant.resolved_depth()}, o={variant.max_outcomes}, dthr={dthr_str})"
+        f"d={variant.resolved_depth()}, o={variant.max_outcomes}, maxexp={maxexp_str}, "
+        f"ord={variant.expansion_order})"
     )
 
 
@@ -868,7 +899,8 @@ def parse_mcts_cli(raw: str) -> MCTSVariantSpec:
     Parseia variante MCTS em formato chave=valor.
 
     Chaves: base, cost, horizon, alpha, terminal, iterations,
-    exploration_weight, depth, max_outcomes, max_expanded_actions.
+    exploration_weight, depth, max_outcomes, max_expanded_actions,
+    expansion_order.
     """
     values = _parse_key_value_spec(
         raw,
@@ -884,6 +916,7 @@ def parse_mcts_cli(raw: str) -> MCTSVariantSpec:
             "depth",
             "max_outcomes",
             "max_expanded_actions",
+            "expansion_order",
         },
     )
 
@@ -920,13 +953,17 @@ def parse_mcts_cli(raw: str) -> MCTSVariantSpec:
     )
 
     if "max_expanded_actions" in values:
-        dthr_raw = values["max_expanded_actions"].lower()
-        if dthr_raw in ("none", "null", "all"):
+        maxexp_raw = values["max_expanded_actions"].lower()
+        if maxexp_raw in ("none", "null", "all"):
             max_expanded_actions: int | None = None
         else:
             max_expanded_actions = int(values["max_expanded_actions"])
     else:
         max_expanded_actions = DEFAULT_MCTS_MAX_EXPANDED_ACTIONS
+
+    expansion_order = values.get(
+        "expansion_order", DEFAULT_MCTS_EXPANSION_ORDER
+    ).lower()
 
     return MCTSVariantSpec(
         base_optimizer=base,
@@ -939,6 +976,7 @@ def parse_mcts_cli(raw: str) -> MCTSVariantSpec:
         depth=depth,
         max_outcomes=max_outcomes,
         max_expanded_actions=max_expanded_actions,
+        expansion_order=expansion_order,  # type: ignore[arg-type]
     ).normalized()
 
 def base_variant_key(base_optimizer: str, cost_function: str | None = None) -> str:
@@ -1073,6 +1111,7 @@ def expand_evaluations(
                     "depth": mcts.resolved_depth(),
                     "max_outcomes": mcts.max_outcomes,
                     "max_expanded_actions": mcts.max_expanded_actions,
+                    "expansion_order": mcts.expansion_order,
                 }
                 if mcts.cost_function:
                     extras["cost_function"] = mcts.cost_function
@@ -1090,6 +1129,7 @@ def expand_evaluations(
                             depth=mcts.depth,
                             max_outcomes=mcts.max_outcomes,
                             max_expanded_actions=mcts.max_expanded_actions,
+                            expansion_order=mcts.expansion_order,
                         ),
                         extras=extras,
                     )

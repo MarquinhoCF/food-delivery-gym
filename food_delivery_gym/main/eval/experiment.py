@@ -413,6 +413,7 @@ def write_run_json(
             "depth": v.resolved_depth(),
             "max_outcomes": v.max_outcomes,
             "max_expanded_actions": v.max_expanded_actions,
+            "expansion_order": v.expansion_order,
         }
         for v in spec.get("_mcts_variants", [])
     ] or None

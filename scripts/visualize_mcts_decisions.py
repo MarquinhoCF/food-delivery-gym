@@ -170,8 +170,18 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=None,
         help=(
-            "Limiar d_thr: máx. ações expandidas por nó "
+            "Máx. ações expandidas por nó (max_expanded_actions) "
             "(default: todos os motoristas)"
+        ),
+    )
+    parser.add_argument(
+        "--expansion-order",
+        choices=list(optimizer_catalog.MCTS_EXPANSION_ORDER_CHOICES),
+        default=optimizer_catalog.DEFAULT_MCTS_EXPANSION_ORDER,
+        help=(
+            "Ordem das ações não tentadas: immediate (C(S,x)) ou "
+            f"heuristic (ranked_actions da base; default: "
+            f"{optimizer_catalog.DEFAULT_MCTS_EXPANSION_ORDER})"
         ),
     )
     parser.add_argument(
@@ -242,6 +252,7 @@ def main() -> None:
         depth=args.depth,
         max_outcomes=args.max_outcomes,
         max_expanded_actions=args.max_expanded_actions,
+        expansion_order=args.expansion_order,
     )
     optimizer.state = env.get_observation()
     optimizer.done = False
@@ -263,6 +274,7 @@ def main() -> None:
             depth=args.depth,
             max_outcomes=args.max_outcomes,
             max_expanded_actions=args.max_expanded_actions,
+            expansion_order=args.expansion_order,
         ),
         f"obj_{args.objective}",
         datetime.now().strftime("%d_%m_%Y-%H_%M_%S"),

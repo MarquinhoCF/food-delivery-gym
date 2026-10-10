@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import List, Optional, Type
+from typing import List, Literal, Optional, Type
 
 from food_delivery_gym.main.driver.driver import Driver
 from food_delivery_gym.main.environment.food_delivery_gym_env import FoodDeliveryGymEnv
@@ -17,7 +17,12 @@ from food_delivery_gym.main.optimizer.optimizer_gym.rollout_optimizer_gym import
     RolloutOptimizerGym,
     TerminalCostMode,
 )
+from food_delivery_gym.main.route.delivery_route_segment import DeliveryRouteSegment
+from food_delivery_gym.main.route.pickup_route_segment import PickupRouteSegment
 from food_delivery_gym.main.route.route import Route
+
+ExpansionOrder = Literal["immediate", "heuristic"]
+EXPANSION_ORDER_CHOICES = ("immediate", "heuristic")
 
 
 @dataclass
@@ -76,7 +81,7 @@ class MonteCarloTreeSearchOptimizerGym(RolloutOptimizerGym):
     """
     Monte Carlo tree search com política de base do rollout nas folhas.
 
-    Em cada decisão (Powell: raiz = St; amostra W após a ação):
+    Em cada decisão (raiz = St; amostra W após a ação):
       1. Raiz lógica no estado atual.
       2. Expansões só via clone(future='resample') + step (futuro hipotético).
       3. `iterations` trajetórias: seleção / expansão / simulação / atualização.
@@ -98,6 +103,7 @@ class MonteCarloTreeSearchOptimizerGym(RolloutOptimizerGym):
         depth: Optional[int] = None,
         max_outcomes: int = 1,
         max_expanded_actions: Optional[int] = None,
+        expansion_order: ExpansionOrder = "immediate",
     ):
         super().__init__(
             environment,
@@ -124,6 +130,18 @@ class MonteCarloTreeSearchOptimizerGym(RolloutOptimizerGym):
                 f"max_expanded_actions deve ser >= 1 ou None; "
                 f"recebido {max_expanded_actions}"
             )
+        if expansion_order not in EXPANSION_ORDER_CHOICES:
+            raise ValueError(
+                f"expansion_order inválido: '{expansion_order}'. "
+                f"Opções: {EXPANSION_ORDER_CHOICES}"
+            )
+        if expansion_order == "heuristic" and not callable(
+            getattr(base_optimizer_cls, "ranked_actions", None)
+        ):
+            raise ValueError(
+                "expansion_order='heuristic' exige base com ranked_actions "
+                f"(classe {base_optimizer_cls.__name__} não tem)"
+            )
 
         self.iterations = int(iterations)
         self.exploration_weight = float(exploration_weight)
@@ -132,6 +150,7 @@ class MonteCarloTreeSearchOptimizerGym(RolloutOptimizerGym):
         self.max_expanded_actions = (
             None if max_expanded_actions is None else int(max_expanded_actions)
         )
+        self.expansion_order: ExpansionOrder = expansion_order
 
     def _default_depth(self) -> int:
         if self.horizon is None:
@@ -141,13 +160,14 @@ class MonteCarloTreeSearchOptimizerGym(RolloutOptimizerGym):
     def get_title(self):
         base_name = self.base_optimizer_cls.__name__
         horizon_str = f"H={self.horizon}" if self.horizon is not None else "H=inf"
-        dthr_str = (
+        maxexp_str = (
             "all" if self.max_expanded_actions is None else str(self.max_expanded_actions)
         )
         return (
             f"MCTS({base_name}, alpha={self.alpha}, {horizon_str}, "
             f"TC={self.terminal_cost_mode}, i={self.iterations}, "
-            f"ew={self.exploration_weight:g}, d={self.depth}, dthr={dthr_str})"
+            f"ew={self.exploration_weight:g}, d={self.depth}, maxexp={maxexp_str}, "
+            f"ord={self.expansion_order})"
         )
 
     def get_hyperparameters(self):
@@ -161,6 +181,7 @@ class MonteCarloTreeSearchOptimizerGym(RolloutOptimizerGym):
                 "max_expanded_actions": jsonable_hyperparameter(
                     self.max_expanded_actions
                 ),
+                "expansion_order": jsonable_hyperparameter(self.expansion_order),
             }
         )
         return params
@@ -217,23 +238,46 @@ class MonteCarloTreeSearchOptimizerGym(RolloutOptimizerGym):
         )
         return sampled_future, float(reward)
 
+    def _route_for_order(self, parent_env: FoodDeliveryGymEnv) -> Route:
+        order = parent_env.get_current_order()
+        segment_pickup = PickupRouteSegment(order)
+        segment_delivery = DeliveryRouteSegment(order)
+        return Route(parent_env.get_simpy_env(), [segment_pickup, segment_delivery])
+
     def _order_untried_actions(self, node: _TreeNode, num_drivers: int) -> None:
         """
-        Ordena as ações ainda não tentadas pela contribuição imediata C(S, x).
+        Ordena as ações ainda não tentadas conforme `expansion_order`.
 
-        Avalia cada ação com clone+step (amostra de W) e guarda o desfecho em
-        `pending` para reaproveitar na expansão.
+        `immediate`: avalia cada ação com clone+step (amostra de W), guarda o
+        desfecho em `pending` e ordena por (-C(S, x), índice).
+
+        `heuristic`: usa `ranked_actions` da política de base (sem preencher
+        `pending`; o desfecho é expandido sob demanda).
         """
         parent_env = self._parent_env(node)
-        child_depth = node.depth + 1
-        for action in range(num_drivers):
-            node.pending[action] = self._expand_outcome(
-                parent_env, action, child_depth=child_depth
+        if self.expansion_order == "heuristic":
+            obs = parent_env.get_observation()
+            drivers = parent_env.get_drivers()
+            route = self._route_for_order(parent_env)
+            base = self.base_optimizer_cls(
+                parent_env, **self.base_optimizer_kwargs
             )
-        node.untried_actions = sorted(
-            range(num_drivers),
-            key=lambda a: (-node.pending[a][1], a),
-        )
+            node.untried_actions = list(
+                base.ranked_actions(
+                    obs, drivers, route, rng=self._scenario_rng
+                )
+            )
+
+        else:
+            child_depth = node.depth + 1
+            for action in range(num_drivers):
+                node.pending[action] = self._expand_outcome(
+                    parent_env, action, child_depth=child_depth
+                )
+            node.untried_actions = sorted(
+                range(num_drivers),
+                key=lambda a: (-node.pending[a][1], a),
+            )
 
     def _simulate_leaf(self, node: _TreeNode) -> float:
         """
@@ -268,9 +312,9 @@ class MonteCarloTreeSearchOptimizerGym(RolloutOptimizerGym):
         """
         Uma trajetória MCTS a partir da raiz.
 
-        1. Expansão míope (Powell TreePolicy): enquanto |A(S)| < d_thr, abre a
-           ação não tentada de maior recompensa imediata (já ordenada em
-           untried_actions). O primeiro desfecho vem do cache `pending`.
+        1. Expansão: enquanto |A(S)| < max_expanded_actions, abre a próxima ação de
+           `untried_actions` (ordem por C(S, x) ou pela heurística de base).
+           Em `immediate`, o primeiro desfecho vem do cache `pending`.
         2. Seleção: com o limiar atingido (ou sem ações restantes), UCT escolhe
            o ramo; se a ação já tem max_outcomes futuros, desce a um deles.
         3. Expansão de W: ação UCT com menos futuros que max_outcomes.
@@ -291,12 +335,19 @@ class MonteCarloTreeSearchOptimizerGym(RolloutOptimizerGym):
                 self._backup(backup_path, leaf_value)
                 return
 
-            # Expansão míope: |A(S)| < d_thr e ainda há ações não tentadas.
+            # Expansão: |A(S)| < max_expanded_actions e ainda há ações não tentadas.
             if node.untried_actions is None:
                 self._order_untried_actions(node, num_drivers)
             if node.untried_actions and len(node.actions) < expansion_limit:
                 action = node.untried_actions.pop(0)
-                sampled_future, immediate_reward = node.pending.pop(action)
+                if action in node.pending:
+                    sampled_future, immediate_reward = node.pending.pop(action)
+                else:
+                    sampled_future, immediate_reward = self._expand_outcome(
+                        self._parent_env(node),
+                        action,
+                        child_depth=node.depth + 1,
+                    )
                 action_stats = _ActionStats(
                     action=action,
                     immediate_reward=immediate_reward,
@@ -435,6 +486,7 @@ class MonteCarloTreeSearchOptimizerGym(RolloutOptimizerGym):
                 "depth": int(self.depth),
                 "max_outcomes": int(self.max_outcomes),
                 "max_expanded_actions": self.max_expanded_actions,
+                "expansion_order": self.expansion_order,
                 "alpha": float(self.alpha),
                 "horizon": self.horizon,
                 "candidates": candidates,

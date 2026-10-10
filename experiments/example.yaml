@@ -4,7 +4,7 @@ scenarios: [simple, medium, complex]
 experiment_mode: same_scenario
 model_base_dir: ./data/ppo_training/
 num_runs: 20
-num_workers: 8
+num_workers: 10
 seed: 42
 metrics_fmt: npz
 
@@ -67,43 +67,74 @@ rollout:
     terminal: model
 
 mcts:
-  - base: lowest
-    cost: route
-    horizon: 10
-    alpha: 0.9
-    terminal: "0"
-    iterations: 30
-    exploration_weight: 50
-    depth: 2
-    max_outcomes: 1
-    max_expanded_actions: 4
-  - base: lowest
-    cost: route
-    horizon: 5
-    alpha: 0.9
-    terminal: model
-    iterations: 30
-    exploration_weight: 50
-    depth: 2
-    max_outcomes: 1
-    max_expanded_actions: 4
+  # Larga: 6 ações, profundidade 2. 32 iterações enchem a raiz e ainda descem.
   - base: lowest
     cost: weighted_score
     horizon: 10
     alpha: 0.9
-    terminal: "0"
-    iterations: 30
-    exploration_weight: 50
+    terminal: model
+    iterations: 32
+    exploration_weight: 1
     depth: 2
     max_outcomes: 1
-    max_expanded_actions: 4
+    max_expanded_actions: 6
+    expansion_order: heuristic
   - base: lowest
     cost: weighted_score
-    horizon: 5
+    horizon: 10
     alpha: 0.9
     terminal: model
-    iterations: 30
-    exploration_weight: 50
+    iterations: 32
+    exploration_weight: 1
     depth: 2
     max_outcomes: 1
-    max_expanded_actions: 4
+    max_expanded_actions: 6
+    expansion_order: immediate
+
+  # Profunda e mais exploratória. Peso 5 ainda deixa o valor da ação pesar.
+  - base: lowest
+    cost: weighted_score
+    horizon: 10
+    alpha: 0.9
+    terminal: model
+    iterations: 32
+    exploration_weight: 5
+    depth: 4
+    max_outcomes: 1
+    max_expanded_actions: 3
+    expansion_order: heuristic
+  - base: lowest
+    cost: weighted_score
+    horizon: 10
+    alpha: 0.9
+    terminal: model
+    iterations: 32
+    exploration_weight: 5
+    depth: 4
+    max_outcomes: 1
+    max_expanded_actions: 3
+    expansion_order: immediate
+
+  # Profunda e um pouco mais gulosa (peso 1, default do UCT).
+  - base: lowest
+    cost: weighted_score
+    horizon: 10
+    alpha: 0.9
+    terminal: model
+    iterations: 32
+    exploration_weight: 1
+    depth: 4
+    max_outcomes: 1
+    max_expanded_actions: 3
+    expansion_order: heuristic
+  - base: lowest
+    cost: weighted_score
+    horizon: 10
+    alpha: 0.9
+    terminal: model
+    iterations: 32
+    exploration_weight: 1
+    depth: 4
+    max_outcomes: 1
+    max_expanded_actions: 3
+    expansion_order: immediate

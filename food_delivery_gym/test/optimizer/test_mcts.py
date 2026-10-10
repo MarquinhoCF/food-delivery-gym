@@ -1,5 +1,7 @@
 """Parse de variante MCTS e smoke de select_driver."""
 
+import pytest
+
 from food_delivery_gym.main.optimizer import catalog as optimizer_catalog
 from food_delivery_gym.main.optimizer.optimizer_gym.first_driver_optimizer_gym import (
     FirstDriverOptimizerGym,
@@ -149,7 +151,7 @@ def test_parse_mcts_cli_max_expanded_actions_and_result_key():
         max_expanded_actions=default_variant.max_expanded_actions,
     )
     assert default_key == "mcts_nearest_driver_h5_a0p9_tc0_i8_ew1_d2_o1"
-    assert "_dthr" not in default_key
+    assert "_maxexp" not in default_key
 
     variant = optimizer_catalog.parse_mcts_cli(
         "base=nearest,horizon=5,iterations=8,depth=2,max_expanded_actions=4"
@@ -167,7 +169,7 @@ def test_parse_mcts_cli_max_expanded_actions_and_result_key():
         max_outcomes=variant.max_outcomes,
         max_expanded_actions=variant.max_expanded_actions,
     )
-    assert key == "mcts_nearest_driver_h5_a0p9_tc0_i8_ew1_d2_o1_dthr4"
+    assert key == "mcts_nearest_driver_h5_a0p9_tc0_i8_ew1_d2_o1_maxexp4"
     parsed = optimizer_catalog.parse_mcts_result_key(key)
     assert parsed is not None
     assert parsed.max_expanded_actions == 4
@@ -196,4 +198,79 @@ def test_expand_evaluations_mcts_includes_max_expanded_actions():
     )
     assert len(variants) == 1
     assert variants[0].extras["max_expanded_actions"] == 3
-    assert variants[0].result_key.endswith("_dthr3")
+    assert variants[0].result_key.endswith("_maxexp3")
+
+
+def test_parse_mcts_cli_expansion_order_and_result_key():
+    default_variant = optimizer_catalog.parse_mcts_cli(
+        "base=nearest,horizon=5,iterations=8,depth=2"
+    )
+    assert default_variant.expansion_order == "immediate"
+    default_key = optimizer_catalog.mcts_result_key(
+        default_variant.base_optimizer,
+        default_variant.cost_function,
+        horizon=default_variant.horizon,
+        alpha=default_variant.alpha,
+        terminal=default_variant.terminal,
+        iterations=default_variant.iterations,
+        exploration_weight=default_variant.exploration_weight,
+        depth=default_variant.depth,
+        max_outcomes=default_variant.max_outcomes,
+        max_expanded_actions=default_variant.max_expanded_actions,
+        expansion_order=default_variant.expansion_order,
+    )
+    assert default_key == "mcts_nearest_driver_h5_a0p9_tc0_i8_ew1_d2_o1"
+    assert "_ordheur" not in default_key
+
+    variant = optimizer_catalog.parse_mcts_cli(
+        "base=nearest,horizon=5,iterations=8,depth=2,"
+        "max_expanded_actions=4,expansion_order=heuristic"
+    )
+    assert variant.expansion_order == "heuristic"
+    key = optimizer_catalog.mcts_result_key(
+        variant.base_optimizer,
+        variant.cost_function,
+        horizon=variant.horizon,
+        alpha=variant.alpha,
+        terminal=variant.terminal,
+        iterations=variant.iterations,
+        exploration_weight=variant.exploration_weight,
+        depth=variant.depth,
+        max_outcomes=variant.max_outcomes,
+        max_expanded_actions=variant.max_expanded_actions,
+        expansion_order=variant.expansion_order,
+    )
+    assert key == "mcts_nearest_driver_h5_a0p9_tc0_i8_ew1_d2_o1_maxexp4_ordheur"
+    parsed = optimizer_catalog.parse_mcts_result_key(key)
+    assert parsed is not None
+    assert parsed.expansion_order == "heuristic"
+    assert parsed.max_expanded_actions == 4
+
+    legacy = optimizer_catalog.parse_mcts_result_key(
+        "mcts_nearest_driver_h5_a0p9_tc0_i8_ew1_d2_o1"
+    )
+    assert legacy is not None
+    assert legacy.expansion_order == "immediate"
+
+
+def test_parse_mcts_cli_heuristic_with_first_raises():
+    with pytest.raises(ValueError, match="ranked_actions"):
+        optimizer_catalog.parse_mcts_cli(
+            "base=first_driver,horizon=5,iterations=8,depth=2,"
+            "expansion_order=heuristic"
+        )
+
+
+def test_expand_evaluations_mcts_includes_expansion_order():
+    variants = optimizer_catalog.expand_evaluations(
+        [optimizer_catalog.get("mcts")],
+        mcts_variants=[
+            optimizer_catalog.parse_mcts_cli(
+                "base=nearest,horizon=5,iterations=8,depth=2,"
+                "expansion_order=heuristic"
+            )
+        ],
+    )
+    assert len(variants) == 1
+    assert variants[0].extras["expansion_order"] == "heuristic"
+    assert variants[0].result_key.endswith("_ordheur")

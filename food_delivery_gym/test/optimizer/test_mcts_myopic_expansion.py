@@ -186,7 +186,7 @@ def test_max_expanded_actions_in_title_hyperparameters_and_decision_log():
         max_expanded_actions=None,
         record_decisions=False,
     )
-    assert "dthr=all" in optimizer_all.get_title()
+    assert "maxexp=all" in optimizer_all.get_title()
     assert optimizer_all.get_hyperparameters()["max_expanded_actions"] is None
 
     optimizer = MonteCarloTreeSearchOptimizerGym(
@@ -199,7 +199,7 @@ def test_max_expanded_actions_in_title_hyperparameters_and_decision_log():
         max_expanded_actions=1,
         record_decisions=True,
     )
-    assert "dthr=1" in optimizer.get_title()
+    assert "maxexp=1" in optimizer.get_title()
     assert optimizer.get_hyperparameters()["max_expanded_actions"] == 1
 
     obs = env.get_observation()

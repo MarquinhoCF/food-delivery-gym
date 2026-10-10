@@ -88,7 +88,7 @@ class MCTSDecisionBoard(Board):
             f"sim_time={decision.get('sim_time')}  |  "
             f"i={decision.get('iterations')}  d={decision.get('depth')}  "
             f"ew={decision.get('exploration_weight')}  "
-            f"dthr={'all' if decision.get('max_expanded_actions') is None else decision.get('max_expanded_actions')}",
+            f"maxexp={'all' if decision.get('max_expanded_actions') is None else decision.get('max_expanded_actions')}",
             fontsize=12,
             fontweight="bold",
         )

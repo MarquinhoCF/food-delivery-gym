@@ -124,7 +124,7 @@ Visualização de decisões: [visualize_rollout_decisions](../tools/visualize-ro
 
 ### Spec CLI / YAML
 
-Formato: `base=...,cost=...,horizon=...,alpha=...,terminal=...,iterations=...,exploration_weight=...,depth=...,max_outcomes=...,max_expanded_actions=...`
+Formato: `base=...,cost=...,horizon=...,alpha=...,terminal=...,iterations=...,exploration_weight=...,depth=...,max_outcomes=...,max_expanded_actions=...,expansion_order=...`
 
 | Chave | Obrigatório | Descrição |
 |-------|-------------|-----------|
@@ -137,7 +137,8 @@ Formato: `base=...,cost=...,horizon=...,alpha=...,terminal=...,iterations=...,ex
 | `exploration_weight` | não (default `1`) | Peso do bônus para ações pouco visitadas |
 | `depth` | não (default = `horizon`, ou `5` se infinito) | Profundidade máxima da árvore |
 | `max_outcomes` | não (default `1`) | Futuros reamostrados por ação |
-| `max_expanded_actions` | não (default `all` / omitido) | Limiar d_thr: máx. ações expandidas por nó (ordenação míope por recompensa imediata). Use inteiro `>= 1`, ou `all`/`none`/`null` para todos os motoristas |
+| `max_expanded_actions` | não (default `all` / omitido) | Máx. ações expandidas por nó. Use inteiro `>= 1`, ou `all`/`none`/`null` para todos os motoristas |
+| `expansion_order` | não (default `immediate`) | Ordem das ações não tentadas: `immediate` (recompensa imediata C(S,x)) ou `heuristic` (`ranked_actions` da base; exige base com ranking — `nearest`, `lowest`, `random`) |
 
 Exemplos:
 
@@ -152,16 +153,17 @@ python -m scripts.run_batch_eval --name mcts_smoke --agents mcts --no-rl \
 ### Nome da pasta de resultado
 
 ```
-mcts_<base_variant>_h<H>_a<alpha>_tc<terminal>_i<iterations>_ew<exploration_weight>_d<depth>_o<max_outcomes>[_dthrK]
+mcts_<base_variant>_h<H>_a<alpha>_tc<terminal>_i<iterations>_ew<exploration_weight>_d<depth>_o<max_outcomes>[_maxexpK][_ordheur]
 ```
 
-O sufixo `_dthrK` só aparece quando `max_expanded_actions` é um inteiro (omitido = todos os motoristas; pastas legadas sem o sufixo continuam válidas).
+O sufixo `_maxexpK` é `max_expanded_actions=K`. Só aparece quando o valor é um inteiro (omitido = todos os motoristas; pastas sem o sufixo continuam válidas). O sufixo `_ordheur` só aparece quando `expansion_order=heuristic`.
 
 | Spec | `result_key` |
 |------|----------------|
 | `base=nearest,horizon=5,alpha=0.9,terminal=0,iterations=8,exploration_weight=1,depth=2,max_outcomes=1` | `mcts_nearest_driver_h5_a0p9_tc0_i8_ew1_d2_o1` |
 | `base=lowest,cost=route,...,iterations=8,exploration_weight=50,depth=2` | `mcts_lowest_route_cost_h5_a0p9_tc0_i8_ew50_d2_o1` |
-| `...,depth=2,max_outcomes=1,max_expanded_actions=4` | `mcts_..._d2_o1_dthr4` |
+| `...,depth=2,max_outcomes=1,max_expanded_actions=4` | `mcts_..._d2_o1_maxexp4` |
+| `...,max_expanded_actions=4,expansion_order=heuristic` | `mcts_..._d2_o1_maxexp4_ordheur` |
 
 ## Modelos RL
 

@@ -24,7 +24,7 @@ python -m scripts.visualize_mcts_decisions --decision 0 [opções]
 | `--exploration-weight` | Peso UCT | padrão do catálogo |
 | `--depth` | Profundidade máxima da árvore | igual ao `horizon` |
 | `--max-outcomes` | Máx. futuros W por ação | padrão do catálogo |
-| `--max-expanded-actions` | Limiar d_thr (máx. ações expandidas por nó) | todos os motoristas |
+| `--max-expanded-actions` | Máx. ações expandidas por nó (`max_expanded_actions`) | todos os motoristas |
 | `--out-dir` | Diretório de saída | `data/visualization/mcts_viz` |
 | `--max-steps` | Limite de passos | `10000` |
 
